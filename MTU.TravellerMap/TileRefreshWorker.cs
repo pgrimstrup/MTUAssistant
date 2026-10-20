@@ -1,13 +1,15 @@
+using MTU.TravellerMap.Data;
 using MTU.TravellerMap.Models;
 
 namespace MTU.TravellerMap;
 
-/// <summary>Downloads sector images for the region of interest at every supported scale.</summary>
-public class TileRefreshWorker(TravellerMapClient client)
+/// <summary>Downloads sector data into the database, then sector images at every supported scale, for the region of interest.</summary>
+public class TileRefreshWorker(TravellerMapClient client, SectorImporter importer)
 {
     public const string Milieu = "M1105";
     public const int MinX = -8, MaxX = 7, MinY = -3, MaxY = 4;
-    public static readonly TimeSpan DelayBetweenCalls = TimeSpan.FromMilliseconds(150);
+    public static readonly TimeSpan DelayBetweenImageCalls = TimeSpan.FromMilliseconds(150);
+    public static readonly TimeSpan DelayBetweenDataCalls = TimeSpan.FromMilliseconds(20);
 
     public static string DefaultRootFolder { get; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MTU");
@@ -22,11 +24,33 @@ public class TileRefreshWorker(TravellerMapClient client)
             .OrderBy(s => s.Y).ThenBy(s => s.X)
             .ToList();
 
-        var total = sectors.Count * scales.Length;
+        var total = sectors.Count * (scales.Length + 1);
         var completed = 0;
         var failed = 0;
         progress.Report(new(0, total, 0, null, null));
 
+        // Phase 1: system data. A null CurrentScale in progress reports means this phase.
+        foreach (var sector in sectors)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            progress.Report(new(completed, total, failed, sector.Name, null));
+
+            try
+            {
+                var data = await client.GetSectorDataAsync(sector.Name, cancellationToken);
+                await importer.ImportAsync(sector, data, cancellationToken);
+            }
+            catch (HttpRequestException)
+            {
+                failed++;
+            }
+
+            completed++;
+            progress.Report(new(completed, total, failed, sector.Name, null));
+            await Task.Delay(DelayBetweenDataCalls, cancellationToken);
+        }
+
+        // Phase 2: images.
         foreach (var scale in scales)
         {
             var folder = Path.Combine(rootFolder, ((int)scale).ToString());
@@ -56,7 +80,7 @@ public class TileRefreshWorker(TravellerMapClient client)
                 completed++;
                 progress.Report(new(completed, total, failed, sector.Name, scale));
                 if(hasDownloaded)
-                    await Task.Delay(DelayBetweenCalls, cancellationToken);
+                    await Task.Delay(DelayBetweenImageCalls, cancellationToken);
             }
         }
     }

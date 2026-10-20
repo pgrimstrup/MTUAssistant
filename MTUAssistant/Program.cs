@@ -15,10 +15,13 @@ namespace MTUAssistant
                 .AddInteractiveServerComponents();
 
             builder.Services.AddTravellerMapClient();
+            builder.Services.AddMtuDatabase();
             builder.Services.AddTransient<TileRefreshWorker>();
             builder.Services.AddScoped<TileRefreshService>();
 
             var app = builder.Build();
+
+            app.Services.MigrateMtuDatabase();
 
             // Configure the HTTP request pipeline.
             if (!app.Environment.IsDevelopment())

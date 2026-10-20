@@ -23,6 +23,9 @@
             <p class="status">
                 @switch (Refresh.Status)
                 {
+                    case TileRefreshStatus.Running when Refresh.Progress.CurrentSector is not null && Refresh.Progress.CurrentScale is null:
+                        <text>Importing system data for <strong>@Refresh.Progress.CurrentSector</strong></text>
+                        break;
                     case TileRefreshStatus.Running when Refresh.Progress.CurrentSector is not null:
                         <text>Downloading <strong>@Refresh.Progress.CurrentSector</strong> at scale @((int)Refresh.Progress.CurrentScale!.Value)</text>
                         break;
