@@ -1,39 +1,136 @@
+:root {
+    --app-bg: #0d1117;
+    --app-surface: #161b22;
+    --app-surface-2: #1c232d;
+    --app-border: #2a313c;
+    --app-text: #e6edf3;
+    --app-muted: #8b949e;
+    --app-accent: #7c8cff;
+    --app-accent-2: #a78bfa;
+    --app-accent-soft: rgba(124, 140, 255, 0.14);
+    --app-radius: 10px;
+
+    --bs-body-bg: var(--app-bg);
+    --bs-body-color: var(--app-text);
+    --bs-border-color: var(--app-border);
+    --bs-link-color-rgb: 124, 140, 255;
+    --bs-link-hover-color-rgb: 167, 139, 250;
+    color-scheme: dark;
+}
+
 html, body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-family: 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background-color: var(--app-bg);
+    color: var(--app-text);
+    -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    letter-spacing: -0.02em;
 }
 
 a, .btn-link {
-    color: #006bb7;
+    color: var(--app-accent);
+    text-decoration: none;
 }
+
+    a:hover, .btn-link:hover {
+        color: var(--app-accent-2);
+    }
+
+.btn {
+    border-radius: 8px;
+    font-weight: 500;
+    transition: background-color .15s, border-color .15s, transform .05s;
+}
+
+    .btn:active {
+        transform: translateY(1px);
+    }
 
 .btn-primary {
     color: #fff;
-    background-color: #1b6ec2;
-    border-color: #1861ac;
+    background-image: linear-gradient(135deg, #6672f5, #8b5cf6);
+    border: none;
 }
+
+    .btn-primary:hover, .btn-primary:focus {
+        color: #fff;
+        filter: brightness(1.12);
+    }
 
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+    box-shadow: 0 0 0 0.2rem rgba(124, 140, 255, 0.35);
 }
 
+.form-control, .form-select {
+    background-color: var(--app-surface);
+    border-color: var(--app-border);
+    color: var(--app-text);
+    border-radius: 8px;
+}
+
+    .form-control:focus, .form-select:focus {
+        background-color: var(--app-surface-2);
+        border-color: var(--app-accent);
+        color: var(--app-text);
+    }
+
 .content {
-    padding-top: 1.1rem;
+    padding-top: 1.5rem;
 }
 
 h1:focus {
     outline: none;
 }
 
+.card, .app-card {
+    background-color: var(--app-surface);
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius);
+}
+
+.table {
+    --bs-table-bg: var(--app-surface);
+    --bs-table-color: var(--app-text);
+    --bs-table-border-color: var(--app-border);
+    --bs-table-striped-bg: var(--app-surface-2);
+    --bs-table-striped-color: var(--app-text);
+    --bs-table-hover-bg: var(--app-accent-soft);
+    border-radius: var(--app-radius);
+    overflow: hidden;
+}
+
+    .table thead th {
+        color: var(--app-muted);
+        font-size: .75rem;
+        font-weight: 600;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        background-color: var(--app-surface-2);
+    }
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--app-border);
+    border-radius: 8px;
+}
+
 .valid.modified:not([type=checkbox]) {
-    outline: 1px solid #26b050;
+    outline: 1px solid #3fb950;
 }
 
 .invalid {
-    outline: 1px solid #e50000;
+    outline: 1px solid #f85149;
 }
 
 .validation-message {
-    color: #e50000;
+    color: #f85149;
 }
 
 .blazor-error-boundary {
