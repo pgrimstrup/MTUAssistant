@@ -1,3 +1,4 @@
+using MTU.TravellerMap;
 using MTUAssistant.Components;
 
 namespace MTUAssistant
@@ -11,6 +12,8 @@ namespace MTUAssistant
             // Add services to the container.
             builder.Services.AddRazorComponents()
                 .AddInteractiveServerComponents();
+
+            builder.Services.AddTravellerMapClient();
 
             var app = builder.Build();
 

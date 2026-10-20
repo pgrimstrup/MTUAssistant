@@ -7,4 +7,17 @@
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\MTU.TravellerMap\MTU.TravellerMap.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Tiles\12\" />
+    <Folder Include="Tiles\16\" />
+    <Folder Include="Tiles\24\" />
+    <Folder Include="Tiles\32\" />
+    <Folder Include="Tiles\48\" />
+    <Folder Include="Tiles\96\" />
+  </ItemGroup>
+
 </Project>
