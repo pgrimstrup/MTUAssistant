@@ -20,7 +20,7 @@ public class TravellerMapClient(HttpClient httpClient)
         if (!Enum.IsDefined(scale))
             throw new ArgumentOutOfRangeException(nameof(scale));
 
-        return await httpClient.GetByteArrayAsync($"data/{Uri.EscapeDataString(sectorName)}/image?scale={(int)scale}", cancellationToken);
+        return await httpClient.GetByteArrayAsync($"data/{Uri.EscapeDataString(sectorName)}/image?scale={(int)scale}&options=24624", cancellationToken);
     }
 
     /// <summary>GET /data/{sector} - sector details and all systems.</summary>

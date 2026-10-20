@@ -1,5 +1,6 @@
 using MTU.TravellerMap;
 using MTUAssistant.Components;
+using MTUAssistant.Services;
 
 namespace MTUAssistant
 {
@@ -14,6 +15,8 @@ namespace MTUAssistant
                 .AddInteractiveServerComponents();
 
             builder.Services.AddTravellerMapClient();
+            builder.Services.AddTransient<TileRefreshWorker>();
+            builder.Services.AddScoped<TileRefreshService>();
 
             var app = builder.Build();
 

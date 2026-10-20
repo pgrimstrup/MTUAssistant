@@ -1,0 +1,70 @@
+@implements IDisposable
+@using MTU.TravellerMap
+@using MTUAssistant.Services
+@inject TileRefreshService Refresh
+
+@if (Refresh.IsDialogOpen)
+{
+    var running = Refresh.Status == TileRefreshStatus.Running;
+
+    <div class="dialog-backdrop">
+        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="tile-dialog-title">
+            <h5 id="tile-dialog-title">Refresh Tiles</h5>
+
+            <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Refresh.Percent.ToString("0")">
+                <div class="progress-fill" style="width: @Refresh.Percent.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+            </div>
+
+            <div class="stats">
+                <span>@Refresh.Progress.Completed / @Refresh.Progress.Total</span>
+                <span>@Refresh.Percent.ToString("0")%</span>
+            </div>
+
+            <p class="status">
+                @switch (Refresh.Status)
+                {
+                    case TileRefreshStatus.Running when Refresh.Progress.CurrentSector is not null:
+                        <text>Downloading <strong>@Refresh.Progress.CurrentSector</strong> at scale @((int)Refresh.Progress.CurrentScale!.Value)</text>
+                        break;
+                    case TileRefreshStatus.Running:
+                        <text>Retrieving sector list…</text>
+                        break;
+                    case TileRefreshStatus.Completed:
+                        <text>Done. Tiles saved to <code>@Refresh.Folder</code></text>
+                        break;
+                    case TileRefreshStatus.Cancelled:
+                        <text>Cancelled.</text>
+                        break;
+                    case TileRefreshStatus.Faulted:
+                        <span class="text-error">Failed: @Refresh.Error</span>
+                        break;
+                }
+            </p>
+
+            @if (Refresh.Progress.Failed > 0)
+            {
+                <p class="text-error">@Refresh.Progress.Failed download(s) failed.</p>
+            }
+
+            <div class="actions">
+                @if (running)
+                {
+                    <button class="btn btn-outline-secondary" @onclick="Refresh.CloseDialog">Hide</button>
+                    <button class="btn btn-primary" @onclick="Refresh.Cancel">Cancel</button>
+                }
+                else
+                {
+                    <button class="btn btn-primary" @onclick="Refresh.CloseDialog">Close</button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized() => Refresh.Changed += OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Refresh.Changed -= OnChanged;
+}
