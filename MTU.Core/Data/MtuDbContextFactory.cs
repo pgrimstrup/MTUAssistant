@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
-namespace MTU.TravellerMap.Data;
+namespace MTU.Core.Data;
 
 /// <summary>Used by the EF tooling (dotnet ef migrations ...) only.</summary>
 public class MtuDbContextFactory : IDesignTimeDbContextFactory<MtuDbContext>

@@ -1,9 +1,10 @@
 ﻿using System.Net.Http.Json;
-using MTU.TravellerMap.Models;
+using MTU.Core;
+using MTU.Core.Models;
 
 namespace MTU.TravellerMap;
 
-public class TravellerMapClient(HttpClient httpClient)
+internal class TravellerMapClient(HttpClient httpClient) : ITravellerMapClient
 {
     public static readonly Uri DefaultBaseAddress = new("https://travellermap.com/");
 

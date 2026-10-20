@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
-namespace MTU.TravellerMap.Data;
+namespace MTU.Core.Data;
 
 public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(options)
 {

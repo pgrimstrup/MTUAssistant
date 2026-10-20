@@ -1,4 +1,4 @@
-namespace MTU.TravellerMap;
+namespace MTU.Core;
 
 /// <param name="CurrentScale">Null while system data is being imported.</param>
 /// <param name="CurrentSubsector">Subsector letter when a subsector image is being downloaded.</param>

@@ -1,4 +1,4 @@
-namespace MTU.TravellerMap.Models;
+namespace MTU.Core.Models;
 
 /// <summary>Sector metadata plus its subsectors, allegiances and systems, parsed from /data/{sector}.</summary>
 public class SectorData

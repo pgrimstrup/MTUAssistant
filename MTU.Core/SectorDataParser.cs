@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using MTU.TravellerMap.Models;
+using MTU.Core.Models;
 
-namespace MTU.TravellerMap;
+namespace MTU.Core;
 
 /// <summary>Parses the Second Survey column-formatted text returned by /data/{sector}.</summary>
 public static partial class SectorDataParser

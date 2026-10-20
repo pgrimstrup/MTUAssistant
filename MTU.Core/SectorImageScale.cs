@@ -1,4 +1,4 @@
-namespace MTU.TravellerMap;
+namespace MTU.Core;
 
 /// <summary>Pixels per parsec supported for map images. Powers of two render best on Traveller Map.</summary>
 public enum SectorImageScale

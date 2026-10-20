@@ -1,4 +1,4 @@
-using MTU.TravellerMap;
+using MTU.Core;
 
 namespace MTUAssistant.Services;
 

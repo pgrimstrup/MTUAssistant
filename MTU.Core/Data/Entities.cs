@@ -1,4 +1,4 @@
-namespace MTU.TravellerMap.Data;
+namespace MTU.Core.Data;
 
 public class SectorEntity
 {

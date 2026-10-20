@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using MTU.TravellerMap.Models;
+using MTU.Core.Models;
 
-namespace MTU.TravellerMap.Data;
+namespace MTU.Core.Data;
 
 /// <summary>Stores parsed sector data in the database, replacing any previous import of the same sector.</summary>
 public class SectorImporter(MtuDbContext db)

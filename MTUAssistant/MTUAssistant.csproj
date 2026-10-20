@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\MTU.Core\MTU.Core.csproj" />
     <ProjectReference Include="..\MTU.TravellerMap\MTU.TravellerMap.csproj" />
   </ItemGroup>
 

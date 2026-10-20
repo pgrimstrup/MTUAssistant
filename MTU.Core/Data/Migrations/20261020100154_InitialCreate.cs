@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace MTU.TravellerMap.Data.Migrations
+namespace MTU.Core.Data.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration

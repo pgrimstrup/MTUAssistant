@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace MTU.TravellerMap.Models;
+namespace MTU.Core.Models;
 
 /// <summary>An entry in the /data sector list.</summary>
 public class SectorSummary
@@ -23,7 +23,4 @@ public class SectorName
     public string? Source { get; set; }
 }
 
-internal class SectorListResponse
-{
-    public List<SectorSummary> Sectors { get; set; } = [];
-}
+

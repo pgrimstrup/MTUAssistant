@@ -1,10 +1,10 @@
-using MTU.TravellerMap.Data;
-using MTU.TravellerMap.Models;
+using MTU.Core.Data;
+using MTU.Core.Models;
 
-namespace MTU.TravellerMap;
+namespace MTU.Core;
 
 /// <summary>Downloads sector data into the database, then sector images at every supported scale, for the region of interest.</summary>
-public class TileRefreshWorker(TravellerMapClient client, SectorImporter importer)
+public class TileRefreshWorker(ITravellerMapClient client, SectorImporter importer)
 {
     public const string Milieu = "M1105";
     public const int MinX = -8, MaxX = 7, MinY = -3, MaxY = 4;
