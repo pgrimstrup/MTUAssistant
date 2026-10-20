@@ -6,6 +6,10 @@ namespace MTU.TravellerMap.Data;
 /// <summary>Stores parsed sector data in the database, replacing any previous import of the same sector.</summary>
 public class SectorImporter(MtuDbContext db)
 {
+    /// <summary>True if the sector has already been imported. Delete the sector row to force a refresh.</summary>
+    public Task<bool> ExistsAsync(SectorSummary summary, CancellationToken cancellationToken = default) =>
+        db.Sectors.AnyAsync(s => s.Milieu == summary.Milieu && s.X == summary.X && s.Y == summary.Y, cancellationToken);
+
     public async Task ImportAsync(SectorSummary summary, SectorData data, CancellationToken cancellationToken = default)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);

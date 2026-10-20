@@ -24,7 +24,8 @@ public class TileRefreshWorker(TravellerMapClient client, SectorImporter importe
             .OrderBy(s => s.Y).ThenBy(s => s.X)
             .ToList();
 
-        var total = sectors.Count * (scales.Length + 1);
+        var imageJobs = BuildImageJobs(sectors, scales);
+        var total = sectors.Count + imageJobs.Count;
         var completed = 0;
         var failed = 0;
         progress.Report(new(0, total, 0, null, null));
@@ -35,10 +36,15 @@ public class TileRefreshWorker(TravellerMapClient client, SectorImporter importe
             cancellationToken.ThrowIfCancellationRequested();
             progress.Report(new(completed, total, failed, sector.Name, null));
 
+            var hasDownloaded = false;
             try
             {
-                var data = await client.GetSectorDataAsync(sector.Name, cancellationToken);
-                await importer.ImportAsync(sector, data, cancellationToken);
+                if (!await importer.ExistsAsync(sector, cancellationToken))
+                {
+                    var data = await client.GetSectorDataAsync(sector.Name, cancellationToken);
+                    hasDownloaded = true;
+                    await importer.ImportAsync(sector, data, cancellationToken);
+                }
             }
             catch (HttpRequestException)
             {
@@ -47,51 +53,75 @@ public class TileRefreshWorker(TravellerMapClient client, SectorImporter importe
 
             completed++;
             progress.Report(new(completed, total, failed, sector.Name, null));
-            await Task.Delay(DelayBetweenDataCalls, cancellationToken);
+            if (hasDownloaded)
+                await Task.Delay(DelayBetweenDataCalls, cancellationToken);
         }
 
         // Phase 2: images.
-        foreach (var scale in scales)
+        foreach (var (sector, scale, subsector) in imageJobs)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            progress.Report(new(completed, total, failed, sector.Name, scale, subsector));
+
             var folder = Path.Combine(rootFolder, ((int)scale).ToString());
             Directory.CreateDirectory(folder);
 
-            foreach (var sector in sectors)
+            bool hasDownloaded = false;
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                progress.Report(new(completed, total, failed, sector.Name, scale));
-
-                bool hasDownloaded = false;
-                try
+                var destination = Path.Combine(folder, GetFileName(sector, subsector));
+                if (!File.Exists(destination))
                 {
-                    var destination = Path.Combine(folder, GetFileName(sector));
-                    if (!File.Exists(destination))
-                    {
-                        var image = await client.GetSectorImageAsync(sector.Name, scale, cancellationToken);
-                        await File.WriteAllBytesAsync(destination, image, cancellationToken);
-                        hasDownloaded = true;
-                    }
+                    var image = subsector is { } letter
+                        ? await client.GetSubsectorImageAsync(sector.Name, letter, scale, cancellationToken)
+                        : await client.GetSectorImageAsync(sector.Name, scale, cancellationToken);
+                    await File.WriteAllBytesAsync(destination, image, cancellationToken);
+                    hasDownloaded = true;
                 }
-                catch (Exception ex) when (ex is HttpRequestException or IOException)
-                {
-                    failed++;
-                }
-
-                completed++;
-                progress.Report(new(completed, total, failed, sector.Name, scale));
-                if(hasDownloaded)
-                    await Task.Delay(DelayBetweenImageCalls, cancellationToken);
             }
+            catch (Exception ex) when (ex is HttpRequestException or IOException)
+            {
+                failed++;
+            }
+
+            completed++;
+            progress.Report(new(completed, total, failed, sector.Name, scale, subsector));
+            if (hasDownloaded)
+                await Task.Delay(DelayBetweenImageCalls, cancellationToken);
         }
     }
 
-    public static string GetFileName(SectorSummary sector)
+    /// <summary>One entry per image to fetch, ordered by scale so lower detail levels complete first.</summary>
+    private static List<(SectorSummary Sector, SectorImageScale Scale, char? Subsector)> BuildImageJobs(
+        List<SectorSummary> sectors, SectorImageScale[] scales)
+    {
+        var jobs = new List<(SectorSummary, SectorImageScale, char?)>();
+        foreach (var scale in scales.Order())
+        {
+            foreach (var sector in sectors)
+            {
+                if (scale.UsesSubsectorImages())
+                {
+                    for (var letter = 'A'; letter <= 'P'; letter++)
+                        jobs.Add((sector, scale, letter));
+                }
+                else
+                {
+                    jobs.Add((sector, scale, null));
+                }
+            }
+        }
+        return jobs;
+    }
+
+    /// <summary>Sector tiles are {row}{col}_{abbr}.png; subsector tiles append the letter: {row}{col}_{abbr}_{letter}.png.</summary>
+    public static string GetFileName(SectorSummary sector, char? subsector = null)
     {
         var x = (char)('A' + (sector.X - MinX));
         var y = (char)('A' + (sector.Y - MinY));
         var name = string.IsNullOrWhiteSpace(sector.Abbreviation) ? sector.Name : sector.Abbreviation;
         foreach (var c in Path.GetInvalidFileNameChars())
             name = name.Replace(c, '_');
-        return $"{y}{x}_{name}.png";
+        return subsector is { } letter ? $"{y}{x}_{name}_{letter}.png" : $"{y}{x}_{name}.png";
     }
 }

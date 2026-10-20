@@ -27,7 +27,7 @@
                         <text>Importing system data for <strong>@Refresh.Progress.CurrentSector</strong></text>
                         break;
                     case TileRefreshStatus.Running when Refresh.Progress.CurrentSector is not null:
-                        <text>Downloading <strong>@Refresh.Progress.CurrentSector</strong> at scale @((int)Refresh.Progress.CurrentScale!.Value)</text>
+                        <text>Downloading <strong>@Refresh.Progress.CurrentSector</strong>@(Refresh.Progress.CurrentSubsector is { } sub ? $" subsector {sub}" : "") at scale @((int)Refresh.Progress.CurrentScale!.Value)</text>
                         break;
                     case TileRefreshStatus.Running:
                         <text>Retrieving sector list…</text>
