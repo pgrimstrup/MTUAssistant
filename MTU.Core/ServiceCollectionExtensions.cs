@@ -16,6 +16,7 @@ public static class ServiceCollectionExtensions
 
         services.AddDbContext<MtuDbContext>(o => o.UseSqlite(ConnectionString(databasePath)));
         services.AddScoped<SectorImporter>();
+        services.AddScoped<ISearchService, SearchService>();
         return services;
     }
 

@@ -1,0 +1,94 @@
+@implements IDisposable
+@inject ISearchService Search
+
+<div class="search">
+    <input type="search" class="form-control" placeholder="Search sectors, subsectors, systems…" autocomplete="off"
+           aria-label="Search" value="@_text" @oninput="OnInput" @onkeydown="OnKeyDown" @onblur="Close" />
+    @if (_open)
+    {
+        <ul class="results" role="listbox">
+            @if (_results.Count == 0)
+            {
+                <li class="empty">No matches</li>
+            }
+            @for (var i = 0; i < _results.Count; i++)
+            {
+                var result = _results[i];
+                <li class="@(i == _active ? "active" : null)" role="option"
+                    @onmousedown="() => Select(result)" @onmousedown:preventDefault>@result.DisplayText</li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    private const int DebounceMilliseconds = 250;
+
+    private string _text = string.Empty;
+    private IReadOnlyList<SearchResult> _results = [];
+    private bool _open;
+    private int _active = -1;
+    private CancellationTokenSource? _cts;
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        _text = e.Value?.ToString() ?? string.Empty;
+        _cts?.Cancel();
+        _cts?.Dispose();
+
+        if (_text.Trim().Length < ISearchService.MinimumTermLength)
+        {
+            _results = [];
+            _open = false;
+            _cts = null;
+            return;
+        }
+
+        var cts = _cts = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(DebounceMilliseconds, cts.Token);
+            _results = await Search.SearchAsync(_text, cts.Token);
+            _active = -1;
+            _open = true;
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer keystroke.
+        }
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowDown" when _results.Count > 0:
+                _active = (_active + 1) % _results.Count;
+                break;
+            case "ArrowUp" when _results.Count > 0:
+                _active = (_active - 1 + _results.Count) % _results.Count;
+                break;
+            case "Enter" when _open && _active >= 0:
+                Select(_results[_active]);
+                break;
+            case "Escape":
+                Close();
+                break;
+        }
+    }
+
+    // Map navigation will hook in here once the map exists.
+    private void Select(SearchResult result)
+    {
+        _text = result.DisplayText;
+        Close();
+    }
+
+    private void Close() => _open = false;
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

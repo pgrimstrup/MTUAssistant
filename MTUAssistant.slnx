@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="MTU.Core/MTU.Core.csproj" Id="b8010375-b15e-42b9-88a6-db73d295b823" />
+  <Project Path="MTU.Mapping/MTU.Mapping.csproj" Id="5b0f94d1-2c51-43a5-83ed-f59d99861155" />
   <Project Path="MTU.TravellerMap/MTU.TravellerMap.csproj" />
   <Project Path="MTUAssistant/MTUAssistant.csproj" />
 </Solution>

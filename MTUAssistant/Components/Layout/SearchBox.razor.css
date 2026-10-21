@@ -1,0 +1,36 @@
+.search {
+    position: relative;
+    width: min(24rem, 100%);
+}
+
+.results {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 50;
+    margin: 0;
+    padding: .25rem;
+    list-style: none;
+    max-height: 20rem;
+    overflow-y: auto;
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
+    border-radius: 10px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+
+    .results li {
+        padding: .45rem .65rem;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+        .results li:hover, .results li.active {
+            background: var(--app-accent-soft);
+        }
+
+        .results li.empty {
+            color: var(--app-muted);
+            cursor: default;
+        }
