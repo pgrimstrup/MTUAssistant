@@ -68,3 +68,13 @@
     background: rgba(5, 7, 13, 0.85);
     color: #ff8a8a;
 }
+
+.map-selection-error {
+    position: absolute;
+    left: .75rem;
+    top: .75rem;
+    padding: .5rem;
+    background: var(--app-surface);
+    color: #ff8a8a;
+    pointer-events: none;
+}

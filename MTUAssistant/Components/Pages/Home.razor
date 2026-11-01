@@ -3,4 +3,117 @@
 
 <PageTitle>Charted Space</PageTitle>
 
-<MapView />
+<div class="world-layout">
+    <MapView WorldSelected="SelectWorld" />
+    <aside class="world-panel" aria-label="Selected world" aria-live="polite">
+        @if (selectedWorld is { } world)
+        {
+            <header class="world-header">
+                <span class="world-eyebrow">@(string.IsNullOrWhiteSpace(world.AllegianceName) ? "Unknown polity" : world.AllegianceName)</span>
+                <div class="world-name-row">
+                    <h1>@(string.IsNullOrWhiteSpace(world.Name) ? "Unnamed world" : world.Name)</h1>
+                    <div class="world-hex world-allegiance" title="@world.AllegianceName">
+                        <span class="location-label">Allegiance</span>
+                        <code>@(string.IsNullOrWhiteSpace(world.AllegianceCode) ? "?" : world.AllegianceCode)</code>
+                    </div>
+                </div>
+                <div class="world-location">
+                    <div class="world-sector">
+                        <span class="location-label">Sector</span>
+                        <span>@(string.IsNullOrWhiteSpace(world.Sector) ? "Unknown sector" : world.Sector)</span>
+                    </div>
+                    <div class="world-hex">
+                        <span class="location-label">Hex</span>
+                        <code>@(string.IsNullOrWhiteSpace(world.Hex) ? "Unknown" : world.Hex)</code>
+                    </div>
+                </div>
+            </header>
+            <section class="system-card uwp-card" aria-labelledby="uwp-heading">
+                <div class="system-card-heading">
+                    <h2 id="uwp-heading">UWP</h2>
+                    <code class="uwp">@(string.IsNullOrWhiteSpace(world.Uwp) ? "Unknown" : world.Uwp)</code>
+                </div>
+                <table class="stellar-table uwp-table" aria-label="Universal World Profile">
+                    <thead>
+                        <tr><th scope="col">Code</th><th scope="col">World profile</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in UwpLookup.Describe(world.Uwp, world.Pbg))
+                        {
+                            <tr data-attribute="@item.Name">
+                                <th scope="row"><span class="star-badge">@item.Code</span></th>
+                                <td><span class="uwp-attribute">@item.Name</span><span class="uwp-description">@item.Description</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+            var tradeCodes = TradeCodeLookup.Describe(world.Remarks);
+            <section class="system-card uwp-card trade-card" aria-labelledby="trade-heading">
+                <div class="system-card-heading">
+                    <h2 id="trade-heading">Trade Codes</h2>
+                    <span class="star-count">@tradeCodes.Count @(tradeCodes.Count == 1 ? "code" : "codes")</span>
+                </div>
+                <table class="stellar-table trade-table" aria-label="World trade codes">
+                    <thead>
+                        <tr><th scope="col">Code</th><th scope="col">Classification</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var tradeCode in tradeCodes)
+                        {
+                            <tr data-category="@tradeCode.Category">
+                                <th scope="row"><span class="star-badge">@tradeCode.Code</span></th>
+                                <td><span class="uwp-attribute">@tradeCode.Name</span><span class="uwp-description">@tradeCode.Description</span></td>
+                            </tr>
+                        }
+                        @if (tradeCodes.Count == 0)
+                        {
+                            <tr><td colspan="2" class="unknown-stars">No trade codes recorded.</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+            var system = SystemDataLookup.Describe(world);
+            <section class="system-card" aria-labelledby="system-data-heading">
+                <div class="system-card-heading">
+                    <h2 id="system-data-heading">System Data</h2>
+                    @if (system.StellarDataKnown)
+                    {
+                        <span class="star-count">@system.Stars.Count @(system.Stars.Count == 1 ? "star" : "stars")</span>
+                    }
+                </div>
+                <table class="stellar-table" aria-label="System stars">
+                    <thead>
+                        <tr><th scope="col">Star</th><th scope="col">Classification</th></tr>
+                    </thead>
+                    <tbody>
+                        @if (system.StellarDataKnown)
+                        {
+                            @foreach (var star in system.Stars)
+                            {
+                                <tr data-spectrum="@star.Code[0]" data-type="@star.Code">
+                                    <th scope="row"><span class="star-badge">@star.Designation</span></th>
+                                    <td><code>@star.Code</code> <span class="star-description">@star.Description</span></td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr><td colspan="2" class="unknown-stars">Unknown @(!string.IsNullOrWhiteSpace(world.Stellar) ? $"({world.Stellar})" : "")</td></tr>
+                        }
+                    </tbody>
+                </table>
+                <p class="system-worlds">@system.WorldDescription</p>
+            </section>
+        }
+        else
+        {
+            <p>No world selected</p>
+        }
+    </aside>
+</div>
+
+@code {
+    private SelectedWorld? selectedWorld;
+    private void SelectWorld(SelectedWorld? world) => selectedWorld = world;
+}

@@ -1,6 +1,8 @@
 // Tiled map of charted space. World units are parsecs, so viewport zoom == screen px per parsec,
 // which maps directly onto the tile scales (a scale-N image has N px per parsec).
 
+import { findHex, observeClicks } from "../../js/WorldSelection.js";
+
 const SCRIPTS = [
     "lib/pixi/pixi.min.js",
     "lib/pixi-viewport/pixi-viewport.umd.js",
@@ -34,9 +36,12 @@ function loadLibraries() {
     return scriptsPromise;
 }
 
-export async function createMap(host, statusEl) {
+export async function createMap(host, statusEl, callback, minSectorX, minSectorY) {
     await loadLibraries();
     const map = new TileMap(host, statusEl);
+    map.callback = callback;
+    map.minSectorX = minSectorX;
+    map.minSectorY = minSectorY;
     await map.start();
     return map;
 }
@@ -92,6 +97,7 @@ class TileMap {
         this.viewport.addChild(this.detailLayer);
 
         this.viewport.drag().pinch().wheel({ smooth: 6 }).decelerate({ friction: 0.92 });
+        this.removeClickObserver = observeClicks(this.app.canvas, event => this.selectWorld(event));
 
         this.resizeObserver = new ResizeObserver(() => this.onResize());
         this.resizeObserver.observe(this.host);
@@ -99,6 +105,21 @@ class TileMap {
         if (!this.restoreView()) this.fit();
 
         this.app.ticker.add(() => this.onTick());
+    }
+
+    async selectWorld(event) {
+        const bounds = this.app.canvas.getBoundingClientRect();
+        const point = this.viewport.toWorld(
+            (event.clientX - bounds.left) * this.host.clientWidth / bounds.width,
+            (event.clientY - bounds.top) * this.host.clientHeight / bounds.height);
+        const hex = findHex(point.x, point.y, this.sw, this.sh);
+        // Include empty hexes: the database returns null, clearing the previous profile.
+        try {
+            await this.callback.invokeMethodAsync("SelectHex", this.minSectorX + hex.sectorColumn,
+                this.minSectorY + hex.sectorRow, hex.column, hex.row);
+        } catch (error) {
+            if (!this.disposed) console.warn("World selection failed", error);
+        }
     }
 
     get fitZoom() {
@@ -359,6 +380,7 @@ class TileMap {
     dispose() {
         this.saveView();
         this.disposed = true;
+        this.removeClickObserver?.();
         this.resizeObserver?.disconnect();
         for (const t of this.tiles.values()) t.abort?.abort();
         this.tiles.clear();

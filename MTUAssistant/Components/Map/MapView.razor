@@ -1,5 +1,7 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
+@inject WorldSelectionService Worlds
+@inject ILogger<MapView> Logger
 
 <div class="map-shell">
     <div @ref="host" class="map-host"></div>
@@ -11,6 +13,10 @@
     </div>
 
     <div @ref="status" class="map-status">Loading map…</div>
+    @if (selectionError is not null)
+    {
+        <div class="map-selection-error" role="alert">@selectionError</div>
+    }
 
     @if (error is not null)
     {
@@ -24,6 +30,32 @@
     private IJSObjectReference? module;
     private IJSObjectReference? map;
     private string? error;
+    private string? selectionError;
+    private DotNetObjectReference<MapView>? callback;
+    private long selectionVersion;
+    private bool disposed;
+
+    [Parameter] public EventCallback<SelectedWorld?> WorldSelected { get; set; }
+
+    [JSInvokable]
+    public async Task SelectHex(int sectorX, int sectorY, int column, int row)
+    {
+        var version = ++selectionVersion;
+        try
+        {
+            var world = await Worlds.FindAsync(sectorX, sectorY, column, row);
+            if (disposed || version != selectionVersion) return;
+            selectionError = null;
+            await WorldSelected.InvokeAsync(world);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unable to load selected world");
+            if (disposed || version != selectionVersion) return;
+            selectionError = "Unable to load world data. Please try again.";
+        }
+        await InvokeAsync(StateHasChanged);
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -32,7 +64,8 @@
         try
         {
             module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Map/MapView.razor.js");
-            map = await module.InvokeAsync<IJSObjectReference>("createMap", host, status);
+            callback = DotNetObjectReference.Create(this);
+            map = await module.InvokeAsync<IJSObjectReference>("createMap", host, status, callback, TileRefreshWorker.MinX, TileRefreshWorker.MinY);
         }
         catch (JSDisconnectedException)
         {
@@ -55,6 +88,8 @@
 
     public async ValueTask DisposeAsync()
     {
+        disposed = true;
+        selectionVersion++;
         try
         {
             if (map is not null)
@@ -66,6 +101,10 @@
         }
         catch (JSDisconnectedException)
         {
+        }
+        finally
+        {
+            callback?.Dispose();
         }
     }
 }
