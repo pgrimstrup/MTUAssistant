@@ -6,7 +6,8 @@ namespace MTU.TravellerMap;
 
 internal class TravellerMapClient(HttpClient httpClient) : ITravellerMapClient
 {
-    public static readonly Uri DefaultBaseAddress = new("https://travellermap.com/");
+    //public static readonly Uri DefaultBaseAddress = new("https://travellermap.com/");
+    public static readonly Uri DefaultBaseAddress = new("http://localhost:50103/");
 
     /// <summary>GET /data - all known sectors.</summary>
     public async Task<IReadOnlyList<SectorSummary>> GetSectorsAsync(CancellationToken cancellationToken = default)

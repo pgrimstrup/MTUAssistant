@@ -8,8 +8,8 @@ public class TileRefreshWorker(ITravellerMapClient client, SectorImporter import
 {
     public const string Milieu = "M1105";
     public const int MinX = -8, MaxX = 7, MinY = -3, MaxY = 4;
-    public static readonly TimeSpan DelayBetweenImageCalls = TimeSpan.FromMilliseconds(150);
-    public static readonly TimeSpan DelayBetweenDataCalls = TimeSpan.FromMilliseconds(20);
+    public static readonly TimeSpan DelayBetweenImageCalls = TimeSpan.FromMilliseconds(0);
+    public static readonly TimeSpan DelayBetweenDataCalls = TimeSpan.FromMilliseconds(0);
 
     public static string DefaultRootFolder { get; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MTU");
