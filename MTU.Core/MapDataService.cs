@@ -15,12 +15,16 @@ public sealed record MapWorld(string Hex, string Name, string Uwp, string Bases,
 /// <summary>Cached map projections over the shared startup catalogue. No request-time database access.</summary>
 public sealed class MapDataService
 {
-    private readonly MapOverview _overview;
-    private readonly FrozenDictionary<int, IReadOnlyList<MapWorld>> _worlds;
+    private readonly SystemDataProvider _provider;
+    private readonly object _gate = new();
+    private SystemCatalogue? _source;
+    private MapOverview _overview = null!;
+    private FrozenDictionary<int, IReadOnlyList<MapWorld>> _worlds = null!;
 
-    public MapDataService(SystemDataProvider provider)
+    public MapDataService(SystemDataProvider provider) => _provider = provider;
+
+    private void Update(SystemCatalogue data)
     {
-        var data = provider.Catalogue;
         var sectors = data.Sectors.Where(s => s.Milieu == TileRefreshWorker.Milieu)
             .OrderBy(s => s.Y).ThenBy(s => s.X).ToArray();
         var worlds = data.Systems.ToLookup(s => s.SectorId);
@@ -44,12 +48,12 @@ public sealed class MapDataService
     public Task<MapOverview> GetOverviewAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(_overview);
+        lock (_gate) { var data = _provider.Catalogue; if (!ReferenceEquals(_source, data)) { Update(data); _source = data; } return Task.FromResult(_overview); }
     }
 
     public Task<IReadOnlyList<MapWorld>?> GetSectorAsync(int sectorId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(_worlds.GetValueOrDefault(sectorId));
+        lock (_gate) { var data = _provider.Catalogue; if (!ReferenceEquals(_source, data)) { Update(data); _source = data; } return Task.FromResult(_worlds.GetValueOrDefault(sectorId)); }
     }
 }

@@ -13,6 +13,8 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
     public DbSet<SectorNameEntity> SectorNames => Set<SectorNameEntity>();
     public DbSet<SubsectorEntity> Subsectors => Set<SubsectorEntity>();
     public DbSet<AllegianceEntity> Allegiances => Set<AllegianceEntity>();
+    public DbSet<BorderEntity> Borders => Set<BorderEntity>();
+    public DbSet<RouteEntity> Routes => Set<RouteEntity>();
     public DbSet<SystemEntity> Systems => Set<SystemEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -24,6 +26,8 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
             e.HasMany(s => s.Names).WithOne(n => n.Sector).HasForeignKey(n => n.SectorId).OnDelete(DeleteBehavior.Cascade);
             e.HasMany(s => s.Subsectors).WithOne(n => n.Sector).HasForeignKey(n => n.SectorId).OnDelete(DeleteBehavior.Cascade);
             e.HasMany(s => s.Allegiances).WithOne(n => n.Sector).HasForeignKey(n => n.SectorId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(s => s.Borders).WithOne(n => n.Sector).HasForeignKey(n => n.SectorId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(s => s.Routes).WithOne(n => n.Sector).HasForeignKey(n => n.SectorId).OnDelete(DeleteBehavior.Cascade);
             e.HasMany(s => s.Systems).WithOne(n => n.Sector).HasForeignKey(n => n.SectorId).OnDelete(DeleteBehavior.Cascade);
         });
 

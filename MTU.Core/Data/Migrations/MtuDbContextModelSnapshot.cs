@@ -23,6 +23,9 @@ namespace MTU.Core.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Base")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -34,12 +37,103 @@ namespace MTU.Core.Data.Migrations
                     b.Property<int>("SectorId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("ShortName")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("SectorId", "Code")
                         .IsUnique();
 
                     b.ToTable("Allegiances");
+                });
+
+            modelBuilder.Entity("MTU.Core.Data.BorderEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Allegiance")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Color")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RawJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SectorId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Style")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SectorId");
+
+                    b.ToTable("Borders");
+                });
+
+            modelBuilder.Entity("MTU.Core.Data.RouteEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Allegiance")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Color")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("End")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("EndOffsetX")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("EndOffsetY")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RawJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SectorId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Start")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("StartOffsetX")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("StartOffsetY")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Style")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Type")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("Width")
+                        .HasColumnType("REAL");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SectorId");
+
+                    b.ToTable("Routes");
                 });
 
             modelBuilder.Entity("MTU.Core.Data.SectorEntity", b =>
@@ -66,6 +160,9 @@ namespace MTU.Core.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Source")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Stylesheet")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Tags")
@@ -234,6 +331,28 @@ namespace MTU.Core.Data.Migrations
                     b.Navigation("Sector");
                 });
 
+            modelBuilder.Entity("MTU.Core.Data.BorderEntity", b =>
+                {
+                    b.HasOne("MTU.Core.Data.SectorEntity", "Sector")
+                        .WithMany("Borders")
+                        .HasForeignKey("SectorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Sector");
+                });
+
+            modelBuilder.Entity("MTU.Core.Data.RouteEntity", b =>
+                {
+                    b.HasOne("MTU.Core.Data.SectorEntity", "Sector")
+                        .WithMany("Routes")
+                        .HasForeignKey("SectorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Sector");
+                });
+
             modelBuilder.Entity("MTU.Core.Data.SectorNameEntity", b =>
                 {
                     b.HasOne("MTU.Core.Data.SectorEntity", "Sector")
@@ -271,7 +390,11 @@ namespace MTU.Core.Data.Migrations
                 {
                     b.Navigation("Allegiances");
 
+                    b.Navigation("Borders");
+
                     b.Navigation("Names");
+
+                    b.Navigation("Routes");
 
                     b.Navigation("Subsectors");
 

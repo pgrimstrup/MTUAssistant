@@ -3,6 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MTU.Core;
 using MTU.Core.Data;
+using MTU.Core.Models;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 static void Check(bool condition, string message)
 {
@@ -189,6 +192,85 @@ using (var cancellation = new CancellationTokenSource()) {
 }
 Check(commands.Reads == 0, "Search, map and selection perform no SQL after initialization, even with database unavailable");
 Console.WriteLine("Shared startup catalogue, concurrent initialization, search, snapshot isolation and zero request-time SQL checks passed.");
+
+// Upgrade an existing database, then prove repeated refresh replaces metadata atomically.
+using (var importConnection = new SqliteConnection("Data Source=:memory:"))
+{
+    await importConnection.OpenAsync();
+    var options = new DbContextOptionsBuilder<MtuDbContext>().UseSqlite(importConnection).Options;
+    await using var db = new MtuDbContext(options);
+    var migrator = db.GetService<IMigrator>();
+    await migrator.MigrateAsync("20261020100154_InitialCreate");
+    await migrator.MigrateAsync();
+    var summary = new SectorSummary { X = -4, Y = -1, Milieu = "M1105", Names = [new SectorName { Text = "Spinward Marches" }] };
+    var mock = new RefreshClient(summary);
+    var reports = new List<TileRefreshProgress>();
+    var worker = new TileRefreshWorker(mock, new SectorImporter(db));
+    var progress = new InlineProgress<TileRefreshProgress>(reports.Add);
+    await worker.RunAsync(progress);
+    var sector = await db.Sectors.SingleAsync();
+    var id = sector.Id;
+    Check((await db.Borders.SingleAsync()).Color == "lightblue", "Stylesheet border colour");
+    var route = await db.Routes.SingleAsync();
+    Check(route.Color == "#006600" && route.EndOffsetX == 1 && route.End == "0208", "Route style and cross-sector offset");
+    Check((await db.Allegiances.SingleAsync()).ShortName == "Sword Worlds", "Metadata allegiance fields");
+    Check((await db.Subsectors.SingleAsync()).Name == "Regina", "Metadata subsector name");
+    Check(reports.Last() is { Total: 1, Completed: 1, Failed: 0 }, "Progress counts sectors, not images");
+    db.ChangeTracker.Clear();
+    var reloadServices = new ServiceCollection();
+    reloadServices.AddDbContext<MtuDbContext>(o => o.UseSqlite(importConnection));
+    reloadServices.AddMtuCatalogue();
+    using var reloadContainer = reloadServices.BuildServiceProvider();
+    var reloadProvider = reloadContainer.GetRequiredService<SystemDataProvider>();
+    await reloadProvider.InitializeAsync();
+    var oldSnapshot = reloadProvider.Catalogue;
+    var mapService = reloadContainer.GetRequiredService<MapDataService>();
+    Check((await mapService.GetSectorAsync(id))!.Single().Name == "Original", "Initial cached map data");
+    var notifications = 0;
+    reloadProvider.Reloaded += () => notifications++;
+    mock.Version = 2;
+    await worker.RunAsync(progress);
+    db.ChangeTracker.Clear();
+    Check((await db.Sectors.SingleAsync()).Id == id && (await db.Systems.SingleAsync()).Name == "Updated", "Existing sector fully refreshed with stable sector ID");
+    Check((await db.Borders.SingleAsync()).Color == "red" && (await db.Routes.SingleAsync()).Color == "orange", "Explicit colours override stylesheet");
+    await reloadProvider.ReloadAsync();
+    Check(notifications == 1 && !ReferenceEquals(oldSnapshot, reloadProvider.Catalogue), "Reload publishes one new catalogue");
+    Check(oldSnapshot.Systems.Single().MainWorld.Name == "Original", "Readers retain an intact old snapshot");
+    Check((await mapService.GetSectorAsync(id))!.Single().Name == "Updated", "Existing map service rebuilds after reload");
+    Check((await mapService.GetOverviewAsync()).Sectors.Single().Worlds.Single().Name == "Updated", "Overview rebuilds after reload");
+    Check((await reloadContainer.GetRequiredService<ISearchService>().SearchAsync("Updated")).Single().SystemName == "Updated", "Search sees reloaded system");
+    Check((await reloadContainer.GetRequiredService<WorldSelectionService>().FindAsync(-4,-1,19,10))!.Name == "Updated", "Selection sees reloaded system");
+    mock.FailMetadata = true;
+    await worker.RunAsync(progress);
+    db.ChangeTracker.Clear();
+    Check((await db.Systems.SingleAsync()).Name == "Updated" && reports.Last().Failed == 1, "Failed metadata fetch retains previous sector");
+    var validSnapshot = reloadProvider.Catalogue;
+    await importConnection.CloseAsync();
+    try { await reloadProvider.ReloadAsync(); throw new Exception("Reload unexpectedly succeeded without database"); }
+    catch (Microsoft.Data.Sqlite.SqliteException) { }
+    Check(ReferenceEquals(validSnapshot, reloadProvider.Catalogue) && notifications == 1, "Failed reload preserves the published snapshot and sends no notification");
+    Check(MetadataStyles.Color("/* note */ border.Foo, border.Bar { color: blue; } border.Bar { color: red }", "border", "Bar") == "red", "Stylesheet grouped selectors and order");
+}
+Console.WriteLine("Metadata migration, full refresh, styles, cross-sector routes and failed-fetch preservation passed.");
+
+sealed class InlineProgress<T>(Action<T> action) : IProgress<T> { public void Report(T value) => action(value); }
+sealed class RefreshClient(SectorSummary sector) : ITravellerMapClient
+{
+    public int Version = 1; public bool FailMetadata;
+    public Task<IReadOnlyList<SectorSummary>> GetSectorsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SectorSummary>>([sector]);
+    public Task<SectorData> GetSectorDataAsync(string name, CancellationToken ct = default) => Task.FromResult(new SectorData {
+        Systems = [new StarSystem { Hex = "1910", Name = Version == 1 ? "Original" : "Updated" }] });
+    public Task<SectorMetadata> GetMetadataAsync(string name, string milieu, CancellationToken ct = default)
+    {
+        if (FailMetadata) throw new HttpRequestException("test failure");
+        return Task.FromResult(new SectorMetadata {
+            Stylesheet = "border.SwCf { color: lightblue; } route.SwCf { color: #006600; }",
+            Subsectors = [new MetadataSubsector { Index = "C", Name = "Regina" }],
+            Allegiances = [new MetadataAllegiance { Code = "SwCf", Name = "Sword Worlds", ShortName = "Sword Worlds" }],
+            Borders = [new MetadataBorder { Path = "0000 0100 0000", Allegiance = "SwCf", Color = Version == 2 ? "red" : null }],
+            Routes = [new MetadataRoute { Start = "3209", End = "0208", EndOffsetX = 1, Allegiance = "SwCf", Color = Version == 2 ? "orange" : null }] });
+    }
+}
 
 sealed class CatalogueCommandCounter : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
 {

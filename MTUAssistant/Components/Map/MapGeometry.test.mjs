@@ -177,3 +177,22 @@ assert.equal(focused.focusRegion(999),false);
 assert.equal(focused.focusRegion(17,'Q'),false);
 assert.equal(focused.focusRegion(17,''),false);
 assert.deepEqual(focused.selected,{key:'keep'});
+
+// A catalogue reload drops stale sector requests and preserves the same galactic centre.
+const reloadMap = new DynamicMap({}, {}, {});
+let aborted=0, moved, resized=0, redrawn=0;
+reloadMap.overview={minSectorX:-4,minSectorY:-1};
+reloadMap.sectorCache.set(3,{controller:{abort(){aborted++;}}});
+reloadMap.viewport={center:{x:100,y:50},moveCenter(x,y){moved={x,y};}};
+reloadMap.loadOverview=async()=>{reloadMap.overview={minSectorX:-5,minSectorY:-2};};
+reloadMap.onResize=()=>resized++;
+reloadMap.update=()=>redrawn++;
+reloadMap.selected={key:'old'};
+await reloadMap.reloadData();
+assert.equal(aborted,1);
+assert.equal(reloadMap.sectorCache.size,0);
+assert.equal(reloadMap.selected,null);
+assert.ok(Math.abs(moved.x-(100+32*HEX_X))<1e-10);
+assert.equal(moved.y,90);
+assert.equal(resized,1);
+assert.equal(redrawn,1);

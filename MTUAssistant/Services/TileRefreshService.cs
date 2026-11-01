@@ -5,7 +5,7 @@ namespace MTUAssistant.Services;
 public enum TileRefreshStatus { Idle, Running, Completed, Cancelled, Faulted }
 
 /// <summary>Per-circuit view model that runs the tile refresh and exposes progress to the UI.</summary>
-public class TileRefreshService(TileRefreshWorker worker)
+public class TileRefreshService(TileRefreshWorker worker, SystemDataProvider dataProvider)
 {
     private CancellationTokenSource? _cts;
 
@@ -13,9 +13,8 @@ public class TileRefreshService(TileRefreshWorker worker)
 
     public bool IsDialogOpen { get; private set; }
     public TileRefreshStatus Status { get; private set; }
-    public TileRefreshProgress Progress { get; private set; } = new(0, 0, 0, null, null);
+    public TileRefreshProgress Progress { get; private set; } = new(0, 0, 0, null);
     public string? Error { get; private set; }
-    public string Folder => TileRefreshWorker.DefaultRootFolder;
 
     public double Percent => Progress.Total == 0 ? 0 : 100.0 * Progress.Completed / Progress.Total;
 
@@ -30,7 +29,7 @@ public class TileRefreshService(TileRefreshWorker worker)
 
         _cts = new CancellationTokenSource();
         Status = TileRefreshStatus.Running;
-        Progress = new(0, 0, 0, null, null);
+        Progress = new(0, 0, 0, null);
         Error = null;
         IsDialogOpen = true;
         Changed?.Invoke();
@@ -55,6 +54,13 @@ public class TileRefreshService(TileRefreshWorker worker)
         }
         finally
         {
+            // Even cancellation or a failed sector may follow successful commits.
+            try { await dataProvider.ReloadAsync(); }
+            catch (Exception ex)
+            {
+                Error = $"{Error} Unable to reload the in-memory catalogue: {ex.Message}".Trim();
+                Status = TileRefreshStatus.Faulted;
+            }
             _cts.Dispose();
             _cts = null;
             Changed?.Invoke();

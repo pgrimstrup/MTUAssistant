@@ -10,7 +10,7 @@ public class SectorImporter(MtuDbContext db)
     public Task<bool> ExistsAsync(SectorSummary summary, CancellationToken cancellationToken = default) =>
         db.Sectors.AnyAsync(s => s.Milieu == summary.Milieu && s.X == summary.X && s.Y == summary.Y, cancellationToken);
 
-    public async Task ImportAsync(SectorSummary summary, SectorData data, CancellationToken cancellationToken = default)
+    public async Task ImportAsync(SectorSummary summary, SectorData data, SectorMetadata metadata, CancellationToken cancellationToken = default)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
@@ -29,6 +29,8 @@ public class SectorImporter(MtuDbContext db)
             await db.Subsectors.Where(n => n.SectorId == sector.Id).ExecuteDeleteAsync(cancellationToken);
             await db.Allegiances.Where(n => n.SectorId == sector.Id).ExecuteDeleteAsync(cancellationToken);
             await db.Systems.Where(n => n.SectorId == sector.Id).ExecuteDeleteAsync(cancellationToken);
+            await db.Borders.Where(n => n.SectorId == sector.Id).ExecuteDeleteAsync(cancellationToken);
+            await db.Routes.Where(n => n.SectorId == sector.Id).ExecuteDeleteAsync(cancellationToken);
         }
 
         sector.Name = summary.Name;
@@ -36,19 +38,29 @@ public class SectorImporter(MtuDbContext db)
         sector.Tags = summary.Tags;
         sector.Credits = data.Credits;
         sector.Source = data.Source;
+        sector.Stylesheet = metadata.Stylesheet;
         sector.DataImportedUtc = DateTime.UtcNow;
 
         // Prefer the names from the sector list; fall back to those in the data file.
         var names = summary.Names.Count > 0 ? summary.Names : data.Names;
         sector.Names = names.Select(n => new SectorNameEntity { Text = n.Text, Lang = n.Lang, Source = n.Source }).ToList();
 
-        sector.Subsectors = data.Subsectors
-            .DistinctBy(s => s.Letter)
-            .Select(s => new SubsectorEntity { Letter = s.Letter, Name = s.Name }).ToList();
-
-        sector.Allegiances = data.Allegiances
-            .DistinctBy(a => a.Code)
-            .Select(a => new AllegianceEntity { Code = a.Code, Name = a.Name }).ToList();
+        sector.Subsectors = metadata.Subsectors.Count > 0
+            ? metadata.Subsectors.DistinctBy(s => s.Index).Select(s => new SubsectorEntity { Letter = s.Index, Name = s.Name }).ToList()
+            : data.Subsectors.DistinctBy(s => s.Letter).Select(s => new SubsectorEntity { Letter = s.Letter, Name = s.Name }).ToList();
+        // Metadata enriches the allegiance list; retain codes only present in sector data.
+        sector.Allegiances = metadata.Allegiances.Select(a => new AllegianceEntity {
+                Code = a.Code, Name = a.Name, Base = a.Base, ShortName = a.ShortName })
+            .Concat(data.Allegiances.Select(a => new AllegianceEntity { Code = a.Code, Name = a.Name }))
+            .Where(a => !string.IsNullOrWhiteSpace(a.Code)).DistinctBy(a => a.Code).ToList();
+        sector.Borders = metadata.Borders.Select(b => new BorderEntity {
+            Path = b.Path, Allegiance = b.Allegiance, Color = b.Color ?? MetadataStyles.Color(metadata.Stylesheet, "border", b.Allegiance),
+            Style = b.Style, RawJson = System.Text.Json.JsonSerializer.Serialize(b) }).ToList();
+        sector.Routes = metadata.Routes.Select(r => new RouteEntity {
+            Start = r.Start, End = r.End, StartOffsetX = r.StartOffsetX, StartOffsetY = r.StartOffsetY,
+            EndOffsetX = r.EndOffsetX, EndOffsetY = r.EndOffsetY, Allegiance = r.Allegiance, Type = r.Type,
+            Color = r.Color ?? MetadataStyles.Color(metadata.Stylesheet, "route", r.Allegiance, r.Type),
+            Style = r.Style, Width = r.Width, RawJson = System.Text.Json.JsonSerializer.Serialize(r) }).ToList();
 
         sector.Systems = data.Systems
             .DistinctBy(s => s.Hex)

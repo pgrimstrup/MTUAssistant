@@ -9,7 +9,7 @@
 
     <div class="dialog-backdrop">
         <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="tile-dialog-title">
-            <h5 id="tile-dialog-title">Refresh Tiles</h5>
+            <h5 id="tile-dialog-title">Refresh Sector Data</h5>
 
             <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Refresh.Percent.ToString("0")">
                 <div class="progress-fill" style="width: @Refresh.Percent.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%"></div>
@@ -23,30 +23,27 @@
             <p class="status">
                 @switch (Refresh.Status)
                 {
-                    case TileRefreshStatus.Running when Refresh.Progress.CurrentSector is not null && Refresh.Progress.CurrentScale is null:
-                        <text>Importing system data for <strong>@Refresh.Progress.CurrentSector</strong></text>
-                        break;
                     case TileRefreshStatus.Running when Refresh.Progress.CurrentSector is not null:
-                        <text>Downloading <strong>@Refresh.Progress.CurrentSector</strong>@(Refresh.Progress.CurrentSubsector is { } sub ? $" subsector {sub}" : "") at scale @((int)Refresh.Progress.CurrentScale!.Value)</text>
+                        <text>Refreshing systems, allegiances, borders and routes for <strong>@Refresh.Progress.CurrentSector</strong></text>
                         break;
                     case TileRefreshStatus.Running:
                         <text>Retrieving sector list…</text>
                         break;
                     case TileRefreshStatus.Completed:
-                        <text>Done. Tiles saved to <code>@Refresh.Folder</code></text>
+                        <text>Refresh complete. The updated catalogue is loaded.</text>
                         break;
                     case TileRefreshStatus.Cancelled:
-                        <text>Cancelled.</text>
+                        <text>Cancelled. Any completed sector updates are loaded.</text>
                         break;
                     case TileRefreshStatus.Faulted:
-                        <span class="text-error">Failed: @Refresh.Error</span>
+                        <span class="text-error">Failed: @Refresh.Error. Any completed sector updates have been reloaded unless the catalogue reload failed.</span>
                         break;
                 }
             </p>
 
             @if (Refresh.Progress.Failed > 0)
             {
-                <p class="text-error">@Refresh.Progress.Failed download(s) failed.</p>
+                <p class="text-error">@Refresh.Progress.Failed sector(s) failed; their previous data was retained.</p>
             }
 
             <div class="actions">

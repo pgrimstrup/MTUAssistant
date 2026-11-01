@@ -42,6 +42,38 @@
     private DotNetObjectReference<MapView>? callback;
     private long selectionVersion;
     private bool disposed;
+    private bool reloadPending;
+
+    protected override void OnInitialized() => SystemData.Reloaded += OnCatalogueReloaded;
+
+    private void OnCatalogueReloaded() => _ = InvokeAsync(async () =>
+    {
+        if (disposed) return;
+        reloadPending = true;
+        await ReloadMapData();
+    });
+
+    private async Task ReloadMapData()
+    {
+        if (disposed || map is null || !reloadPending) return;
+        reloadPending = false;
+        try
+        {
+            selectionVersion++;
+            await map.InvokeVoidAsync("reloadData");
+            if (disposed) return;
+            await WorldSelected.InvokeAsync(null);
+            selectionError = null;
+            StateHasChanged();
+        }
+        catch (JSDisconnectedException) { }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unable to reload map data");
+            selectionError = "Unable to reload map data. Refresh this page to try again.";
+            StateHasChanged();
+        }
+    }
 
     [Parameter] public EventCallback<SelectedWorld?> WorldSelected { get; set; }
     [Parameter] public int? SystemId { get; set; }
@@ -167,7 +199,8 @@
             map = await module.InvokeAsync<IJSObjectReference>("createMap", host, status, callback);
             if (!disposed)
             {
-                await FocusSearchTarget();
+                if (reloadPending) await ReloadMapData();
+                else await FocusSearchTarget();
                 await InvokeAsync(StateHasChanged);
             }
         }
@@ -193,6 +226,7 @@
     public async ValueTask DisposeAsync()
     {
         disposed = true;
+        SystemData.Reloaded -= OnCatalogueReloaded;
         selectionVersion++;
         try
         {

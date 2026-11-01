@@ -7,8 +7,7 @@ namespace MTU.Core;
 
 public interface ITravellerMapClient
 {
+    Task<SectorMetadata> GetMetadataAsync(string sectorName, string milieu, CancellationToken cancellationToken = default);
     Task<SectorData> GetSectorDataAsync(string sectorName, CancellationToken cancellationToken = default);
-    Task<byte[]> GetSectorImageAsync(string sectorName, SectorImageScale scale, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SectorSummary>> GetSectorsAsync(CancellationToken cancellationToken = default);
-    Task<byte[]> GetSubsectorImageAsync(string sectorName, char subsector, SectorImageScale scale, CancellationToken cancellationToken = default);
 }

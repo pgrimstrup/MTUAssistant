@@ -18,6 +18,9 @@ public class SectorEntity
     public List<SubsectorEntity> Subsectors { get; set; } = [];
     public List<AllegianceEntity> Allegiances { get; set; } = [];
     public List<SystemEntity> Systems { get; set; } = [];
+    public List<BorderEntity> Borders { get; set; } = [];
+    public List<RouteEntity> Routes { get; set; } = [];
+    public string? Stylesheet { get; set; }
 }
 
 public class SectorNameEntity
@@ -47,6 +50,8 @@ public class AllegianceEntity
     public SectorEntity Sector { get; set; } = null!;
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public string? Base { get; set; }
+    public string? ShortName { get; set; }
 }
 
 public class SystemEntity
@@ -75,4 +80,22 @@ public class SystemEntity
     /// <summary>Allegiance code; matches <see cref="AllegianceEntity.Code"/> within the same sector.</summary>
     public string A { get; set; } = string.Empty;
     public string Stellar { get; set; } = string.Empty;
+}
+
+public class BorderEntity
+{
+    public int Id { get; set; } public int SectorId { get; set; } public SectorEntity Sector { get; set; } = null!;
+    public string Path { get; set; } = ""; public string? Allegiance { get; set; }
+    public string? Color { get; set; } public string? Style { get; set; }
+    public string RawJson { get; set; } = "{}";
+}
+public class RouteEntity
+{
+    public int Id { get; set; } public int SectorId { get; set; } public SectorEntity Sector { get; set; } = null!;
+    public string Start { get; set; } = ""; public string End { get; set; } = "";
+    public int StartOffsetX { get; set; } public int StartOffsetY { get; set; }
+    public int EndOffsetX { get; set; } public int EndOffsetY { get; set; }
+    public string? Allegiance { get; set; } public string? Type { get; set; }
+    public string? Color { get; set; } public string? Style { get; set; } public double? Width { get; set; }
+    public string RawJson { get; set; } = "{}";
 }

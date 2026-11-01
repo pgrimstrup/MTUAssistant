@@ -16,24 +16,11 @@ internal class TravellerMapClient(HttpClient httpClient) : ITravellerMapClient
         return response?.Sectors ?? [];
     }
 
-    /// <summary>GET /data/{sector}/image?scale={n} - PNG bytes.</summary>
-    public async Task<byte[]> GetSectorImageAsync(string sectorName, SectorImageScale scale, CancellationToken cancellationToken = default)
+    public async Task<SectorMetadata> GetMetadataAsync(string sectorName, string milieu, CancellationToken cancellationToken = default)
     {
-        if (!Enum.IsDefined(scale))
-            throw new ArgumentOutOfRangeException(nameof(scale));
-
-        return await httpClient.GetByteArrayAsync($"data/{Uri.EscapeDataString(sectorName)}/image?scale={(int)scale}&options=24624", cancellationToken);
-    }
-
-    /// <summary>GET /data/{sector}/{subsector}/image?scale={n} - PNG bytes. The subsector is a letter A-P.</summary>
-    public async Task<byte[]> GetSubsectorImageAsync(string sectorName, char subsector, SectorImageScale scale, CancellationToken cancellationToken = default)
-    {
-        if (!Enum.IsDefined(scale))
-            throw new ArgumentOutOfRangeException(nameof(scale));
-        if (subsector is < 'A' or > 'P')
-            throw new ArgumentOutOfRangeException(nameof(subsector), "Subsector must be a letter A-P.");
-
-        return await httpClient.GetByteArrayAsync($"data/{Uri.EscapeDataString(sectorName)}/{subsector}/image?scale={(int)scale}&options=24624&sscoords=1", cancellationToken);
+        var url = $"https://travellermap.com/api/metadata?sector={Uri.EscapeDataString(sectorName)}&milieu={Uri.EscapeDataString(milieu)}";
+        return await httpClient.GetFromJsonAsync<SectorMetadata>(url, cancellationToken)
+            ?? throw new InvalidDataException($"Empty metadata response for {sectorName}.");
     }
 
     /// <summary>GET /data/{sector} - sector details and all systems.</summary>

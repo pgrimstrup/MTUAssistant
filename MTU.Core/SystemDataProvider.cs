@@ -55,13 +55,15 @@ public sealed class SystemCatalogue
 /// <summary>
 /// Loads once at startup, publishing only a complete immutable snapshot. Owns no DbContext
 /// after initialization. Search, map and selection share this instance across requests/circuits.
-/// Database imports require an application restart to become visible.
+/// Reloads publish a complete replacement snapshot.
 /// </summary>
 public sealed class SystemDataProvider(IServiceScopeFactory scopeFactory)
 {
     private readonly object _initializationLock = new();
     private Task? _initialization;
     private SystemCatalogue? _catalogue;
+    private readonly SemaphoreSlim _reloadGate = new(1, 1);
+    public event Action? Reloaded;
 
     public SystemCatalogue Catalogue => Volatile.Read(ref _catalogue)
         ?? throw new InvalidOperationException("Initialize the system data provider before serving requests.");
@@ -72,6 +74,15 @@ public sealed class SystemDataProvider(IServiceScopeFactory scopeFactory)
         lock (_initializationLock) initialization = _initialization ??= LoadAsync();
         // A caller can cancel its wait without cancelling the load shared by other callers.
         return initialization.WaitAsync(cancellationToken);
+    }
+
+    public async Task ReloadAsync(CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        await _reloadGate.WaitAsync(cancellationToken);
+        try { await LoadAsync(); }
+        finally { _reloadGate.Release(); }
+        Reloaded?.Invoke();
     }
 
     private async Task LoadAsync()

@@ -51,20 +51,8 @@ export class DynamicMap {
     }
 
     async start() {
-        const response = await fetch(new URL("api/map/overview", document.baseURI), { signal: this.abort.signal });
-        if (!response.ok) throw new Error(`World database request failed: ${response.status}`);
-        this.overview = await response.json();
+        await this.loadOverview();
         if (this.disposed) return;
-        this.worldW = this.overview.columns * SECTOR_WIDTH + MAP_PADDING * 2;
-        this.worldH = this.overview.rows * SECTOR_HEIGHT + MAP_PADDING * 2 + .5;
-        this.sectors = this.overview.sectors.map(sector => {
-            const col = sector.x - this.overview.minSectorX, row = sector.y - this.overview.minSectorY;
-            const result = { ...sector, col, row,
-                rect: { x: MAP_PADDING + col * SECTOR_WIDTH, y: MAP_PADDING + row * SECTOR_HEIGHT,
-                    w: SECTOR_WIDTH, h: SECTOR_HEIGHT + .5 } };
-            result.points = sector.worlds.map(world => this.positionWorld(result, world)).filter(Boolean);
-            return result;
-        });
 
         this.app = new PIXI.Application();
         await this.app.init({ resizeTo: this.host, background: 0x070b13, antialias: true,
@@ -94,6 +82,41 @@ export class DynamicMap {
         if (!this.restoreView()) this.fit();
         this.tick = () => this.onTick();
         this.app.ticker.add(this.tick);
+        this.update();
+    }
+
+    async loadOverview() {
+        const response = await fetch(new URL("api/map/overview", document.baseURI), { signal: this.abort.signal });
+        if (!response.ok) throw new Error(`World database request failed: ${response.status}`);
+        this.overview = await response.json();
+        if (this.disposed) return;
+        this.worldW = this.overview.columns * SECTOR_WIDTH + MAP_PADDING * 2;
+        this.worldH = this.overview.rows * SECTOR_HEIGHT + MAP_PADDING * 2 + .5;
+        this.sectors = this.overview.sectors.map(sector => {
+            const col = sector.x - this.overview.minSectorX, row = sector.y - this.overview.minSectorY;
+            const result = { ...sector, col, row,
+                rect: { x: MAP_PADDING + col * SECTOR_WIDTH, y: MAP_PADDING + row * SECTOR_HEIGHT,
+                    w: SECTOR_WIDTH, h: SECTOR_HEIGHT + .5 } };
+            result.points = sector.worlds.map(world => this.positionWorld(result, world)).filter(Boolean);
+            return result;
+        });
+
+    }
+
+    async reloadData() {
+        if (this.disposed) return;
+        const previousOverview = this.overview;
+        const centre = this.viewport?.center;
+        for (const entry of this.sectorCache.values()) entry.controller?.abort();
+        this.sectorCache.clear();
+        await this.loadOverview();
+        if (this.disposed) return;
+        this.selected = null;
+        this.onResize();
+        if (centre && previousOverview) this.viewport.moveCenter(
+            centre.x + (previousOverview.minSectorX - this.overview.minSectorX) * SECTOR_WIDTH,
+            centre.y + (previousOverview.minSectorY - this.overview.minSectorY) * SECTOR_HEIGHT);
+        this.lastView = "";
         this.update();
     }
 

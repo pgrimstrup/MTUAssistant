@@ -1,6 +1,6 @@
 # MTUAssistant
 
-The home-page atlas is drawn directly from the M1105 sector/world database using PixiJS and pixi-viewport. Political borders and routes are not rendered. Downloaded PNG tiles are not required by the map; the existing tile-download utility remains available.
+The home-page atlas is drawn directly from the M1105 sector/world database using PixiJS and pixi-viewport. Political borders and routes are not rendered. Downloaded PNG tiles are not required by the map. Refresh Sector Data downloads system data and TravellerMap metadata instead.
 
 ## Map detail
 
@@ -22,13 +22,19 @@ At close zoom, UWP sits at the top of the hex, below coordinates when shown; nam
 
 ## Shared system catalogue
 
-After database migration, application startup awaits the singleton `SystemDataProvider.InitializeAsync()` before accepting requests. It loads sectors, subsectors, allegiances and systems once, using a short-lived database scope, and publishes a complete immutable `SystemCatalogue`. Concurrent initialization callers share the same task; a failed load prevents startup rather than exposing partial data. Database imports or edits become visible after restarting the application.
+After database migration, application startup awaits the singleton `SystemDataProvider.InitializeAsync()` before accepting requests. It loads sectors, subsectors, allegiances and systems once, using a short-lived database scope, and publishes a complete immutable `SystemCatalogue`. Concurrent initialization callers share the same task; a failed load prevents startup rather than exposing partial data. After a refresh, the provider reloads and atomically publishes a complete replacement snapshot; a failed reload leaves the prior snapshot available.
 
-`SearchService`, `MapDataService` and `WorldSelectionService` share that catalogue across requests and Blazor circuits. Search retains its existing all-milieu scope, result grouping/limits and subsector context. Map and selection retain the M1105 filter. Map overview and per-sector DTOs are prepared once, preserving existing API response shapes. Search returns fresh UI result objects so edits cannot affect shared data.
+`SearchService`, `MapDataService` and `WorldSelectionService` share that catalogue across requests and Blazor circuits. Search retains its existing all-milieu scope, result grouping/limits and subsector context. Map and selection retain the M1105 filter. Map overview and per-sector DTOs are rebuilt when the catalogue changes, preserving existing API response shapes. Search returns fresh UI result objects so edits cannot affect shared data.
 
 `CatalogueSystem` owns a stable system ID, location, `MainWorldData` and an immutable `Bodies` collection. Main-world data retains all currently stored system attributes. Bodies are currently empty; future `SystemBodyData` record types can supply stars, planets, moons and orbital information for an orrery without changing search or map contracts. No bodies or orbital positions are inferred from summary counts. Add future body-table loading to the provider's startup load and publish it as part of the same snapshot.
 
 The runtime checks initialize concurrently, verify one read per source table, then close the test database and exercise search, map and selection. They also cover empty catalogues, milieu filtering, cancellation and protection from mutable search results.
+
+## Refreshing sector data
+
+Refresh Sector Data updates every sector in the configured M1105 area. For each sector it retrieves system data and TravellerMap metadata before replacing the sector's names, subsectors, allegiances, systems, borders and routes in a single database transaction. Existing sector IDs are retained. No sector or subsector image tiles are downloaded. A failed download leaves that sector's previous data intact and is counted in the progress dialog; cancellation retains already committed sectors.
+
+Border paths and route endpoints (including cross-sector offsets) are preserved. Explicit colours take precedence over matching TravellerMap stylesheet rules; the original stylesheet and metadata fields are retained for future rendering. After a completed, cancelled, or interrupted refresh, the shared catalogue reloads any committed sector updates; open maps reload their data and clear their selection.
 
 ## Checks
 
