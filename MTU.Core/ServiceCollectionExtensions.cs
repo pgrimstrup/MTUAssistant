@@ -16,8 +16,17 @@ public static class ServiceCollectionExtensions
 
         services.AddDbContext<MtuDbContext>(o => o.UseSqlite(ConnectionString(databasePath)));
         services.AddScoped<SectorImporter>();
-        services.AddScoped<ISearchService, SearchService>();
-        services.AddScoped<WorldSelectionService>();
+        services.AddMtuCatalogue();
+        return services;
+    }
+
+    /// <summary>Registers the shared read-only catalogue and its consumers; initialize it after migration.</summary>
+    public static IServiceCollection AddMtuCatalogue(this IServiceCollection services)
+    {
+        services.AddSingleton<SystemDataProvider>();
+        services.AddSingleton<ISearchService, SearchService>();
+        services.AddSingleton<WorldSelectionService>();
+        services.AddSingleton<MapDataService>();
         return services;
     }
 

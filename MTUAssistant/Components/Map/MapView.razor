@@ -12,7 +12,14 @@
         <button type="button" title="Fit to screen" aria-label="Fit to screen" @onclick="Fit">&#x26F6;</button>
     </div>
 
-    <div @ref="status" class="map-status">Loading map…</div>
+    <div class="map-key" aria-label="Map legend">
+        <span class="map-key-water">● Water</span>
+        <span class="map-key-dry">● Dry / belt</span>
+        <span class="map-key-amber">◯ Amber zone</span>
+        <span class="map-key-red">◯ Red zone</span>
+        <span class="map-key-water">★ Naval · ▲ Scout</span>
+    </div>
+    <div @ref="status" class="map-status" role="status">Loading world data…</div>
     @if (selectionError is not null)
     {
         <div class="map-selection-error" role="alert">@selectionError</div>
@@ -65,7 +72,7 @@
         {
             module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Map/MapView.razor.js");
             callback = DotNetObjectReference.Create(this);
-            map = await module.InvokeAsync<IJSObjectReference>("createMap", host, status, callback, TileRefreshWorker.MinX, TileRefreshWorker.MinY);
+            map = await module.InvokeAsync<IJSObjectReference>("createMap", host, status, callback);
         }
         catch (JSDisconnectedException)
         {

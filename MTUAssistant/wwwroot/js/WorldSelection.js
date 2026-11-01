@@ -1,29 +1,4 @@
-// Poster tiles place odd columns half a parsec above even columns.
-// Search adjacent centres rather than rounding x and y independently near hex corners.
-export function findHex(x, y, sectorWidth, sectorHeight) {
-    const stepX = sectorWidth / 32;
-    const stepY = sectorHeight / 40;
-    // Traveller Map poster images include a 0.25-column left margin and
-    // a 0.10-parsec top margin. TileMap draws that padding at each tile's origin.
-    x -= stepX * 0.25;
-    y -= stepY * 0.10;
-    const approximateColumn = Math.floor(x / stepX);
-    let best;
-    let distance = Infinity;
-    for (let column = approximateColumn - 1; column <= approximateColumn + 1; column++) {
-        const offset = column % 2 === 0 ? 0.5 : 1;
-        const row = Math.round(y / stepY - offset);
-        const cx = (column + 0.5) * stepX;
-        const cy = (row + offset) * stepY;
-        const d = Math.hypot(x - cx, y - cy);
-        if (d < distance) {
-            distance = d;
-            best = { sectorColumn: Math.floor(column / 32), sectorRow: Math.floor(row / 40),
-                column: ((column % 32) + 32) % 32 + 1, row: ((row % 40) + 40) % 40 + 1 };
-        }
-    }
-    return best;
-}
+export { findHex } from "./MapGeometry.js";
 
 // Passive observers never capture a pointer or stop propagation to pixi-viewport.
 export function observeClicks(canvas, onClick) {

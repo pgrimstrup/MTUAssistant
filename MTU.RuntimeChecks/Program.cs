@@ -85,15 +85,17 @@ Check(compactStars.StellarDataKnown && compactStars.Stars.Count == 8
 using var connection = new SqliteConnection("Data Source=:memory:");
 await connection.OpenAsync();
 var services = new ServiceCollection();
-services.AddDbContext<MtuDbContext>(options => options.UseSqlite(connection));
-services.AddScoped<WorldSelectionService>();
-using var provider = services.BuildServiceProvider();
+var commands = new CatalogueCommandCounter();
+services.AddDbContext<MtuDbContext>(options => options.UseSqlite(connection).AddInterceptors(commands));
+services.AddMtuCatalogue();
+using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
 using (var scope = provider.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<MtuDbContext>();
     await db.Database.EnsureCreatedAsync();
     db.Sectors.AddRange(
         new SectorEntity { Name = "Spinward Marches", X = -4, Y = -1, Milieu = "M1105",
+            Subsectors = [new SubsectorEntity { Letter = "C", Name = "Regina" }],
             Allegiances = [new AllegianceEntity { Code = "ImDd", Name = "Third Imperium, Domain of Deneb" }],
             Systems = [
                 new SystemEntity { Name = "Regina", Hex = "1910", Uwp = "A788899-C", Pbg = "703", W = "8", Stellar = "F7 V BD M3 V", Remarks = "Sa", A = "ImDd" },
@@ -105,8 +107,21 @@ using (var scope = provider.CreateScope())
             Systems = [new SystemEntity { Name = "Other Regina", Hex = "1910", Uwp = "X000000-0", A = "ImDd" }] });
     await db.SaveChangesAsync();
 }
+commands.Reads = 0;
+var catalogueProvider = provider.GetRequiredService<SystemDataProvider>();
+await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => catalogueProvider.InitializeAsync()));
+Check(commands.Reads == 4, "Concurrent initialization reads each catalogue table exactly once");
+var snapshot = catalogueProvider.Catalogue;
+
+await catalogueProvider.InitializeAsync();
+Check(ReferenceEquals(snapshot, catalogueProvider.Catalogue) && commands.Reads == 4, "Initialization reuses the published snapshot");
+Check(snapshot.Systems.Length == 4 && snapshot.Systems.All(s => s.Bodies.IsEmpty), "All milieus loaded with no invented system bodies");
+commands.Reads = 0;
+// Destroy the in-memory database: every consumer must now work solely from the snapshot.
+await connection.CloseAsync();
 using (var scope = provider.CreateScope())
 {
+    Check(ReferenceEquals(catalogueProvider, scope.ServiceProvider.GetRequiredService<SystemDataProvider>()), "Catalogue shared across scopes");
     var selection = scope.ServiceProvider.GetRequiredService<WorldSelectionService>();
     var world = await selection.FindAsync(-4, -1, 19, 10);
     Check(world is { Name: "Regina", Sector: "Spinward Marches", Hex: "1910", Uwp: "A788899-C", Pbg: "703", W: "8", Stellar: "F7 V BD M3 V", Remarks: "Sa" }, "Database selection, system data and milieu");
@@ -119,3 +134,71 @@ using (var scope = provider.CreateScope())
     await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => selection.FindAsync(-4, -1, 19, 10)));
 }
 Console.WriteLine("UWP parsing and SQLite world selection checks passed.");
+
+using (var scope = provider.CreateScope())
+{
+    var service = scope.ServiceProvider.GetRequiredService<MapDataService>();
+    var overview = await service.GetOverviewAsync();
+    Check(overview.Sectors.Count == 1 && overview.Sectors[0].Name == "Spinward Marches", "Database map overview filters milieu");
+    Check(overview.Sectors[0].Hexes.Count == 3 && overview.MinSectorX == TileRefreshWorker.MinX,
+        "Overview points and atlas origin without tile files");
+    Check(overview.Sectors[0].Worlds.Single(w => w.Hex == "1910") is
+        { Name: "Regina", Uwp: "A788899-C", Remarks: "Sa" }, "Overview includes world label classifications before sector details load");
+    var details = await service.GetSectorAsync(overview.Sectors[0].Id);
+    Check(details is not null && details.Single(w => w.Hex == "1910") is
+        { Name: "Regina", Uwp: "A788899-C", Pbg: "703", Remarks: "Sa", Allegiance: "ImDd" }, "Sector detail fields");
+    Check(await service.GetSectorAsync(-1) is null, "Missing sector is not an empty valid sector");
+    var otherEra = snapshot.Sectors.Single(s => s.Milieu == "M1120");
+    Check(await service.GetSectorAsync(otherEra.Id) is null, "Sector detail filters milieu");
+}
+using (var emptyConnection = new SqliteConnection("Data Source=:memory:"))
+{
+    await emptyConnection.OpenAsync();
+    using var emptyDb = new MtuDbContext(new DbContextOptionsBuilder<MtuDbContext>().UseSqlite(emptyConnection).Options);
+    await emptyDb.Database.EnsureCreatedAsync();
+    var emptyServices = new ServiceCollection();
+    emptyServices.AddDbContext<MtuDbContext>(options => options.UseSqlite(emptyConnection));
+    emptyServices.AddMtuCatalogue();
+    using var emptyProvider = emptyServices.BuildServiceProvider();
+    await emptyProvider.GetRequiredService<SystemDataProvider>().InitializeAsync();
+    var overview = await emptyProvider.GetRequiredService<MapDataService>().GetOverviewAsync();
+    Check(overview.Sectors.Count == 0 && overview.Columns > 0 && overview.Rows > 0, "Empty database has usable atlas bounds");
+}
+Console.WriteLine("Database-driven map overview, sector details and empty database checks passed.");
+
+var search = provider.GetRequiredService<ISearchService>();
+var results = await search.SearchAsync("  REGina  ");
+Check(results.Count == 3 && results[0].SubsectorName == "Regina", "Search trimming, case insensitivity, subsector and system results");
+var regina = results.Single(r => r.SystemName == "Regina");
+Check(regina is { SectorName: "Spinward Marches", SubsectorLetter: "C", SubsectorName: "Regina", SubsectorHex: "0310", SectorHex: "1910" }, "Search subsector context preserved");
+Check(results.Any(r => r.SystemName == "Other Regina"), "Search retains its existing all-milieu scope");
+regina.SystemName = "Changed UI result";
+Check((await search.SearchAsync("Regina")).Any(r => r.SystemName == "Regina"), "UI results cannot mutate the catalogue");
+Check((await search.SearchAsync("re")).Count == 0, "Minimum search term length");
+Check((await search.SearchAsync("Spinward")).Single().SectorName == "Spinward Marches", "Sector search");
+await Task.WhenAll(Enumerable.Range(0, 20).Select(async _ => {
+    Check((await search.SearchAsync("Regina")).Count == 3, "Concurrent search snapshot");
+    Check((await provider.GetRequiredService<MapDataService>().GetOverviewAsync()).Sectors.Count == 1, "Concurrent map snapshot");
+}));
+using (var cancellation = new CancellationTokenSource()) {
+    cancellation.Cancel();
+    try { await search.SearchAsync("Regina", cancellation.Token); throw new Exception("Search ignored cancellation"); }
+    catch (OperationCanceledException) { }
+    try { await provider.GetRequiredService<MapDataService>().GetOverviewAsync(cancellation.Token); throw new Exception("Map ignored cancellation"); }
+    catch (OperationCanceledException) { }
+}
+Check(commands.Reads == 0, "Search, map and selection perform no SQL after initialization, even with database unavailable");
+Console.WriteLine("Shared startup catalogue, concurrent initialization, search, snapshot isolation and zero request-time SQL checks passed.");
+
+sealed class CatalogueCommandCounter : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
+{
+    public int Reads;
+    public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(
+        System.Data.Common.DbCommand command, Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
+        Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader> result,
+        CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref Reads);
+        return ValueTask.FromResult(result);
+    }
+}

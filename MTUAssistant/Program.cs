@@ -8,7 +8,7 @@ namespace MTUAssistant
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +25,9 @@ namespace MTUAssistant
             var app = builder.Build();
 
             app.Services.MigrateMtuDatabase();
+            await app.Services.GetRequiredService<SystemDataProvider>().InitializeAsync();
+            // Prepare map projections before requests are accepted.
+            _ = app.Services.GetRequiredService<MapDataService>();
 
             // Configure the HTTP request pipeline.
             if (!app.Environment.IsDevelopment())
@@ -37,16 +40,15 @@ namespace MTUAssistant
             app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
             app.UseHttpsRedirection();
 
-            app.UseMtuTiles();
 
             app.UseAntiforgery();
 
             app.MapStaticAssets();
-            app.MapMtuTiles();
+            app.MapMtuMap();
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
 
-            app.Run();
+            await app.RunAsync();
         }
     }
 }

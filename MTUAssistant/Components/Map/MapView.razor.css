@@ -78,3 +78,9 @@
     color: #ff8a8a;
     pointer-events: none;
 }
+
+.map-key { position: absolute; left: .75rem; bottom: 2.25rem; display: flex; flex-wrap: wrap; gap: .3rem .8rem; max-width: calc(100% - 1.5rem); padding: .3rem .5rem; border: 1px solid #263447; border-radius: .3rem; background: rgba(7, 11, 19, .88); font-size: .65rem; pointer-events: none; }
+.map-key-water { color: #87cde6; }
+.map-key-dry { color: #dcbf94; }
+.map-key-amber { color: #f1c36c; }
+.map-key-red { color: #ff727f; }

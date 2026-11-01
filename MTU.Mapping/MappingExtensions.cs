@@ -40,4 +40,13 @@ public static class MappingExtensions
         endpoints.MapGet("/api/map/manifest", (ITileManifestService service) => Results.Ok(service.GetManifest()));
         return endpoints;
     }
+
+    public static IEndpointRouteBuilder MapMtuMap(this IEndpointRouteBuilder endpoints)
+    {
+        endpoints.MapGet("/api/map/overview", async (MapDataService service, CancellationToken ct) =>
+            Results.Ok(await service.GetOverviewAsync(ct)));
+        endpoints.MapGet("/api/map/sectors/{sectorId:int}", async (int sectorId, MapDataService service, CancellationToken ct) =>
+            await service.GetSectorAsync(sectorId, ct) is { } worlds ? Results.Ok(worlds) : Results.NotFound());
+        return endpoints;
+    }
 }
