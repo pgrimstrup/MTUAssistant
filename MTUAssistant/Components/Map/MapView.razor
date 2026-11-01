@@ -1,0 +1,71 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="map-shell">
+    <div @ref="host" class="map-host"></div>
+
+    <div class="map-hud">
+        <button type="button" title="Zoom in" aria-label="Zoom in" @onclick="ZoomIn">+</button>
+        <button type="button" title="Zoom out" aria-label="Zoom out" @onclick="ZoomOut">&minus;</button>
+        <button type="button" title="Fit to screen" aria-label="Fit to screen" @onclick="Fit">&#x26F6;</button>
+    </div>
+
+    <div @ref="status" class="map-status">Loading map…</div>
+
+    @if (error is not null)
+    {
+        <div class="map-error">@error</div>
+    }
+</div>
+
+@code {
+    private ElementReference host;
+    private ElementReference status;
+    private IJSObjectReference? module;
+    private IJSObjectReference? map;
+    private string? error;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Map/MapView.razor.js");
+            map = await module.InvokeAsync<IJSObjectReference>("createMap", host, status);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (Exception ex)
+        {
+            error = $"Unable to start the map: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private Task ZoomIn() => Invoke("zoomIn");
+    private Task ZoomOut() => Invoke("zoomOut");
+    private Task Fit() => Invoke("fit");
+
+    private async Task Invoke(string method)
+    {
+        if (map is not null) await map.InvokeVoidAsync(method);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (map is not null)
+            {
+                await map.InvokeVoidAsync("dispose");
+                await map.DisposeAsync();
+            }
+            if (module is not null) await module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

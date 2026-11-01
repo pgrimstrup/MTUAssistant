@@ -1,0 +1,70 @@
+.map-shell {
+    position: relative;
+    height: calc(100vh - 4.5rem);
+    min-height: 320px;
+    border: 1px solid var(--app-border);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: #05070d;
+}
+
+.map-host {
+    position: absolute;
+    inset: 0;
+    cursor: grab;
+}
+
+.map-host:active {
+    cursor: grabbing;
+}
+
+.map-host ::deep canvas {
+    display: block;
+}
+
+.map-hud {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.map-hud button {
+    width: 2.25rem;
+    height: 2.25rem;
+    border: 1px solid var(--app-border);
+    border-radius: 0.4rem;
+    background: var(--app-surface);
+    color: inherit;
+    font-size: 1.15rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.map-hud button:hover {
+    background: var(--app-accent-soft);
+    border-color: var(--app-accent);
+}
+
+.map-status {
+    position: absolute;
+    left: 0.75rem;
+    bottom: 0.6rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 0.3rem;
+    background: rgba(10, 14, 24, 0.75);
+    color: #9aa7bd;
+    font-size: 0.75rem;
+    pointer-events: none;
+}
+
+.map-error {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(5, 7, 13, 0.85);
+    color: #ff8a8a;
+}

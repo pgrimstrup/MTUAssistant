@@ -1,4 +1,5 @@
 using MTU.Core;
+using MTU.Mapping;
 using MTU.TravellerMap;
 using MTUAssistant.Components;
 using MTUAssistant.Services;
@@ -17,6 +18,7 @@ namespace MTUAssistant
 
             builder.Services.AddTravellerMapClient();
             builder.Services.AddMtuDatabase();
+            builder.Services.AddMtuMapping();
             builder.Services.AddTransient<TileRefreshWorker>();
             builder.Services.AddScoped<TileRefreshService>();
 
@@ -35,9 +37,12 @@ namespace MTUAssistant
             app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
             app.UseHttpsRedirection();
 
+            app.UseMtuTiles();
+
             app.UseAntiforgery();
 
             app.MapStaticAssets();
+            app.MapMtuTiles();
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
 
