@@ -4,7 +4,7 @@
 <PageTitle>Charted Space</PageTitle>
 
 <div class="world-layout">
-    <MapView WorldSelected="SelectWorld" />
+    <MapView WorldSelected="SelectWorld" SystemId="SystemId" SectorId="SectorId" SubsectorId="SubsectorId" FocusToken="FocusToken" />
     <aside class="world-panel" aria-label="Selected world" aria-live="polite">
         @if (selectedWorld is { } world)
         {
@@ -114,6 +114,10 @@
 </div>
 
 @code {
+    [SupplyParameterFromQuery(Name = "system")] public int? SystemId { get; set; }
+    [SupplyParameterFromQuery(Name = "sector")] public int? SectorId { get; set; }
+    [SupplyParameterFromQuery(Name = "subsector")] public int? SubsectorId { get; set; }
+    [SupplyParameterFromQuery(Name = "focus")] public string? FocusToken { get; set; }
     private SelectedWorld? selectedWorld;
     private void SelectWorld(SelectedWorld? world) => selectedWorld = world;
 }

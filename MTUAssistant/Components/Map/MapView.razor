@@ -1,6 +1,7 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 @inject WorldSelectionService Worlds
+@inject SystemDataProvider SystemData
 @inject ILogger<MapView> Logger
 
 <div class="map-shell">
@@ -43,6 +44,97 @@
     private bool disposed;
 
     [Parameter] public EventCallback<SelectedWorld?> WorldSelected { get; set; }
+    [Parameter] public int? SystemId { get; set; }
+    [Parameter] public int? SectorId { get; set; }
+    [Parameter] public int? SubsectorId { get; set; }
+    [Parameter] public string? FocusToken { get; set; }
+    private (int? System, int? Sector, int? Subsector, string? Token) lastFocus;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var request = (SystemId, SectorId, SubsectorId, FocusToken);
+        if (request == lastFocus) return;
+        lastFocus = request;
+        // Invalidate an older pending selection, including a removed query parameter.
+        selectionVersion++;
+        if (map is not null) await FocusSearchTarget();
+    }
+
+    private async Task FocusSearchTarget()
+    {
+        if (SystemId is { } systemId) await FocusSystem(systemId);
+        else if (SubsectorId is { } subsectorId) await FocusRegion(null, subsectorId);
+        else if (SectorId is { } sectorId) await FocusRegion(sectorId, null);
+    }
+
+    private async Task FocusRegion(int? sectorId, int? subsectorId)
+    {
+        var version = ++selectionVersion;
+        var data = SystemData.Catalogue;
+        string? letter = null;
+        if (subsectorId is { } id)
+        {
+            var subsector = data.Subsectors.FirstOrDefault(s => s.Id == id);
+            sectorId = subsector?.SectorId;
+            letter = subsector?.Letter;
+        }
+        if (sectorId is not { } targetId || !data.SectorsById.TryGetValue(targetId, out var sector)
+            || sector.Milieu != TileRefreshWorker.Milieu)
+        {
+            selectionError = "This region is not available on the current map.";
+            return;
+        }
+        try
+        {
+            var focused = await map!.InvokeAsync<bool>("focusRegion", targetId, letter);
+            if (disposed || version != selectionVersion) return;
+            if (!focused)
+            {
+                selectionError = "Unable to locate this region on the map.";
+                return;
+            }
+            selectionError = null;
+            await WorldSelected.InvokeAsync(null);
+        }
+        catch (JSDisconnectedException) { }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unable to focus searched region");
+            if (!disposed && version == selectionVersion)
+                selectionError = "Unable to navigate to this region. Please try again.";
+        }
+    }
+
+    private async Task FocusSystem(int id)
+    {
+        var version = ++selectionVersion;
+        var data = SystemData.Catalogue;
+        if (!data.SystemsById.TryGetValue(id, out var system)
+            || !data.SectorsById.TryGetValue(system.SectorId, out var sector)
+            || sector.Milieu != TileRefreshWorker.Milieu)
+        {
+            selectionError = "This system is not available on the current map.";
+            return;
+        }
+        try
+        {
+            var focused = await map!.InvokeAsync<bool>("focusWorld", system.SectorId, system.Hex);
+            if (disposed || version != selectionVersion) return;
+            if (!focused)
+            {
+                selectionError = "Unable to locate this system on the map.";
+                return;
+            }
+            await SelectHex(sector.X, sector.Y, int.Parse(system.Hex[..2]), int.Parse(system.Hex[2..]));
+        }
+        catch (JSDisconnectedException) { }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unable to focus searched system {SystemId}", id);
+            if (!disposed && version == selectionVersion)
+                selectionError = "Unable to navigate to this system. Please try again.";
+        }
+    }
 
     [JSInvokable]
     public async Task SelectHex(int sectorX, int sectorY, int column, int row)
@@ -73,6 +165,11 @@
             module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Map/MapView.razor.js");
             callback = DotNetObjectReference.Create(this);
             map = await module.InvokeAsync<IJSObjectReference>("createMap", host, status, callback);
+            if (!disposed)
+            {
+                await FocusSearchTarget();
+                await InvokeAsync(StateHasChanged);
+            }
         }
         catch (JSDisconnectedException)
         {

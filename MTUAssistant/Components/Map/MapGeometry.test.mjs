@@ -122,3 +122,58 @@ try {
     globalThis.document = savedDocument;
     globalThis.PIXI = savedPixi;
 }
+
+// Search navigation uses sector identity and hex geometry without waiting for detail fetches.
+const focused = new DynamicMap({}, {}, {});
+let centre, refreshed=0, saved=0;
+focused.sectors=[{id:17,col:0,row:0},{id:22,col:3,row:2}];
+focused.worldW=200; focused.worldH=200;
+focused.viewport={worldScreenWidth:40,worldScreenHeight:30,scale:{x:32},
+    plugins:{remove(name){assert.equal(name,'animate');},get(){return {reset(){}};}},
+    clamp(bounds){assert.ok(bounds.left < 0 && bounds.top < 0);},
+    animate(options){
+        assert.equal(options.time,650);
+        assert.equal(options.ease,'easeInOutSine');
+        assert.equal(options.scale,undefined,'pan does not animate zoom');
+        centre=options.position;
+        options.callbackOnComplete();
+    },
+    moveCenter(x,y){centre={x,y};}};
+focused.update=()=>refreshed++;
+focused.saveView=()=>saved++;
+for (const [id,col,row,hex] of [[17,0,0,'0101'],[22,127,119,'3240']]) {
+    assert.equal(focused.focusWorld(id,hex),true);
+    assert.deepEqual(centre,hexCenter(col,row));
+    assert.deepEqual(focused.selected,{...centre,key:id+'/'+hex});
+    assert.equal(focused.viewport.scale.x,32,'search preserves zoom');
+}
+assert.equal(refreshed,2); assert.equal(saved,2);
+assert.equal(focused.focusWorld(999,'0101'),false);
+assert.equal(focused.focusWorld(17,'0000'),false);
+assert.equal(refreshed,2);
+assert.equal(focused.focusWorld(17,'0101'),true,'same world can be selected again');
+focused.disposed=true;
+assert.equal(focused.focusWorld(17,'0101'),false);
+
+// Region navigation clears selection and uses the same animated pan without changing zoom.
+focused.disposed=false;
+for (const [id,col,row] of [[17,0,0],[22,3,2]]) {
+    focused.selected={key:'old world'};
+    assert.equal(focused.focusRegion(id),true);
+    assert.ok(Math.abs(centre.x-(1+(col+.5)*32*HEX_X))<1e-10);
+    assert.equal(centre.y,1+(row+.5)*40);
+    assert.equal(focused.selected,null);
+    for (let index=0;index<16;index++) {
+        focused.selected={key:'old world'};
+        assert.equal(focused.focusRegion(id,String.fromCharCode(65+index)),true);
+        assert.ok(Math.abs(centre.x-(1+col*32*HEX_X+(index%4+.5)*32*HEX_X/4))<1e-10);
+        assert.equal(centre.y,1+row*40+(Math.floor(index/4)+.5)*10);
+        assert.equal(focused.selected,null);
+        assert.equal(focused.viewport.scale.x,32);
+    }
+}
+focused.selected={key:'keep'};
+assert.equal(focused.focusRegion(999),false);
+assert.equal(focused.focusRegion(17,'Q'),false);
+assert.equal(focused.focusRegion(17,''),false);
+assert.deepEqual(focused.selected,{key:'keep'});

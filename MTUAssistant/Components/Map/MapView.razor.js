@@ -111,8 +111,19 @@ export class DynamicMap {
         if (!this.viewport || !this.host.clientWidth || !this.host.clientHeight) return;
         this.viewport.resize(this.host.clientWidth, this.host.clientHeight, this.worldW, this.worldH);
         this.viewport.clampZoom({ minScale: this.fitZoom, maxScale: MAX_ZOOM });
-        this.viewport.clamp({ direction: "all", underflow: "center" });
+        this.updatePanBounds();
         this.lastView = "";
+    }
+
+    updatePanBounds() {
+        if (!this.allowEdgeCentering) {
+            this.viewport.clamp({ direction: "all", underflow: "center" });
+            return;
+        }
+        this.viewport.clamp({ left: -this.viewport.worldScreenWidth / 2,
+            right: this.worldW + this.viewport.worldScreenWidth / 2,
+            top: -this.viewport.worldScreenHeight / 2,
+            bottom: this.worldH + this.viewport.worldScreenHeight / 2 });
     }
 
     fit() {
@@ -427,6 +438,58 @@ export class DynamicMap {
         if (!this.selected) return;
         this.hexPath(this.selection, this.selected);
         this.selection.fill({ color: 0x83e3d1, alpha: .10 }).stroke({ color: 0x83e3d1, width: 1.8 / zoom });
+    }
+
+    focusWorld(sectorId, hex) {
+        if (this.disposed || !this.viewport) return false;
+        const sector = this.sectors.find(sector => sector.id === sectorId);
+        const location = parseHex(hex);
+        if (!sector || !location) return false;
+        const point = hexCenter(sector.col * 32 + location.column - 1,
+            sector.row * 40 + location.row - 1);
+        this.selected = { ...point, key: sectorId + "/" + hex };
+        return this.panToPoint(point);
+    }
+
+    focusRegion(sectorId, letter = null) {
+        if (this.disposed || !this.viewport) return false;
+        const sector = this.sectors.find(sector => sector.id === sectorId);
+        if (!sector || (letter !== null && !/^[A-P]$/.test(letter))) return false;
+        let x = MAP_PADDING + sector.col * SECTOR_WIDTH;
+        let y = MAP_PADDING + sector.row * SECTOR_HEIGHT;
+        if (letter === null) {
+            x += SECTOR_WIDTH / 2;
+            y += SECTOR_HEIGHT / 2;
+        } else {
+            const index = letter.charCodeAt(0) - 65;
+            x += (index % 4 + .5) * SECTOR_WIDTH / 4;
+            y += (Math.floor(index / 4) + .5) * SECTOR_HEIGHT / 4;
+        }
+        this.selected = null;
+        return this.panToPoint({ x, y });
+    }
+
+    panToPoint(point) {
+        // Replace any previous flight and stop drag momentum before search navigation.
+        this.viewport.plugins.remove("animate");
+        this.viewport.plugins.get("decelerate")?.reset();
+        // Permit edge worlds to sit at the centre even when the atlas fits the viewport.
+        this.allowEdgeCentering = true;
+        this.updatePanBounds();
+        if (globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+            this.viewport.moveCenter(point.x, point.y);
+            this.saveView();
+        } else {
+            this.viewport.animate({ time: 650, position: point, ease: "easeInOutSine",
+                callbackOnComplete: () => {
+                    if (this.disposed) return;
+                    this.lastView = "";
+                    this.saveView();
+                } });
+        }
+        this.lastView = "";
+        this.update();
+        return true;
     }
 
     async selectWorld(event) {

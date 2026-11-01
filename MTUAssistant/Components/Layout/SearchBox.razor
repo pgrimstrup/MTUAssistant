@@ -1,8 +1,10 @@
-@implements IDisposable
+@implements IAsyncDisposable
 @inject ISearchService Search
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <div class="search">
-    <input type="search" class="form-control" placeholder="Search sectors, subsectors, systems…" autocomplete="off"
+    <input @ref="searchInput" type="search" class="form-control" placeholder="Search sectors, subsectors, systems…" autocomplete="off"
            aria-label="Search" value="@_text" @oninput="OnInput" @onkeydown="OnKeyDown" @onblur="Close" />
     @if (_open)
     {
@@ -29,9 +31,26 @@
     private bool _open;
     private int _active = -1;
     private CancellationTokenSource? _cts;
+    private ElementReference searchInput;
+    private IJSObjectReference? inputModule;
+    private bool selectTextAfterRender;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!selectTextAfterRender) return;
+        try
+        {
+            inputModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/SearchInput.js");
+            if (!selectTextAfterRender) return;
+            selectTextAfterRender = false;
+            await inputModule.InvokeVoidAsync("selectAll", searchInput);
+        }
+        catch (JSDisconnectedException) { }
+    }
 
     private async Task OnInput(ChangeEventArgs e)
     {
+        selectTextAfterRender = false;
         _text = e.Value?.ToString() ?? string.Empty;
         _cts?.Cancel();
         _cts?.Dispose();
@@ -68,8 +87,8 @@
             case "ArrowUp" when _results.Count > 0:
                 _active = (_active - 1 + _results.Count) % _results.Count;
                 break;
-            case "Enter" when _open && _active >= 0:
-                Select(_results[_active]);
+            case "Enter" when _open && _results.Count > 0:
+                Select(_results[Math.Max(0, _active)]);
                 break;
             case "Escape":
                 Close();
@@ -77,18 +96,30 @@
         }
     }
 
-    // Map navigation will hook in here once the map exists.
     private void Select(SearchResult result)
     {
+        _cts?.Cancel();
         _text = result.DisplayText;
+        selectTextAfterRender = true;
         Close();
+        var target = result.SystemId > 0 ? $"system={result.SystemId}"
+            : result.SubsectorId > 0 ? $"subsector={result.SubsectorId}"
+            : $"sector={result.SectorId}";
+        // Each selection, including a repeated one, creates a new navigation request.
+        Navigation.NavigateTo($"{Navigation.BaseUri}?{target}&focus={Guid.NewGuid():N}");
     }
 
     private void Close() => _open = false;
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         _cts?.Cancel();
         _cts?.Dispose();
+        selectTextAfterRender = false;
+        try
+        {
+            if (inputModule is not null) await inputModule.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { }
     }
 }
