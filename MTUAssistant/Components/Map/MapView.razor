@@ -2,6 +2,7 @@
 @inject IJSRuntime JS
 @inject WorldSelectionService Worlds
 @inject SystemDataProvider SystemData
+@inject MTUAssistant.Services.SelectedWorldState WorldState
 @inject MTUAssistant.Services.MapPointerLocation PointerLocation
 @inject ILogger<MapView> Logger
 
@@ -63,7 +64,7 @@
             selectionVersion++;
             await map.InvokeVoidAsync("reloadData");
             if (disposed) return;
-            await WorldSelected.InvokeAsync(null);
+            await RestoreWorldSelection();
             selectionError = null;
             StateHasChanged();
         }
@@ -91,6 +92,25 @@
         // Invalidate an older pending selection, including a removed query parameter.
         selectionVersion++;
         if (map is not null) await FocusSearchTarget();
+    }
+
+    private async Task RestoreWorldSelection()
+    {
+        var selected = WorldState.World;
+        if (selected is null || map is null) return;
+        var version = ++selectionVersion;
+        var data = SystemData.Catalogue;
+        if (!data.SectorsById.TryGetValue(selected.SectorId, out var sector)
+            || sector.Milieu != TileRefreshWorker.Milieu
+            || !data.SystemsByHex.ContainsKey((sector.Milieu, sector.X, sector.Y, selected.Hex)))
+        {
+            await WorldSelected.InvokeAsync(null);
+            return;
+        }
+        var restored = await map.InvokeAsync<bool>("restoreSelection", selected.SectorId, selected.Hex);
+        if (disposed || version != selectionVersion) return;
+        if (!restored) { await WorldSelected.InvokeAsync(null); return; }
+        await SelectHex(sector.X, sector.Y, int.Parse(selected.Hex[..2]), int.Parse(selected.Hex[2..]));
     }
 
     private async Task FocusSearchTarget()
@@ -208,7 +228,8 @@
             if (!disposed)
             {
                 if (reloadPending) await ReloadMapData();
-                else await FocusSearchTarget();
+                else if (SystemId is not null || SectorId is not null || SubsectorId is not null) await FocusSearchTarget();
+                else await RestoreWorldSelection();
                 await InvokeAsync(StateHasChanged);
             }
         }

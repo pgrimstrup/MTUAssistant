@@ -1,0 +1,40 @@
+.trading-page { max-width: 90rem; margin: 0 auto; }
+.trading-header { margin-bottom: 1.5rem; }
+.eyebrow, .panel-label { margin: 0 0 .35rem; color: var(--app-muted); font-size: .7rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+h1 { margin: 0; font-size: 1.8rem; }
+.intro { margin: .4rem 0 0; color: var(--app-muted); }
+.trade-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.trade-panel { min-height: 22rem; border: 1px solid var(--app-border); border-radius: var(--app-radius); background: var(--app-surface); overflow: hidden; }
+.panel-header { display: flex; align-items: center; justify-content: space-between; padding: 1.1rem 1.2rem; border-bottom: 1px solid var(--app-border); background: var(--app-surface-2); }
+h2 { margin: 0; font-size: 1.15rem; }
+.direction { display: grid; place-items: center; width: 2.2rem; height: 2.2rem; border-radius: .5rem; font-size: 1.2rem; }
+.buying .direction { color: #82d9cf; background: rgba(130, 217, 207, .1); }
+.selling .direction { color: #c5b4ff; background: rgba(197, 180, 255, .1); }
+.panel-body { padding: 2rem 1.2rem; color: var(--app-muted); }
+.panel-body p { margin: .3rem 0; }
+.panel-body .empty-title { color: var(--app-text); font-weight: 600; }
+@media (max-width: 760px) { .trade-columns { grid-template-columns: minmax(0, 1fr); } .trade-panel { min-height: 14rem; } }
+.trade-controls { display:flex; flex-wrap:wrap; align-items:end; gap:.8rem; margin-bottom:1.25rem; }
+.trade-controls label { display:grid; gap:.3rem; color:var(--app-muted); font-size:.8rem; }
+.trade-controls .dm-input { width:6rem; }
+.market-summary { margin:0 0 .8rem !important; font-size:.8rem; }
+.table-wrap { overflow-x:auto; }
+.trade-goods { width:100%; font-size:.86rem; }
+.trade-goods th:nth-child(n+2), .trade-goods td:nth-child(n+2) { text-align:right; white-space:nowrap; }
+.tag { display:inline-block; padding:.1rem .35rem; border-radius:.25rem; background:rgba(235,123,123,.15); color:#ffb6b6; font-size:.7rem; }
+.trade-error { color:#ffb6b6; }
+
+.trade-credit { margin-top:1rem; font-size:.75rem; color:var(--app-muted); }
+
+.header-status { display:flex; align-items:center; gap:.6rem; }
+.outdated-badge { padding:.2rem .5rem; border:1px solid rgba(243,195,108,.4); border-radius:999px; color:#f3c36c; background:rgba(243,195,108,.1); font-size:.7rem; font-weight:650; }
+
+.destination-label { display:grid; gap:.3rem; color:var(--app-muted); font-size:.8rem; margin-bottom:.5rem; }
+.danger-badge { color:#ffaaaa; border-color:rgba(255,100,100,.55); background:rgba(190,45,45,.2); }
+
+.destination-codes { display:flex; flex-wrap:wrap; gap:.35rem; margin-bottom:1rem; }
+.trade-code-badge { --star-colour:#c6cfff; display:inline-grid; place-items:center; min-width:1.8rem; height:1.55rem; padding:0 .2rem; border-radius:.3rem; border:1px solid var(--star-colour); color:var(--star-colour); font:600 .8rem monospace; background:var(--app-bg); }
+.trade-code-badge[data-category="physical"] { --star-colour:#82d9cf; }
+.trade-code-badge[data-category="population"], .trade-code-badge[data-category="political"] { --star-colour:#c5b4ff; }
+.trade-code-badge[data-category="economic"] { --star-colour:#f6dd93; }
+.trade-code-badge[data-category="special"] { --star-colour:#ffb2a6; }

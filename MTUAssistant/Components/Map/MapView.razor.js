@@ -495,6 +495,19 @@ export class DynamicMap {
         this.selection.fill({ color: 0x83e3d1, alpha: .10 }).stroke({ color: 0x83e3d1, width: 1.8 / zoom });
     }
 
+    restoreSelection(sectorId, hex) {
+        if (this.disposed || !this.viewport) return false;
+        const sector = this.sectors.find(sector => sector.id === sectorId);
+        const location = parseHex(hex);
+        if (!sector || !location) return false;
+        const point = hexCenter(sector.col * 32 + location.column - 1,
+            sector.row * 40 + location.row - 1);
+        this.selected = { ...point, key: sectorId + "/" + hex };
+        this.lastView = "";
+        this.update();
+        return true;
+    }
+
     focusWorld(sectorId, hex) {
         if (this.disposed || !this.viewport) return false;
         const sector = this.sectors.find(sector => sector.id === sectorId);

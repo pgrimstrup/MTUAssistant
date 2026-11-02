@@ -156,8 +156,18 @@ assert.equal(focused.focusWorld(17,'0101'),true,'same world can be selected agai
 focused.disposed=true;
 assert.equal(focused.focusWorld(17,'0101'),false);
 
-// Region navigation clears selection and uses the same animated pan without changing zoom.
+// Restoring a selection must not move or zoom the saved viewport.
 focused.disposed=false;
+const previousCentre = centre;
+assert.equal(focused.restoreSelection(22, '3240'), true);
+assert.deepEqual(focused.selected, { ...hexCenter(127,119), key:'22/3240' });
+assert.equal(centre, previousCentre);
+assert.equal(focused.viewport.scale.x, 32);
+assert.equal(focused.restoreSelection(999, '0101'), false);
+assert.equal(focused.restoreSelection(17, '0000'), false);
+assert.equal(focused.selected.key, '22/3240');
+
+// Region navigation clears selection and uses the same animated pan without changing zoom.
 for (const [id,col,row] of [[17,0,0],[22,3,2]]) {
     focused.selected={key:'old world'};
     assert.equal(focused.focusRegion(id),true);

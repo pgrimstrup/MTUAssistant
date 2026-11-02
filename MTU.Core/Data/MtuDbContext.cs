@@ -15,6 +15,7 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
     public DbSet<AllegianceEntity> Allegiances => Set<AllegianceEntity>();
     public DbSet<BorderEntity> Borders => Set<BorderEntity>();
     public DbSet<RouteEntity> Routes => Set<RouteEntity>();
+    public DbSet<TradeMarketEntity> TradeMarkets => Set<TradeMarketEntity>();
     public DbSet<SystemEntity> Systems => Set<SystemEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -31,6 +32,7 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
             e.HasMany(s => s.Systems).WithOne(n => n.Sector).HasForeignKey(n => n.SectorId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<TradeMarketEntity>().HasIndex(m => new { m.SectorId, m.Hex, m.Mode }).IsUnique();
         modelBuilder.Entity<SubsectorEntity>().HasIndex(s => new { s.SectorId, s.Letter }).IsUnique();
         modelBuilder.Entity<AllegianceEntity>().HasIndex(a => new { a.SectorId, a.Code }).IsUnique();
         modelBuilder.Entity<SystemEntity>(e =>

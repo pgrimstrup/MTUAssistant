@@ -36,6 +36,14 @@ Refresh Sector Data updates every sector in the configured M1105 area. For each 
 
 Border paths and route endpoints (including cross-sector offsets) are preserved. Explicit colours take precedence over matching TravellerMap stylesheet rules; the original stylesheet and metadata fields are retained for future rendering. After a completed, cancelled, or interrupted refresh, the shared catalogue reloads any committed sector updates; open maps reload their data and clear their selection.
 
+## Trading
+
+Select a world on the map, then open Trading. Broker and Streetwise generate and save independent markets for each sector and hex. Common and matching goods use their listed lot sizes; extra D66 rolls add lots to existing entries. Broker rerolls illegal goods; Streetwise marks randomly rolled legal goods as stolen. Exotic goods have referee-determined tonnage. Each purchase price per ton uses a 3D roll, the saved skill DM, the strongest matching purchase DM and the strongest matching sale DM subtracted. The supplier DM is entered as a signed modifier and defaults to −2. Existing priced markets retain their original prices until rerolled. The resulting percentage and prices are saved with the market. Existing markets receive prices once on first opening without changing their goods or quantities. Markets survive system-row replacement during sector refresh.
+
+Buying and Selling have independent mode and skill DM controls. Selling (Imports) can use the current world or an alphabetically sorted destination within six parsecs. Remote worlds load or generate their own saved selling market and show a red seven-day-old price badge. Selling lists goods with a positive matching Sale DM. Broker also includes common goods and excludes illegal goods; Streetwise excludes common goods and can include illegal goods. Roll calculates the sale price per ton from 3D plus the Selling section’s selected skill DM and strongest Sale DM, minus the strongest Purchase DM, plus the signed Buyer DM (default −2). Demand in tons is rolled using each commodity’s listed tonnage dice. Older saved Imports receive demand once without changing their prices. Sale results are saved independently by world and mode and marked outdated when reopened. They are sorted from highest to lowest price percentage.
+
+The D66 goods, availability codes and lot sizes are based on [Trade Goods Dice Modifiers](https://github.com/timtoon/trade-goods) by Tim Heiderich (Mongoose Traveller 2nd edition, 2016); the aid identifies itself as CC BY-NC 4.0. Its ice-world availability codes have been normalized to TravellerMap's `Ic` code.
+
 ## Checks
 
 ```powershell

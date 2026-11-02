@@ -128,6 +128,15 @@ var snapshot = catalogueProvider.Catalogue;
 await catalogueProvider.InitializeAsync();
 Check(ReferenceEquals(snapshot, catalogueProvider.Catalogue) && commands.Reads == 6, "Initialization reuses the published snapshot");
 Check(snapshot.Systems.Length == 4 && snapshot.Systems.All(s => s.Bodies.IsEmpty), "All milieus loaded with no invented system bodies");
+var spinward = snapshot.Sectors.Single(s => s.Milieu == "M1105");
+var adjacent = new CatalogueSector(-1,"Adjacent",spinward.X+1,spinward.Y,"M1105");
+Check(TradeDestinations.Distance(spinward,"3201",adjacent,"0101") == 1, "Distance across sector seam");
+Check(TradeDestinations.Distance(adjacent,"0101",spinward,"3201") == 1, "Distance symmetric across negative coordinates");
+Check(TradeDestinations.Distance(spinward,"1910",spinward,"1916") == 6 && TradeDestinations.Distance(spinward,"1910",spinward,"1917") == 7, "Six parsec distance boundary");
+Check(TradeDestinations.Distance(spinward,"0000",spinward,"1910") is null, "Invalid hex does not produce a destination");
+var nearby = TradeDestinations.Within(snapshot,spinward.Id,"1910");
+Check(nearby.Select(d => d.System.MainWorld.Name).SequenceEqual(new[] {"No allegiance", "Unmapped polity"}), "Nearby worlds sorted alphabetically with current world and other milieu excluded");
+Check(nearby.All(d => d.Distance <= 6), "Only nearby destinations included");
 commands.Reads = 0;
 // Destroy the in-memory database: every consumer must now work solely from the snapshot.
 await connection.CloseAsync();
@@ -202,6 +211,58 @@ using (var cancellation = new CancellationTokenSource()) {
 Check(commands.Reads == 0, "Search, map and selection perform no SQL after initialization, even with database unavailable");
 Console.WriteLine("Shared startup catalogue, concurrent initialization, search, snapshot isolation and zero request-time SQL checks passed.");
 
+// Purchase price uses 3D, one strongest matching modifier per column and the skill DM.
+Check(TradePricing.Percentage(-20) == 200 && TradePricing.Percentage(0) == 175
+    && TradePricing.Percentage(8) == 100 && TradePricing.Percentage(23) == 25 && TradePricing.Percentage(40) == 25, "Purchase price table bounds");
+var priceExample = TradePricing.Price(new MarketLine(11, "Example", 1, 10, false, false), 2, "In Ht Ni Po", DiceForPrice(2,3,4));
+Check(priceExample is { PriceRoll:9, PurchaseDm:3, SaleDm:2, PricePercent:80, BasePrice:20000, BuyPrice:16000 }, "Highest matching DMs and price per ton");
+Check(TradePricing.FormatTradeModifiers(priceExample, false) == "+3/-2", "Buying displays individual trade DMs");
+Check(TradePricing.FormatTradeModifiers(priceExample, true) == "+2/-3", "Selling displays individual trade DMs");
+Check(TradePricing.FormatTradeModifiers(priceExample with { PurchaseDm = 0, SaleDm = 0 }, false) == "", "Zero trade DMs are blank");
+Check(TradePricing.FormatTradeModifiers(priceExample with { PurchaseDm = 1, SaleDm = 1 }, false) == "+1/-1", "Offsetting trade DMs remain visible");
+Check(TradePricing.FormatTradeModifiers(priceExample with { PurchaseDm = 0, SaleDm = -2 }, true) == "-2", "Negative sale DMs retain their sign");
+Check(TradePricing.FormatTradeModifiers(priceExample with { PurchaseDm = null, SaleDm = null }, true) == "", "Missing trade DMs are blank");
+var supplierExample = TradePricing.Price(new MarketLine(11, "Example", 1, 10, false, false), 2, "In Ht Ni Po", DiceForPrice(2,3,4), -2);
+Check(supplierExample is { PricePercent:90, BuyPrice:18000 }, "Signed supplier DM is added to the purchase roll");
+var positiveSupplier = TradePricing.Price(new MarketLine(11, "Example", 1, 10, false, false), 2, "In Ht Ni Po", DiceForPrice(2,3,4), 2);
+Check(positiveSupplier is { PricePercent:70, BuyPrice:14000 }, "Positive supplier DM is added rather than subtracted");
+Check(TradePricing.Price(new MarketLine(66, "Exotics", 1, null, false, false), 0, "", DiceForPrice()).BuyPrice is null, "Exotics remain referee-priced");
+static Func<int> DiceForPrice(params int[] values) { var queue = new Queue<int>(values); return () => queue.Dequeue(); }
+
+Check(TradePricing.SalePercentage(-99) == 30 && TradePricing.SalePercentage(10) == 90
+    && TradePricing.SalePercentage(11) == 100 && TradePricing.SalePercentage(23) == 160
+    && TradePricing.SalePercentage(99) == 160, "Sale price table boundaries");
+var saleExample = TradePricing.SalePrice(new MarketLine(11, "Example", 0, null, false, false), 2, "In Ht Ni Po", DiceForPrice(2,3,4));
+Check(saleExample is { PriceRoll:9, PurchaseDm:3, SaleDm:2, PricePercent:90, BasePrice:20000, SalePrice:18000 }, "Sale price adds skill and highest sale DM, subtracts highest purchase DM");
+var buyerExample = TradePricing.SalePrice(new MarketLine(11, "Example", 0, null, false, false), 2, "In Ht Ni Po", DiceForPrice(2,3,4), -2);
+Check(buyerExample is { PricePercent:80, SalePrice:16000 }, "Signed buyer DM is added to the sale roll");
+var positiveBuyer = TradePricing.SalePrice(new MarketLine(11, "Example", 0, null, false, false), 2, "In Ht Ni Po", DiceForPrice(2,3,4), 2);
+Check(positiveBuyer is { PricePercent:105, SalePrice:21000 }, "Positive buyer DM is added to the sale roll");
+// Exact Imports membership for Regina's trade codes: commons plus matching positive Sale DMs.
+var reginaImports = MarketGenerator.GenerateSales("Broker", 0, "Ri Pa Ph An Cp Sa Ht", () => 3);
+int[] reginaExpected = [11,12,13,14,15,16,21,23,25,31,32,34,35,36,42,43,44,45,46,51,54,55];
+Check(reginaImports.Goods.Select(g => g.D66).SequenceEqual(reginaExpected), "Regina Imports match exact common and positive sale demand");
+Check(!TradePricing.HasSaleDemand(26, "An") && TradePricing.HasSaleDemand(26, "In"), "Demand matches complete codes, not substrings");
+Check(!TradePricing.HasSaleDemand(45, "Ag") && TradePricing.HasSaleDemand(45, "Ag Ht"), "Negative sale DM alone does not create demand");
+var noCodes = MarketGenerator.GenerateSales("Broker", 0, "", () => 3);
+Check(noCodes.Goods.Select(g => g.D66).SequenceEqual(new[] {11,12,13,14,15,16}), "No trade codes produces only common goods");
+var saleBroker = MarketGenerator.GenerateSales("Broker", 2, "In", () => 3);
+var saleStreet = MarketGenerator.GenerateSales("Streetwise", 2, "In", () => 3);
+Check(saleBroker.BuyerDm == -2 && saleBroker.DemandVersion == 1 && saleBroker.Goods.Single(g => g.D66 == 11).Tons == 60, "Demand uses commodity tonnage dice and records default buyer DM");
+Check(saleBroker.Goods.Count(g => g.D66 <= 16) == 6 && saleBroker.Goods.Any(g => g.D66 == 61) == false, "Broker sale demand includes common and excludes illegal goods");
+Check(saleStreet.Goods.Any(g => g.D66 == 61 && g.Illegal) && saleStreet.Goods.All(g => g.D66 > 16), "Streetwise includes illegal matching demand but excludes common goods");
+Check(!saleStreet.Goods.Any(g => g.D66 == 62), "Imports exclude nonmatching sale demand");
+// Fixed dice streams cover random duplicates, illegal rerolls and stolen goods.
+static Func<int> Dice(params int[] values) { var queue = new Queue<int>(values); return () => queue.Count > 0 ? queue.Dequeue() : 1; }
+var brokerDice = Enumerable.Repeat(1, 12).Concat(new[] { 1, 6, 1, 1, 1, 1, 1 }).ToArray();
+var brokerMarket = MarketGenerator.Generate("Broker", 2, "", Dice(brokerDice));
+Check(brokerMarket.Goods.Count == 6 && brokerMarket.Goods.All(g => !g.Illegal && !g.Stolen), "Broker commons and illegal reroll");
+Check(brokerMarket.Goods.Single(g => g.D66 == 11) is { Lots: 2, Tons: 40 }, "Duplicate random good adds tonnage");
+var streetMarket = MarketGenerator.Generate("Streetwise", -1, "Ht", Dice(1, 1, 1, 1, 1, 1, 1));
+Check(streetMarket.Goods.Count == 3 && streetMarket.Goods.Count(g => g.Illegal) == 2
+    && streetMarket.Goods.Single(g => g.D66 == 11).Stolen, "Streetwise illegal availability and stolen random goods");
+Check(TradeGoods.All.Count == 36 && TradeGoods.All.Select(g => g.D66).Distinct().Count() == 36, "D66 commodity coverage");
+
 // Upgrade an existing database, then prove repeated refresh replaces metadata atomically.
 using (var importConnection = new SqliteConnection("Data Source=:memory:"))
 {
@@ -232,6 +293,30 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     using var reloadContainer = reloadServices.BuildServiceProvider();
     var reloadProvider = reloadContainer.GetRequiredService<SystemDataProvider>();
     await reloadProvider.InitializeAsync();
+    var marketService = new TradingService(db);
+    db.TradeMarkets.Add(new TradeMarketEntity { SectorId = id, Hex = "0101", Mode = "Broker", ResultJson = "{\"Mode\":\"Broker\",\"SkillDm\":2,\"RolledUtc\":\"2026-01-01T00:00:00Z\",\"RandomRolls\":1,\"Goods\":[{\"D66\":11,\"Name\":\"Common Electronics\",\"Lots\":2,\"Tons\":40,\"Illegal\":false,\"Stolen\":false}]}" });
+    await db.SaveChangesAsync();
+    var legacy = await marketService.GetAsync(id, "0101", "Broker", "In Ht");
+    Check(legacy is { PricingVersion:1 } && legacy.Goods.Single() is { Lots:2, Tons:40, BasePrice:20000, PricePercent:not null, BuyPrice:not null }, "Legacy market priced without rerolling goods");
+    Check((await marketService.GetAsync(id, "0101", "Broker", "In Ht"))!.Goods.SequenceEqual(legacy!.Goods), "Legacy prices are persisted and not rerolled");
+    var savedSales = await marketService.RollSalesAsync(id, "1910", "Broker", 3, "In");
+    var legacySale = savedSales with { DemandVersion = 0, BuyerDm = null, Goods = savedSales.Goods.Select(g => g with { Tons = null }).ToArray() };
+    db.TradeMarkets.Add(new TradeMarketEntity { SectorId = id, Hex = "1912", Mode = "Sale:Broker", ResultJson = System.Text.Json.JsonSerializer.Serialize(legacySale) });
+    await db.SaveChangesAsync();
+    var upgradedSale = await marketService.GetSalesAsync(id, "1912", "Broker");
+    Check(upgradedSale is { IsOutdated:true, DemandVersion:1, BuyerDm:null } && upgradedSale.Goods.All(g => g.Tons > 0), "Older sale market gains demand without inventing a buyer DM");
+    Check(upgradedSale!.Goods.Select(g => g.SalePrice).SequenceEqual(legacySale.Goods.Select(g => g.SalePrice)), "Demand upgrade preserves saved prices");
+    Check((await marketService.GetSalesAsync(id, "1912", "Broker"))!.Goods.SequenceEqual(upgradedSale.Goods), "Upgraded demand persists without rerolling");
+    var loadedSales = await marketService.GetSalesAsync(id, "1910", "Broker");
+    Check(loadedSales!.BuyerDm == -2 && loadedSales.Goods.All(g => g.Tons > 0), "Buyer DM and demand persist");
+    Check(loadedSales!.IsOutdated && loadedSales.Goods.SequenceEqual(savedSales.Goods), "Sale prices reload unchanged and are marked outdated");
+    Check(await marketService.GetSalesAsync(id, "1910", "Streetwise") is null && await marketService.GetSalesAsync(id, "1911", "Broker") is null, "Sales isolated by world and mode");
+    var savedMarket = await marketService.RollAsync(id, "1910", "Broker", 3, "Ht");
+    Check(!savedMarket.IsOutdated, "Newly rolled market is current");
+    var reloadedMarket = await marketService.GetAsync(id, "1910", "Broker");
+    Check(reloadedMarket!.IsOutdated, "Market loaded from database is outdated");
+    Check(reloadedMarket.SupplierDm == -2 && reloadedMarket.Goods.SequenceEqual(savedMarket.Goods), "Saved market restores supplier DM and generated goods");
+    Check(await marketService.GetAsync(id, "1911", "Broker") is null && await marketService.GetAsync(id, "1910", "Streetwise") is null, "Markets isolated by world and mode");
     var oldSnapshot = reloadProvider.Catalogue;
     var mapService = reloadContainer.GetRequiredService<MapDataService>();
     Check((await mapService.GetSectorAsync(id))!.Single().Name == "Original", "Initial cached map data");
@@ -244,6 +329,7 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     db.ChangeTracker.Clear();
     Check((await db.Sectors.SingleAsync()).Id == id && (await db.Systems.SingleAsync()).Name == "Updated", "Existing sector fully refreshed with stable sector ID");
     Check((await db.Borders.SingleAsync()).Color == "red" && (await db.Routes.SingleAsync()).Color == "orange", "Explicit colours override stylesheet");
+    Check((await marketService.GetAsync(id, "1910", "Broker"))!.Goods.SequenceEqual(savedMarket.Goods), "Market survives sector system-row replacement");
     await reloadProvider.ReloadAsync();
     Check(notifications == 1 && !ReferenceEquals(oldSnapshot, reloadProvider.Catalogue), "Reload publishes one new catalogue");
     Check(oldSnapshot.Systems.Single().MainWorld.Name == "Original", "Readers retain an intact old snapshot");
@@ -296,3 +382,4 @@ sealed class CatalogueCommandCounter : Microsoft.EntityFrameworkCore.Diagnostics
         return ValueTask.FromResult(result);
     }
 }
+

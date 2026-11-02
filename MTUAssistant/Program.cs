@@ -22,6 +22,7 @@ namespace MTUAssistant
             builder.Services.AddTransient<TileRefreshWorker>();
             builder.Services.AddScoped<TileRefreshService>();
             builder.Services.AddScoped<MapPointerLocation>();
+            builder.Services.AddScoped<SelectedWorldState>();
 
             var app = builder.Build();
 

@@ -1,7 +1,7 @@
 namespace MTU.Core;
 
 public sealed record SelectedWorld(string Name, string Sector, string Hex, string Uwp, string Pbg,
-    string W, string Stellar, string Remarks, string AllegianceCode, string? AllegianceName);
+    string W, string Stellar, string Remarks, string AllegianceCode, string? AllegianceName, int SectorId = 0);
 
 public sealed class WorldSelectionService(SystemDataProvider provider)
 {
@@ -14,6 +14,6 @@ public sealed class WorldSelectionService(SystemDataProvider provider)
         var world = system.MainWorld;
         return Task.FromResult<SelectedWorld?>(new SelectedWorld(world.Name, data.SectorsById[system.SectorId].Name,
             system.Hex, world.Uwp, world.Pbg, world.WorldCount, world.Stellar, world.Remarks,
-            world.AllegianceCode, world.AllegianceName));
+            world.AllegianceCode, world.AllegianceName, system.SectorId));
     }
 }

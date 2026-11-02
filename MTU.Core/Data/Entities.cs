@@ -99,3 +99,14 @@ public class RouteEntity
     public string? Color { get; set; } public string? Style { get; set; } public double? Width { get; set; }
     public string RawJson { get; set; } = "{}";
 }
+
+/// <summary>Per-sector/hex market survives system-row replacement during sector imports.</summary>
+public class TradeMarketEntity
+{
+    public int Id { get; set; }
+    public int SectorId { get; set; }
+    public SectorEntity Sector { get; set; } = null!;
+    public string Hex { get; set; } = "";
+    public string Mode { get; set; } = "";
+    public string ResultJson { get; set; } = "";
+}

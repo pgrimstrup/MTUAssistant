@@ -1,0 +1,191 @@
+@page "/trading"
+@inject TradingService TradeService
+@inject SystemDataProvider SystemData
+@inject MTUAssistant.Services.SelectedWorldState WorldState
+
+<PageTitle>Trading</PageTitle>
+
+<div class="trading-page">
+    <header class="trading-header">
+        <p class="eyebrow">Commerce</p>
+        <h1>Trading</h1>
+        @if (world is not null) { <p class="intro">@world.Name · @world.Sector @world.Hex</p> }
+        else { <p class="intro">Select a world on the map to begin trading.</p> }
+    </header>
+    <div class="trade-columns">
+        <section class="trade-panel buying" aria-labelledby="buying-heading">
+            <header class="panel-header"><div><span class="panel-label">Exports</span><h2 id="buying-heading">Buying</h2></div><div class="header-status">@if (market?.IsOutdated == true) { <span class="outdated-badge">Outdated</span> }<span class="direction" aria-hidden="true">↗</span></div></header>
+            <div class="panel-body">
+                @if (world is not null)
+                {
+                    <label class="destination-label">Current world
+                        <input class="form-control" value="@($"{world.Name} · {world.Sector} {world.Hex}")" readonly />
+                    </label>
+                    <div class="destination-codes" aria-label="Current world trade codes">
+                        @foreach (var tradeCode in TradeCodeLookup.Describe(world.Remarks))
+                        {
+                            <span class="trade-code-badge" data-category="@tradeCode.Category" title="@tradeCode.Name">@tradeCode.Code</span>
+                        }
+                    </div>
+                    <div class="trade-controls">
+                        <label>Mode <select class="form-select" value="@mode" @onchange="ChangeMode" disabled="@busy"><option>Broker</option><option>Streetwise</option></select></label>
+                        <label>Skill DM <input class="form-control dm-input" type="number" @bind="skillDm" disabled="@busy" /></label>
+                        <label>Supplier DM <input class="form-control dm-input" type="number" @bind="supplierDm" disabled="@busy" /></label>
+                        <button type="button" class="btn btn-primary" @onclick="Roll" disabled="@busy">Roll</button>
+                    </div>
+                    @if (error is not null) { <p class="trade-error" role="alert">@error</p> }
+                    @if (market is null) { <p>Roll to generate trade goods for this world.</p> }
+                    else
+                    {
+                        <p class="market-summary">@market.Mode · Skill DM @market.SkillDm · Supplier DM @(market.SupplierDm?.ToString() ?? "not recorded") · @market.RandomRolls additional rolls</p>
+                        <div class="table-wrap"><table class="table trade-goods">
+                            <thead><tr><th>Trade good</th><th title="World trade-code modifiers applied to the price roll">Trade DMs</th><th>Supply (T)</th><th>Base price / t</th><th>Modifier</th><th>Buy price / t</th></tr></thead>
+                            <tbody>@foreach (var good in market.Goods.OrderBy(g => g.PricePercent ?? int.MaxValue).ThenBy(g => g.Name)) {
+                                <tr><td>@good.Name @if (good.Illegal) { <span class="tag">Illegal</span> } else if (good.Stolen) { <span class="tag">Stolen</span> }</td><td>@TradePricing.FormatTradeModifiers(good, false)</td><td>@(good.Tons?.ToString("N0") ?? "Referee")</td><td>@(good.BasePrice is { } basePrice ? $"Cr {basePrice:N0}" : "Referee")</td><td>@(good.PricePercent is { } percent ? $"{percent}%" : "Referee")</td><td>@(good.BuyPrice is { } buyPrice ? $"Cr {buyPrice:N0}" : "Referee")</td></tr>
+                            }</tbody>
+                        </table></div>
+                    }
+                }
+                else { <p>Select a world on the map to generate available goods.</p> }
+            </div>
+        </section>
+        <section class="trade-panel selling" aria-labelledby="selling-heading">
+            <header class="panel-header"><div><span class="panel-label">Imports</span><h2 id="selling-heading">Selling</h2></div><div class="header-status">@if (sales is not null && isRemoteDestination) { <span class="outdated-badge danger-badge">Prices are @(destination?.Distance >= 4 ? 14 : 7) days old</span> } else if (sales?.IsOutdated == true) { <span class="outdated-badge">Outdated</span> }<span class="direction" aria-hidden="true">↙</span></div></header>
+            <div class="panel-body">
+                @if (world is null) { <p>Select a world on the map to generate sale prices.</p> }
+                else
+                {
+                    <label class="destination-label">Destination
+                        <select class="form-select" value="@destinationId" @onchange="ChangeDestination" disabled="@busy">
+                            <option value="0">@world.Name · @world.Sector @world.Hex (current world)</option>
+                            @foreach (var destination in destinations) {
+                                <option value="@destination.System.Id">@destination.System.MainWorld.Name · @destination.Sector.Name @destination.System.Hex (@destination.Distance pc)</option>
+                            }
+                        </select>
+                    </label>
+                    <div class="destination-codes" aria-label="Destination world trade codes">
+                        @foreach (var tradeCode in TradeCodeLookup.Describe(destination?.System.MainWorld.Remarks ?? world.Remarks))
+                        {
+                            <span class="trade-code-badge" data-category="@tradeCode.Category" title="@tradeCode.Name">@tradeCode.Code</span>
+                        }
+                    </div>
+                    <div class="trade-controls"><label>Mode <select class="form-select" value="@sellMode" @onchange="ChangeSellMode" disabled="@busy"><option>Broker</option><option>Streetwise</option></select></label><label>Skill DM <input class="form-control dm-input" type="number" @bind="sellSkillDm" disabled="@busy" /></label><label>Buyer DM <input class="form-control dm-input" type="number" @bind="buyerDm" disabled="@busy" /></label><button type="button" class="btn btn-primary" @onclick="RollSales" disabled="@busy">Roll</button></div>
+                    @if (salesError is not null) { <p class="trade-error" role="alert">@salesError</p> }
+                    @if (sales is null) { <p>Roll to find goods this world wants to buy.</p> }
+                    else
+                    {
+                        <p class="market-summary">@sales.Mode · Skill DM @sales.SkillDm · Buyer DM @(sales.BuyerDm?.ToString() ?? "not recorded")</p>
+                        <div class="table-wrap"><table class="table trade-goods">
+                            <thead><tr><th>Trade good</th><th title="World trade-code modifiers applied to the price roll">Trade DMs</th><th>Demand (T)</th><th>Base price / t</th><th>Modifier</th><th>Sale price / t</th></tr></thead>
+                            <tbody>@foreach (var good in sales.Goods.OrderByDescending(g => g.PricePercent ?? int.MinValue).ThenBy(g => g.Name)) {
+                                <tr><td>@good.Name @if (good.Illegal) { <span class="tag">Illegal</span> }</td><td>@TradePricing.FormatTradeModifiers(good, true)</td><td>@(good.Tons?.ToString("N0") ?? "Referee")</td><td>@(good.BasePrice is { } basePrice ? $"Cr {basePrice:N0}" : "Referee")</td><td>@(good.PricePercent is { } percent ? $"{percent}%" : "Referee")</td><td>@(good.SalePrice is { } salePrice ? $"Cr {salePrice:N0}" : "Referee")</td></tr>
+                            }</tbody>
+                        </table></div>
+                    }
+                }
+            </div>
+        </section>
+    </div>
+    <p class="trade-credit">Trade goods based on <a href="https://github.com/timtoon/trade-goods" target="_blank" rel="noopener noreferrer">Trade Goods Dice Modifiers</a> by Tim Heiderich (CC BY-NC 4.0), Mongoose Traveller 2nd edition, 2016.</p>
+</div>
+
+@code {
+    private SelectedWorld? world;
+    private string mode = "Broker";
+    private int skillDm;
+    private string sellMode = "Broker";
+    private int sellSkillDm;
+    private int supplierDm = -2;
+    private int buyerDm = -2;
+    private int destinationId;
+    private IReadOnlyList<TradeDestination> destinations = [];
+    private TradeDestination? destination => destinations.FirstOrDefault(d => d.System.Id == destinationId);
+    private bool isRemoteDestination => destinationId != 0;
+    private MarketResult? market;
+    private MarketResult? sales;
+    private string? salesError;
+    private bool busy;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        world = WorldState.World;
+        if (world is not null) destinations = TradeDestinations.Within(SystemData.Catalogue, world.SectorId, world.Hex);
+        await LoadMarket();
+        await LoadSales();
+    }
+    private async Task LoadMarket()
+    {
+        if (world is null) return;
+        busy = true;
+        try { market = await TradeService.GetAsync(world.SectorId, world.Hex, mode, world.Remarks); skillDm = market?.SkillDm ?? 0; supplierDm = market?.SupplierDm ?? -2; error = null; }
+        catch (Exception) { error = "Unable to load the saved market."; }
+        finally { busy = false; }
+    }
+    private async Task ChangeMode(ChangeEventArgs args)
+    {
+        mode = args.Value?.ToString() == "Streetwise" ? "Streetwise" : "Broker";
+        market = null;
+        await LoadMarket();
+    }
+    private async Task LoadSales()
+    {
+        if (world is null) return;
+        busy = true;
+        try
+        {
+            var target = destination;
+            if (isRemoteDestination && target is null) { salesError = "Destination is no longer available."; return; }
+            var sectorId = target?.System.SectorId ?? world.SectorId;
+            var hex = target?.System.Hex ?? world.Hex;
+            sales = await TradeService.GetSalesAsync(sectorId, hex, sellMode);
+            if (sales is not null)
+            {
+                if (target is not null) sales = sales with { IsOutdated = true };
+                sellSkillDm = sales.SkillDm;
+                buyerDm = sales.BuyerDm ?? -2;
+            }
+            salesError = null;
+        }
+        catch (Exception) { salesError = "Unable to load the saved sales market."; }
+        finally { busy = false; }
+    }
+    private async Task ChangeDestination(ChangeEventArgs args)
+    {
+        if (!int.TryParse(args.Value?.ToString(), out var id) || (id != 0 && !destinations.Any(d => d.System.Id == id))) return;
+        destinationId = id;
+        sales = null;
+        await LoadSales();
+    }
+    private async Task ChangeSellMode(ChangeEventArgs args)
+    {
+        sellMode = args.Value?.ToString() == "Streetwise" ? "Streetwise" : "Broker";
+        sales = null;
+        await LoadSales();
+    }
+    private async Task Roll()
+    {
+        if (world is null || busy) return;
+        busy = true;
+        try { market = await TradeService.RollAsync(world.SectorId, world.Hex, mode, skillDm, world.Remarks, supplierDm); error = null; }
+        catch (Exception) { error = "Unable to save the generated market. Please try again."; }
+        finally { busy = false; }
+    }
+    private async Task RollSales()
+    {
+        if (world is null || busy) return;
+        busy = true;
+        try
+        {
+            var target = destination;
+            if (isRemoteDestination && target is null) { salesError = "Destination is no longer available."; return; }
+            sales = await TradeService.RollSalesAsync(target?.System.SectorId ?? world.SectorId,
+                target?.System.Hex ?? world.Hex, sellMode, sellSkillDm, target?.System.MainWorld.Remarks ?? world.Remarks, buyerDm);
+            if (target is not null) sales = sales with { IsOutdated = true };
+            salesError = null;
+        }
+        catch (Exception) { salesError = "Unable to save the generated sale prices. Please try again."; }
+        finally { busy = false; }
+    }
+
+}

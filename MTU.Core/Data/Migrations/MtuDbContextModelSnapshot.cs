@@ -320,6 +320,35 @@ namespace MTU.Core.Data.Migrations
                     b.ToTable("Systems");
                 });
 
+            modelBuilder.Entity("MTU.Core.Data.TradeMarketEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Hex")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SectorId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SectorId", "Hex", "Mode")
+                        .IsUnique();
+
+                    b.ToTable("TradeMarkets");
+                });
+
             modelBuilder.Entity("MTU.Core.Data.AllegianceEntity", b =>
                 {
                     b.HasOne("MTU.Core.Data.SectorEntity", "Sector")
@@ -379,6 +408,17 @@ namespace MTU.Core.Data.Migrations
                 {
                     b.HasOne("MTU.Core.Data.SectorEntity", "Sector")
                         .WithMany("Systems")
+                        .HasForeignKey("SectorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Sector");
+                });
+
+            modelBuilder.Entity("MTU.Core.Data.TradeMarketEntity", b =>
+                {
+                    b.HasOne("MTU.Core.Data.SectorEntity", "Sector")
+                        .WithMany()
                         .HasForeignKey("SectorId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

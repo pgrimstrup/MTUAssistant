@@ -1,5 +1,6 @@
 ﻿@page "/"
 @using MTUAssistant.Components.Map
+@inject MTUAssistant.Services.SelectedWorldState WorldState
 
 <PageTitle>Charted Space</PageTitle>
 
@@ -119,5 +120,6 @@
     [SupplyParameterFromQuery(Name = "subsector")] public int? SubsectorId { get; set; }
     [SupplyParameterFromQuery(Name = "focus")] public string? FocusToken { get; set; }
     private SelectedWorld? selectedWorld;
-    private void SelectWorld(SelectedWorld? world) => selectedWorld = world;
+    protected override void OnInitialized() => selectedWorld = WorldState.World;
+    private void SelectWorld(SelectedWorld? world) { selectedWorld = world; WorldState.World = world; }
 }
