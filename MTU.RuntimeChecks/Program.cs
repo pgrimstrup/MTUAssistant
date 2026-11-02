@@ -12,6 +12,69 @@ static void Check(bool condition, string message)
     if (!condition) throw new Exception(message);
 }
 
+Check(PassengerTraffic.DiceFor(1) == 0 && PassengerTraffic.DiceFor(2) == 1 && PassengerTraffic.DiceFor(6) == 2
+    && PassengerTraffic.DiceFor(10) == 3 && PassengerTraffic.DiceFor(13) == 4 && PassengerTraffic.DiceFor(15) == 5
+    && PassengerTraffic.DiceFor(16) == 6 && PassengerTraffic.DiceFor(19) == 9 && PassengerTraffic.DiceFor(20) == 10, "Passenger traffic table boundaries");
+var passengers = PassengerTraffic.Roll("A788899-C", "A", 1, 2, () => 1);
+Check(passengers.PopulationDm == 3 && passengers.StarportDm == 2 && passengers.ZoneDm == 1, "Passenger world modifiers");
+Check(passengers.Lines.Count == 4 && passengers.Lines[0] is { Passage: "High", Roll: 2, ModifiedRoll: 7, Dice: 3, Passengers: 3 }
+    && passengers.Lines[3] is { Passage: "Low", ModifiedRoll: 12, Dice: 4, Passengers: 4 }, "Passenger class modifiers and independent rolls");
+var sparsePassengers = PassengerTraffic.Roll("X000100-0", "R", 0, 0, () => 1);
+Check(sparsePassengers.PopulationDm == -4 && sparsePassengers.StarportDm == -3 && sparsePassengers.ZoneDm == -4
+    && sparsePassengers.Lines.All(line => line.Passengers == 0), "Low population red zone passenger modifiers");
+try { PassengerTraffic.Roll("???????-?", "", 0, 0); throw new Exception("Unknown UWP accepted"); }
+catch (ArgumentException) { }
+
+var selectedPassengers = PassengerTraffic.Select(passengers, "High", 2);
+selectedPassengers = PassengerTraffic.Select(selectedPassengers, "Low", 3);
+Check(PassengerTraffic.Fees[0].Payment(selectedPassengers) == 19100
+    && PassengerTraffic.Fees[5].Payment(selectedPassengers) == 1228000, "Passenger payments use selected classes and distance");
+try { PassengerTraffic.Select(passengers, "High", 4); throw new Exception("Too many passengers accepted"); }
+catch (ArgumentException) { }
+try { PassengerTraffic.Select(passengers, "Low", -1); throw new Exception("Negative passenger selection accepted"); }
+catch (ArgumentException) { }
+Check(FreightTraffic.DiceFor(1) == 0 && FreightTraffic.DiceFor(3) == 1 && FreightTraffic.DiceFor(5) == 2
+    && FreightTraffic.DiceFor(8) == 3 && FreightTraffic.DiceFor(11) == 4 && FreightTraffic.DiceFor(14) == 5
+    && FreightTraffic.DiceFor(16) == 6 && FreightTraffic.DiceFor(19) == 9 && FreightTraffic.DiceFor(20) == 10, "Freight traffic table boundaries");
+var freight = FreightTraffic.Roll("A788899-C", "A", 1, () => 1);
+Check(freight.PopulationDm == 4 && freight.StarportDm == 2 && freight.TechDm == 2 && freight.ZoneDm == -2, "Freight world modifiers");
+Check(freight.Lines[0] is { Type: "Major", ModifiedRoll: 5, Dice: 2, Lots: 2 }
+    && freight.Lines[1] is { Type: "Minor", ModifiedRoll: 9, Dice: 4, Lots: 4 }
+    && freight.Lines[2] is { Type: "Incidental", ModifiedRoll: 11, Dice: 4, Lots: 4 }, "Freight type modifiers and independent rolls");
+var loadingInput = freight with { Lines = freight.Lines.Select(line => line with {
+    Lots = line.Type switch { "Major" => 3, "Minor" => 1, _ => 1 } }).Reverse().ToArray() };
+var cargoDice = new Queue<int>([6, 2, 1, 2, 6]);
+var loadedCargo = FreightTraffic.TakeCargo(loadingInput, 16, () => cargoDice.Dequeue());
+Check(loadedCargo.CargoCapacity == 16 && loadedCargo.Lines.Single(l => l.Type == "Major").CargoTaken == 10
+    && loadedCargo.Lines.Single(l => l.Type == "Minor").CargoTaken == 0
+    && loadedCargo.Lines.Single(l => l.Type == "Incidental").CargoTaken == 6 && cargoDice.Count == 0,
+    "Cargo loading prioritizes classes, skips oversized lots and fills remaining capacity");
+var noCargo = FreightTraffic.TakeCargo(loadingInput, 0, () => throw new Exception("No dice at zero capacity"));
+Check(noCargo.Lines.All(l => l.CargoTaken == 0), "Zero cargo capacity");
+try { FreightTraffic.TakeCargo(loadingInput, -1); throw new Exception("Negative capacity accepted"); }
+catch (ArgumentException) { }
+Check(FreightTraffic.MailTrafficDm(-10) == -2 && FreightTraffic.MailTrafficDm(-9) == -1
+    && FreightTraffic.MailTrafficDm(-4) == 0 && FreightTraffic.MailTrafficDm(4) == 0
+    && FreightTraffic.MailTrafficDm(5) == 1 && FreightTraffic.MailTrafficDm(10) == 2, "Mail traffic modifier bands");
+var mailDice = new Queue<int>([4, 4, 3]);
+var withMail = FreightTraffic.RollMail(freight, 2, 1, () => mailDice.Dequeue());
+Check(withMail.Mail is { FreightTrafficDm: 7, Effect: 4, TechDm: 0, Roll: 8, ModifiedRoll: 12, Containers: 3 }, "Mail succeeds at 12 and rolls containers");
+var lowTechMail = FreightTraffic.RollMail(freight with { Tech = "5" }, 0, 0, () => 1);
+Check(lowTechMail.Mail is { TechDm: -4, Containers: 0 }, "Mail failure and low tech penalty");
+var cannotFit = FreightTraffic.TakeMail(withMail, 14);
+Check(cannotFit.Mail is { CargoTaken: 0, InsufficientSpace: true }, "Mail cannot exceed capacity");
+var acceptedMail = FreightTraffic.TakeMail(withMail, 20);
+Check(acceptedMail.Mail is { CargoTaken: 15, InsufficientSpace: false }, "Mail accepted when it fits");
+var afterMailCargo = FreightTraffic.TakeCargo(acceptedMail, 20, () => 1);
+Check(afterMailCargo.Lines.Sum(l => l.CargoTaken ?? 0) <= 5 && afterMailCargo.Mail?.CargoTaken == 15, "Freight respects accepted mail capacity");
+try { FreightTraffic.TakeCargo(acceptedMail, 14); throw new Exception("Cargo capacity below accepted mail allowed"); }
+catch (ArgumentException) { }
+var sparseFreight = FreightTraffic.Roll("X000100-0", "R", 0, () => 1);
+Check(sparseFreight.PopulationDm == -4 && sparseFreight.StarportDm == -3 && sparseFreight.TechDm == -1
+    && sparseFreight.ZoneDm == -6 && sparseFreight.Lines.All(line => line.Lots == 0), "Sparse red zone freight modifiers");
+try { FreightTraffic.Roll("A788899-?", "", 0); throw new Exception("Unknown freight tech level accepted"); }
+catch (ArgumentException) { }
+
 Check(PoliticalColor.Resolve(null, "ImDd", false) == "red", "Imperial border fallback");
 Check(PoliticalColor.Resolve("", "Im", true) == "limegreen", "Imperial route fallback");
 Check(PoliticalColor.Resolve(null, "ZhIN", false) == "blue", "Zhodani border fallback");
@@ -317,6 +380,57 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     Check(reloadedMarket!.IsOutdated, "Market loaded from database is outdated");
     Check(reloadedMarket.SupplierDm == -2 && reloadedMarket.Goods.SequenceEqual(savedMarket.Goods), "Saved market restores supplier DM and generated goods");
     Check(await marketService.GetAsync(id, "1911", "Broker") is null && await marketService.GetAsync(id, "1910", "Streetwise") is null, "Markets isolated by world and mode");
+    var passengerService = new PassengerMarketService(db);
+    Check(await passengerService.GetAsync(id, "1910") is null, "No passenger roll before generation");
+    var passengerRoll = PassengerTraffic.Roll("A788899-C", "A", 2, 1, () => 1);
+    await passengerService.SaveAsync(id, "1910", passengerRoll);
+    await using (var reopened = new MtuDbContext(options))
+    {
+        var loadedPassengers = await new PassengerMarketService(reopened).GetAsync(id, "1910");
+        Check(loadedPassengers is not null && loadedPassengers.Effect == 2 && loadedPassengers.Steward == 1
+            && loadedPassengers.Lines.SequenceEqual(passengerRoll.Lines), "Passenger roll and inputs survive reopening");
+        Check(await new PassengerMarketService(reopened).GetAsync(id, "1911") is null, "Passenger rolls are isolated by world");
+    }
+    var selectedPassengerRoll = PassengerTraffic.Select(passengerRoll, "High", 1);
+    await passengerService.SaveAsync(id, "1910", selectedPassengerRoll);
+    await using (var reopened = new MtuDbContext(options))
+    {
+        var selection = await new PassengerMarketService(reopened).GetAsync(id, "1910");
+        Check(selection!.Lines.Single(line => line.Passage == "High").Taken == 1, "Passenger selection persists");
+    }
+    var replacementRoll = PassengerTraffic.Roll("A788899-C", "A", -1, 3, () => 2);
+    await passengerService.SaveAsync(id, "1910", replacementRoll);
+    Check((await passengerService.GetAsync(id, "1910"))!.Lines.SequenceEqual(replacementRoll.Lines)
+        && await db.TransportMarkets.CountAsync() == 1, "Reroll replaces the saved passenger market");
+    var freightService = new FreightMarketService(db);
+    Check(await freightService.GetAsync(id, "1910") is null, "Freight is separate from passenger results");
+    await freightService.SaveAsync(id, "1910", freight);
+    await using (var reopened = new MtuDbContext(options))
+    {
+        var restoredFreight = await new FreightMarketService(reopened).GetAsync(id, "1910");
+        Check(restoredFreight is not null && restoredFreight.Effect == 1 && restoredFreight.Lines.SequenceEqual(freight.Lines), "Freight results persist");
+        Check(await new FreightMarketService(reopened).GetAsync(id, "1911") is null, "Freight isolated by world");
+    }
+    var oldFreight = freight with { Lines = freight.Lines.Select(line => line.Type == "Minor"
+        ? line with { LotSize = "1Dx5 (3 to 30)" } : line).ToArray() };
+    await freightService.SaveAsync(id, "1910", oldFreight);
+    var correctedFreight = await freightService.GetAsync(id, "1910");
+    Check(correctedFreight!.Lines[1].LotSize == "1Dx5 (5 to 30)" && correctedFreight.Lines[1].Lots == oldFreight.Lines[1].Lots,
+        "Legacy minor lot labels corrected without rerolling");
+    await freightService.SaveAsync(id, "1910", loadedCargo);
+    await using (var reopened = new MtuDbContext(options))
+    {
+        var restoredCargo = await new FreightMarketService(reopened).GetAsync(id, "1910");
+        Check(restoredCargo?.CargoCapacity == 16 && restoredCargo.Lines.SequenceEqual(loadedCargo.Lines), "Cargo capacity and loaded tons persist");
+    }
+    await freightService.SaveAsync(id, "1910", acceptedMail);
+    await using (var reopened = new MtuDbContext(options))
+    {
+        var savedMail = await new FreightMarketService(reopened).GetAsync(id, "1910");
+        Check(savedMail?.Mail is { Rank: 2, SocDm: 1, Containers: 3, CargoTaken: 15 }, "Mail result and cargo persist");
+    }
+    await freightService.SaveAsync(id, "1910", sparseFreight);
+    Check((await freightService.GetAsync(id, "1910"))!.Lines.SequenceEqual(sparseFreight.Lines), "Freight reroll replaces saved result");
     var oldSnapshot = reloadProvider.Catalogue;
     var mapService = reloadContainer.GetRequiredService<MapDataService>();
     Check((await mapService.GetSectorAsync(id))!.Single().Name == "Original", "Initial cached map data");
@@ -330,6 +444,7 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     Check((await db.Sectors.SingleAsync()).Id == id && (await db.Systems.SingleAsync()).Name == "Updated", "Existing sector fully refreshed with stable sector ID");
     Check((await db.Borders.SingleAsync()).Color == "red" && (await db.Routes.SingleAsync()).Color == "orange", "Explicit colours override stylesheet");
     Check((await marketService.GetAsync(id, "1910", "Broker"))!.Goods.SequenceEqual(savedMarket.Goods), "Market survives sector system-row replacement");
+    Check((await passengerService.GetAsync(id, "1910"))!.Lines.SequenceEqual(replacementRoll.Lines), "Passenger results survive system refresh");
     await reloadProvider.ReloadAsync();
     Check(notifications == 1 && !ReferenceEquals(oldSnapshot, reloadProvider.Catalogue), "Reload publishes one new catalogue");
     Check(oldSnapshot.Systems.Single().MainWorld.Name == "Original", "Readers retain an intact old snapshot");

@@ -349,6 +349,35 @@ namespace MTU.Core.Data.Migrations
                     b.ToTable("TradeMarkets");
                 });
 
+            modelBuilder.Entity("MTU.Core.Data.TransportMarketEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Hex")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SectorId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SectorId", "Hex", "Kind")
+                        .IsUnique();
+
+                    b.ToTable("TransportMarkets");
+                });
+
             modelBuilder.Entity("MTU.Core.Data.AllegianceEntity", b =>
                 {
                     b.HasOne("MTU.Core.Data.SectorEntity", "Sector")
@@ -416,6 +445,17 @@ namespace MTU.Core.Data.Migrations
                 });
 
             modelBuilder.Entity("MTU.Core.Data.TradeMarketEntity", b =>
+                {
+                    b.HasOne("MTU.Core.Data.SectorEntity", "Sector")
+                        .WithMany()
+                        .HasForeignKey("SectorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Sector");
+                });
+
+            modelBuilder.Entity("MTU.Core.Data.TransportMarketEntity", b =>
                 {
                     b.HasOne("MTU.Core.Data.SectorEntity", "Sector")
                         .WithMany()

@@ -1,0 +1,47 @@
+.cargo-page { max-width: 90rem; margin: 0 auto; }
+.page-header { margin-bottom: 1.5rem; }
+h1 { margin: 0; font-size: 1.8rem; }
+.world-details { margin-bottom: 1.5rem; }
+.world-label { display: grid; gap: .3rem; color: var(--app-muted); font-size: .8rem; }
+.badge-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .75rem 1.5rem; margin-top: .65rem; }
+.badge-group { display: flex; flex-wrap: wrap; gap: .35rem; }
+.trade-badges { justify-content: flex-end; margin-left: auto; }
+.world-badge { --star-colour: #c6cfff; display: inline-grid; place-items: center; width: 1.55rem; height: 1.55rem; border-radius: .3rem; border: 1px solid var(--star-colour); color: var(--star-colour); font: 600 .8rem monospace; background: var(--app-bg); }
+.world-badge[data-attribute="Size"], .world-badge[data-attribute="Atmosphere"], .world-badge[data-attribute="Hydrographics"] { --star-colour: #82d9cf; }
+.world-badge[data-attribute="Population"], .world-badge[data-attribute="Government"], .world-badge[data-attribute="Law level"] { --star-colour: #c5b4ff; }
+.world-badge[data-attribute="Starport"], .world-badge[data-attribute="Tech level"] { --star-colour: #f6dd93; }
+.trade-badge { min-width: 1.8rem; width: auto; padding: 0 .2rem; }
+.trade-badge[data-category="physical"] { --star-colour: #82d9cf; }
+.trade-badge[data-category="population"], .trade-badge[data-category="political"] { --star-colour: #c5b4ff; }
+.trade-badge[data-category="economic"] { --star-colour: #f6dd93; }
+.trade-badge[data-category="special"] { --star-colour: #ffb2a6; }
+.empty-message { color: var(--app-muted); margin-bottom: 1.5rem; }
+.sections { display: grid; gap: 1rem; }
+.cargo-panel { min-height: 8rem; border: 1px solid var(--app-border); border-radius: var(--app-radius); background: var(--app-surface); overflow: hidden; }
+.cargo-panel header { padding: 1.1rem 1.2rem; border-bottom: 1px solid var(--app-border); background: var(--app-surface-2); }
+h2 { margin: 0; font-size: 1.15rem; }
+
+.panel-body { padding: 1.2rem; color: var(--app-muted); }
+.passenger-controls { display: flex; flex-wrap: wrap; align-items: end; gap: .8rem; margin-bottom: 1rem; }
+.passenger-controls label { display: grid; gap: .3rem; font-size: .8rem; }
+.passenger-controls input { width: 7rem; }
+.table-wrap { overflow-x: auto; }
+.passenger-table { width: 100%; font-size: .86rem; }
+.passenger-table th, .passenger-table td { white-space: nowrap; text-align: right; }
+.passenger-table th:first-child { text-align: left; }
+.passenger-error { color: #ffb6b6; }
+
+.fees-heading { margin: 1.5rem 0 .3rem; color: var(--app-text); font-size: 1rem; }
+.fees-caption { margin: 0 0 .6rem; font-size: .8rem; }
+
+.passenger-header { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+.outdated-badge { padding: .2rem .5rem; border: 1px solid rgba(243,195,108,.4); border-radius: 999px; color: #f3c36c; background: rgba(243,195,108,.1); font-size: .7rem; font-weight: 650; }
+
+.cargo-controls { display: flex; flex-wrap: wrap; align-items: end; gap: .8rem; margin-left: auto; }
+
+.freight-status { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+
+.mail-available { color: #a3e8c2; border-color: rgba(100, 210, 145, .55); background: rgba(35, 150, 85, .2); }
+.mail-danger { color: #ffaaaa; border-color: rgba(255, 100, 100, .55); background: rgba(190, 45, 45, .2); }
+
+.passenger-count { width: 5.5rem; margin-left: auto; text-align: right; }

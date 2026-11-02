@@ -16,6 +16,7 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
     public DbSet<BorderEntity> Borders => Set<BorderEntity>();
     public DbSet<RouteEntity> Routes => Set<RouteEntity>();
     public DbSet<TradeMarketEntity> TradeMarkets => Set<TradeMarketEntity>();
+    public DbSet<TransportMarketEntity> TransportMarkets => Set<TransportMarketEntity>();
     public DbSet<SystemEntity> Systems => Set<SystemEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -33,6 +34,7 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
         });
 
         modelBuilder.Entity<TradeMarketEntity>().HasIndex(m => new { m.SectorId, m.Hex, m.Mode }).IsUnique();
+        modelBuilder.Entity<TransportMarketEntity>().HasIndex(m => new { m.SectorId, m.Hex, m.Kind }).IsUnique();
         modelBuilder.Entity<SubsectorEntity>().HasIndex(s => new { s.SectorId, s.Letter }).IsUnique();
         modelBuilder.Entity<AllegianceEntity>().HasIndex(a => new { a.SectorId, a.Code }).IsUnique();
         modelBuilder.Entity<SystemEntity>(e =>

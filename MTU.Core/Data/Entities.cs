@@ -110,3 +110,14 @@ public class TradeMarketEntity
     public string Mode { get; set; } = "";
     public string ResultJson { get; set; } = "";
 }
+
+/// <summary>Transport results remain associated with a sector and hex across data refreshes.</summary>
+public class TransportMarketEntity
+{
+    public int Id { get; set; }
+    public int SectorId { get; set; }
+    public SectorEntity Sector { get; set; } = null!;
+    public string Hex { get; set; } = "";
+    public string Kind { get; set; } = "";
+    public string ResultJson { get; set; } = "";
+}
