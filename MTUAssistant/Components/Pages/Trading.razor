@@ -2,6 +2,8 @@
 @implements IDisposable
 @inject CampaignService Campaigns
 @inject TradingService TradeService
+@inject TravellerService TravellerStore
+@inject MTUAssistant.Services.TradingSelectionState TradingState
 @inject SystemDataProvider SystemData
 @inject MTUAssistant.Services.SelectedWorldState WorldState
 
@@ -23,17 +25,36 @@
                     <label class="destination-label">Current world
                         <input class="form-control" value="@($"{world.Name} · {world.Sector} {world.Hex}")" readonly />
                     </label>
-                    <div class="destination-codes" aria-label="Current world trade codes">
-                        @foreach (var tradeCode in TradeCodeLookup.Describe(world.Remarks))
-                        {
-                            <span class="trade-code-badge" data-category="@tradeCode.Category" title="@tradeCode.Name">@tradeCode.Code</span>
-                        }
+                    <div class="badge-row">
+                        <div class="badge-group uwp-badges" aria-label="Current world universal world profile">
+                            @foreach (var item in UwpLookup.Describe(world.Uwp, world.Pbg))
+                            {
+                                <span class="world-badge" data-attribute="@item.Name" title="@($"{item.Name}: {item.Description}")">@item.Code</span>
+                            }
+                        </div>
+                        <div class="badge-group trade-badges" aria-label="Current world trade codes and travel zone">
+                            @if (ZoneName(CurrentZone()) is { } originZone)
+                            {
+                                <span class="world-badge zone-badge" data-zone="@originZone">@originZone Zone</span>
+                            }
+                            @foreach (var tradeCode in TradeCodeLookup.Describe(world.Remarks))
+                            {
+                                <span class="world-badge trade-badge" data-category="@tradeCode.Category" title="@tradeCode.Name">@tradeCode.Code</span>
+                            }
+                        </div>
                     </div>
                     <div class="trade-controls">
+                        <label>Traveller <select class="form-select traveller-select" @bind="buyTravellerId" disabled="@busy">
+                            <option value="0">Select a Traveller</option>
+                            @foreach (var traveller in travellers.Where(t => !t.Inactive))
+                            {
+                                <option value="@traveller.Id">@traveller.TravellerName</option>
+                            }
+                        </select></label>
                         <label>Mode <select class="form-select" value="@mode" @onchange="ChangeMode" disabled="@busy"><option>Broker</option><option>Streetwise</option></select></label>
-                        <label>Skill DM <input class="form-control dm-input" type="number" @bind="skillDm" disabled="@busy" /></label>
+                        <label>Skill DM <output class="form-control dm-input" title="Selected Traveller: skill + higher INT or EDU DM; untrained skill −3, reduced by Jack-of-All-Trades (maximum +3)">@FormatSkillDm(skillDm)</output></label>
                         <label>Supplier DM <input class="form-control dm-input" type="number" @bind="supplierDm" disabled="@busy" /></label>
-                        <button type="button" class="btn btn-primary" @onclick="Roll" disabled="@busy">Roll</button>
+                        <button type="button" class="btn btn-primary" @onclick="Roll" disabled="@(busy || skillDm is null)">Roll</button>
                     </div>
                     @if (error is not null) { <p class="trade-error" role="alert">@error</p> }
                     @if (market is null) { <p>Roll to generate trade goods for this world.</p> }
@@ -65,13 +86,33 @@
                             }
                         </select>
                     </label>
-                    <div class="destination-codes" aria-label="Destination world trade codes">
-                        @foreach (var tradeCode in TradeCodeLookup.Describe(destination?.System.MainWorld.Remarks ?? world.Remarks))
-                        {
-                            <span class="trade-code-badge" data-category="@tradeCode.Category" title="@tradeCode.Name">@tradeCode.Code</span>
-                        }
+                    <div class="badge-row">
+                        <div class="badge-group uwp-badges" aria-label="Destination world universal world profile">
+                            @foreach (var item in UwpLookup.Describe(destination is null ? world.Uwp : destination.System.MainWorld.Uwp, destination is null ? world.Pbg : destination.System.MainWorld.Pbg))
+                            {
+                                <span class="world-badge" data-attribute="@item.Name" title="@($"{item.Name}: {item.Description}")">@item.Code</span>
+                            }
+                        </div>
+                        <div class="badge-group trade-badges" aria-label="Destination world trade codes and travel zone">
+                            @if (ZoneName(destination is null ? CurrentZone() : destination.System.MainWorld.Zone) is { } destinationZone)
+                            {
+                                <span class="world-badge zone-badge" data-zone="@destinationZone">@destinationZone Zone</span>
+                            }
+                            @foreach (var tradeCode in TradeCodeLookup.Describe(destination?.System.MainWorld.Remarks ?? world.Remarks))
+                            {
+                                <span class="world-badge trade-badge" data-category="@tradeCode.Category" title="@tradeCode.Name">@tradeCode.Code</span>
+                            }
+                        </div>
                     </div>
-                    <div class="trade-controls"><label>Mode <select class="form-select" value="@sellMode" @onchange="ChangeSellMode" disabled="@busy"><option>Broker</option><option>Streetwise</option></select></label><label>Skill DM <input class="form-control dm-input" type="number" @bind="sellSkillDm" disabled="@busy" /></label><label>Buyer DM <input class="form-control dm-input" type="number" @bind="buyerDm" disabled="@busy" /></label><button type="button" class="btn btn-primary" @onclick="RollSales" disabled="@busy">Roll</button></div>
+                    <div class="trade-controls">
+                        <label>Traveller <select class="form-select traveller-select" @bind="sellTravellerId" disabled="@busy">
+                            <option value="0">Select a Traveller</option>
+                            @foreach (var traveller in travellers.Where(t => !t.Inactive))
+                            {
+                                <option value="@traveller.Id">@traveller.TravellerName</option>
+                            }
+                        </select></label>
+                        <label>Mode <select class="form-select" value="@sellMode" @onchange="ChangeSellMode" disabled="@busy"><option>Broker</option><option>Streetwise</option></select></label><label>Skill DM <output class="form-control dm-input" title="Selected Traveller: skill + higher INT or EDU DM; untrained skill −3, reduced by Jack-of-All-Trades (maximum +3)">@FormatSkillDm(sellSkillDm)</output></label><label>Buyer DM <input class="form-control dm-input" type="number" @bind="buyerDm" disabled="@busy" /></label><button type="button" class="btn btn-primary" @onclick="RollSales" disabled="@(busy || sellSkillDm is null)">Roll</button></div>
                     @if (salesError is not null) { <p class="trade-error" role="alert">@salesError</p> }
                     @if (sales is null) { <p>Roll to find goods this world wants to buy.</p> }
                     else
@@ -93,13 +134,43 @@
 
 @code {
     private Campaign? activeCampaign;
-    private void CampaignChanged(Campaign? campaign) { activeCampaign = campaign; _ = InvokeAsync(StateHasChanged); }
+    private void CampaignChanged(Campaign? campaign) => _ = InvokeAsync(async () =>
+    {
+        selections = campaign is null ? new() : TradingState.ForCampaign(campaign.Id);
+        activeCampaign = campaign;
+        await LoadTravellers();
+        await LoadMarket();
+        await LoadSales();
+        StateHasChanged();
+    });
+    private IReadOnlyList<Traveller> travellers = [];
+    private static string FormatSkillDm(int? dm) => dm?.ToString("+0;-0;0") ?? "";
+    private async Task LoadTravellers()
+    {
+        travellers = [];
+        var campaignId = activeCampaign?.Id;
+        if (campaignId is null) return;
+        try
+        {
+            var loaded = await TravellerStore.ListAsync(campaignId.Value);
+            if (activeCampaign?.Id == campaignId)
+            {
+                travellers = loaded;
+                if (!loaded.Any(t => t.Id == buyTravellerId && !t.Inactive)) buyTravellerId = 0;
+                if (!loaded.Any(t => t.Id == sellTravellerId && !t.Inactive)) sellTravellerId = 0;
+            }
+        }
+        catch (Exception) { error = salesError = "Unable to load active Traveller modifiers."; }
+    }
     public void Dispose() => Campaigns.Changed -= CampaignChanged;
     private SelectedWorld? world;
-    private string mode = "Broker";
-    private int skillDm;
-    private string sellMode = "Broker";
-    private int sellSkillDm;
+    private MTUAssistant.Services.TradingSelections selections = new();
+    private string mode { get => selections.BuyingMode; set => selections.BuyingMode = value; }
+    private int buyTravellerId { get => selections.BuyingTravellerId; set => selections.BuyingTravellerId = value; }
+    private int sellTravellerId { get => selections.SellingTravellerId; set => selections.SellingTravellerId = value; }
+    private int? skillDm => TravellerService.TradingModifier(travellers.Where(t => t.Id == buyTravellerId), mode);
+    private string sellMode { get => selections.SellingMode; set => selections.SellingMode = value; }
+    private int? sellSkillDm => TravellerService.TradingModifier(travellers.Where(t => t.Id == sellTravellerId), sellMode);
     private int supplierDm = -2;
     private int buyerDm = -2;
     private int destinationId;
@@ -114,6 +185,12 @@
             && data.SystemsByHex.TryGetValue((sector.Milieu, sector.X, sector.Y, world.Hex), out var system)
             ? system.MainWorld.Zone : null;
     }
+    private static string? ZoneName(string? zone) => zone?.Trim().ToUpperInvariant() switch
+    {
+        "A" or "AMBER" or "AMBERZONE" => "Amber",
+        "R" or "RED" or "REDZONE" => "Red",
+        _ => null
+    };
     private string CurrentPricingCodes() => TradePricing.WithZone(world?.Remarks, CurrentZone());
     private MarketResult? market;
     private MarketResult? sales;
@@ -125,6 +202,8 @@
     {
         Campaigns.Changed += CampaignChanged;
         activeCampaign = (await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive);
+        selections = activeCampaign is null ? new() : TradingState.ForCampaign(activeCampaign.Id);
+        await LoadTravellers();
         world = WorldState.World;
         if (world is not null) destinations = TradeDestinations.Within(SystemData.Catalogue, world.SectorId, world.Hex);
         await LoadMarket();
@@ -134,7 +213,7 @@
     {
         if (world is null) return;
         busy = true;
-        try { market = await TradeService.GetAsync(world.SectorId, world.Hex, mode, CurrentPricingCodes()); skillDm = market?.SkillDm ?? 0; supplierDm = market?.SupplierDm ?? -2; error = null; }
+        try { market = await TradeService.GetAsync(world.SectorId, world.Hex, mode, CurrentPricingCodes()); supplierDm = market?.SupplierDm ?? -2; error = null; }
         catch (Exception) { error = "Unable to load the saved market."; }
         finally { busy = false; }
     }
@@ -157,7 +236,7 @@
             sales = await TradeService.GetSalesAsync(sectorId, hex, sellMode);
             if (sales is not null)
             {
-                sellSkillDm = sales.SkillDm;
+
                 buyerDm = sales.BuyerDm ?? -2;
             }
             salesError = null;
@@ -182,7 +261,7 @@
     {
         if (world is null || busy) return;
         busy = true;
-        try { if (activeCampaign is null) { error = "Select a campaign to generate dated results."; return; } market = await TradeService.RollAsync(world.SectorId, world.Hex, mode, skillDm, CurrentPricingCodes(), supplierDm, targetDay: CampaignDates.Today(activeCampaign), population: MarketGenerator.PopulationFromUwp(world.Uwp)); error = null; }
+        try { if (activeCampaign is null) { error = "Select a campaign to generate dated results."; return; } await LoadTravellers(); if (skillDm is not { } modifier) { error = "Select an active Traveller."; return; } market = await TradeService.RollAsync(world.SectorId, world.Hex, mode, modifier, CurrentPricingCodes(), supplierDm, targetDay: CampaignDates.Today(activeCampaign), population: MarketGenerator.PopulationFromUwp(world.Uwp)); error = null; }
         catch (ArgumentException ex) { error = ex.Message; }
         catch (Exception) { error = "Unable to save the generated market. Please try again."; }
         finally { busy = false; }
@@ -196,10 +275,12 @@
             var target = destination;
             if (activeCampaign is null) { salesError = "Select a campaign to generate dated results."; return; }
             if (isRemoteDestination && target is null) { salesError = "Destination is no longer available."; return; }
+            await LoadTravellers();
+            if (sellSkillDm is not { } modifier) { salesError = "Select an active Traveller."; return; }
             var today = CampaignDates.Today(activeCampaign);
             var targetDay = target is null ? today : CampaignDates.RemoteTarget(today, target.Distance, () => System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, 7));
             sales = await TradeService.RollSalesAsync(target?.System.SectorId ?? world.SectorId,
-                target?.System.Hex ?? world.Hex, sellMode, sellSkillDm,
+                target?.System.Hex ?? world.Hex, sellMode, modifier,
                 TradePricing.WithZone(target?.System.MainWorld.Remarks ?? world.Remarks, target is null ? CurrentZone() : target.System.MainWorld.Zone),
                 buyerDm, targetDay: targetDay, population: MarketGenerator.PopulationFromUwp(target?.System.MainWorld.Uwp ?? world.Uwp));
             salesError = null;

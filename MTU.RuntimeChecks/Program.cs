@@ -400,6 +400,39 @@ Check(streetMarket.Goods.Count == 3 && streetMarket.Goods.Count(g => g.Illegal) 
     && streetMarket.Goods.Single(g => g.D66 == 11).Stolen, "Streetwise illegal availability and stolen random goods");
 Check(TradeGoods.All.Count == 36 && TradeGoods.All.Select(g => g.D66).Distinct().Count() == 36, "D66 commodity coverage");
 
+var tradingSelections = new MTUAssistant.Services.TradingSelectionState();
+var firstSelections = tradingSelections.ForCampaign(1);
+firstSelections.BuyingTravellerId = 12;
+firstSelections.BuyingMode = "Streetwise";
+firstSelections.SellingTravellerId = 34;
+Check(tradingSelections.ForCampaign(1) is { BuyingTravellerId: 12, BuyingMode: "Streetwise", SellingTravellerId: 34, SellingMode: "Broker" }, "Both trade panel selections survive returning to the campaign independently");
+Check(tradingSelections.ForCampaign(2) is { BuyingTravellerId: 0, BuyingMode: "Broker", SellingTravellerId: 0, SellingMode: "Broker" }, "Trade selections are isolated by campaign");
+Check(new MTUAssistant.Services.TradingSelectionState().ForCampaign(1).BuyingTravellerId == 0, "Trade selections are isolated by user session");
+var brokerExample = new Traveller(0, 1, "", "Broker", "", "7777A7", "", 0, 0, 0,
+    Skills: [new TravellerSkill(0, 0, "Broker", 1), new TravellerSkill(0, 0, "Streetwise", 0)]);
+Check(TravellerService.TradingModifier([brokerExample with { Upp = "" }], "Broker") == 1
+    && TravellerService.TradingModifier([brokerExample with { Upp = "??????" }], "Broker") == 1
+    && TravellerService.TradingModifier([brokerExample with { Upp = "777?A7" }], "Broker") == 2, "Unknown trading characteristics default to seven while known values are retained");
+Check(TravellerService.TradingModifier([brokerExample with { Upp = "", Skills = [] }], "Streetwise") == -3, "Unknown UPP still applies untrained skill penalty");
+var jackTrader = brokerExample with { Skills = [new TravellerSkill(0, 0, "Jack-of-All-Trades", 2)] };
+Check(TravellerService.SkillDm(jackTrader, "Broker") == -1
+    && TravellerService.TradingModifier([jackTrader], "Broker") == 0
+    && TravellerService.TradingModifier([jackTrader], "Streetwise") == 0, "JoaT 2 reduces both untrained trade penalties on the same Traveller");
+foreach (var level in new[] { 0, 1, 2, 3, 5 })
+    Check(TravellerService.SkillDm(jackTrader with { Skills = [new TravellerSkill(0, 0, "jack-of-all-trades", level)] }, "Broker") == -3 + Math.Min(3, level), "JoaT penalty reduction is capped and case insensitive");
+Check(TravellerService.SkillDm(jackTrader with { Skills = [new TravellerSkill(0, 0, "Broker", 0), new TravellerSkill(0, 0, "Jack-of-All-Trades", 3)] }, "Broker") == 0
+    && TravellerService.SkillDm(jackTrader with { Skills = [new TravellerSkill(0, 0, "Broker", 2), new TravellerSkill(0, 0, "Jack-of-All-Trades", 3)] }, "Broker") == 2, "JoaT never boosts trained skills including level zero");
+Check(TravellerService.TradingModifier([brokerExample, jackTrader with { Inactive = true, Upp = "777FF7" }], "Streetwise") == 1, "Inactive JoaT user excluded");
+var smartTrader = brokerExample with { Upp = "777C77", Skills = [new TravellerSkill(0, 0, "broker", 0), new TravellerSkill(0, 0, "Streetwise", 3)] };
+Check(TravellerService.TradingModifier([brokerExample], "Broker") == 2, "Broker 1 plus EDU 10 gives +2");
+Check(TravellerService.TradingModifier([smartTrader], "Broker") == 2, "Higher INT used with skill zero and case insensitive skill name");
+Check(TravellerService.TradingModifier([brokerExample, smartTrader], "Streetwise") == 5, "Streetwise uses its own best total");
+Check(TravellerService.TradingModifier([brokerExample, smartTrader with { Inactive = true }], "Streetwise") == 1, "Inactive high skill excluded");
+Check(TravellerService.TradingModifier([brokerExample with { Skills = [] }], "Broker") == -2, "Untrained trading penalty added to best characteristic");
+Check(TravellerService.TradingModifier([brokerExample with { Upp = "777227", Skills = [new TravellerSkill(0, 0, "Broker", 0)] }], "Broker") == -2, "Negative totals are retained");
+Check(TravellerService.TradingModifier([], "Broker") is null
+    && TravellerService.TradingModifier([brokerExample with { Inactive = true }], "Broker") is null
+, "No active Traveller cannot supply a trading DM");
 // Upgrade an existing numeric Terms Served value without losing Traveller skills or token.
 using (var termsConnection = new SqliteConnection("Data Source=:memory:"))
 {
@@ -413,6 +446,7 @@ using (var termsConnection = new SqliteConnection("Data Source=:memory:"))
     await termsDb.Database.ExecuteSqlRawAsync("INSERT INTO TravellerSkills (Id, TravellerId, Name, Level) VALUES (1, 1, 'Pilot', 2)");
     await termsMigrator.MigrateAsync();
     var upgraded = (await new TravellerService(termsDb).ListAsync(1)).Single();
+    Check(!upgraded.Inactive, "Existing Travellers default to active after migration");
     Check(upgraded.TermsServed == "3" && upgraded.TokenImage is { Length: 8 }
         && upgraded.Skills!.Single() is { Name: "Pilot", Level: 2 }, "Terms migration preserves numeric value, token and skills");
     await new TravellerService(termsDb).SaveAsync(upgraded with { TermsServed = "Navy 3, Diplomat 1" });
@@ -494,6 +528,11 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     Check((await travellerService.MailModifiersAsync(firstCampaign.Id)) == (4, 2), "Campaign mail modifiers select highest rank and SOC");
     Check((await travellerService.MailModifiersAsync(secondCampaign.Id)) == (9, 3), "Mail modifiers exclude other campaigns");
     Check(await travellerService.StewardModifierAsync(firstCampaign.Id) is { Value: -3, HasSkill: false }, "Unskilled Steward uses highest campaign INT minus three");
+    await travellerService.SaveSkillAsync(firstCampaign.Id, new TravellerSkill(0, traveller.Id, "Jack-of-All-Trades", 2));
+    Check(await travellerService.StewardModifierAsync(firstCampaign.Id) is { Value: -1, HasSkill: false }, "Untrained Steward uses same Traveller JoaT plus INT");
+    await travellerService.SaveSkillAsync(firstCampaign.Id, (await travellerService.ListSkillsAsync(firstCampaign.Id, traveller.Id)).Single() with { Level = 5 });
+    Check(await travellerService.StewardModifierAsync(firstCampaign.Id) is { Value: 0, HasSkill: false }, "JoaT cap removes penalty without granting Steward training");
+    await travellerService.DeleteSkillAsync(firstCampaign.Id, traveller.Id, (await travellerService.ListSkillsAsync(firstCampaign.Id, traveller.Id)).Single().Id);
     var secondTraveller = (await travellerService.ListAsync(firstCampaign.Id)).Single(t => t.TravellerName == "Second");
     var otherSteward = (await travellerService.ListAsync(secondCampaign.Id)).Single();
     await travellerService.SaveAsync(secondTraveller with { Upp = "123C5C" });
@@ -508,6 +547,16 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     Check((await travellerService.StewardModifierAsync(firstCampaign.Id)).Value == 1, "Best same-traveller Steward plus INT excludes other campaigns");
     await travellerService.SaveAsync(secondTraveller with { Upp = "123?5C" });
     Check((await travellerService.StewardModifierAsync(firstCampaign.Id)).MissingInt.SequenceEqual(new[] { "Second" }), "Unknown Steward intelligence is identified");
+    await travellerService.SaveAsync(secondTraveller with { Inactive = true, Upp = "123?5C" });
+    using (var reopened = new MtuDbContext(options))
+        Check((await new TravellerService(reopened).ListAsync(firstCampaign.Id)).Single(t => t.Id == secondTraveller.Id).Inactive, "Inactive flag persists while Traveller remains listed");
+    Check((await travellerService.MailModifiersAsync(firstCampaign.Id)) == (2, -1), "Inactive Traveller rank and SOC excluded from freight mail modifiers");
+    Check(await travellerService.StewardModifierAsync(firstCampaign.Id) is { Value: 1, HasSkill: true, MissingInt.Count: 0 }, "Inactive Steward and missing INT excluded from passengers");
+    await travellerService.SaveAsync(traveller with { Inactive = true });
+    Check((await travellerService.MailModifiersAsync(firstCampaign.Id)) == (0, null), "All inactive gives no mail modifiers");
+    Check(await travellerService.StewardModifierAsync(firstCampaign.Id) is { Value: null, HasSkill: false, MissingInt.Count: 0 }, "All inactive gives no passenger Steward modifier");
+    await travellerService.SaveAsync(traveller);
+    Check(await travellerService.StewardModifierAsync(firstCampaign.Id) is { Value: 1, HasSkill: true }, "Reactivated Traveller contributes again");
     await travellerService.DeleteSkillAsync(firstCampaign.Id, traveller.Id, (await travellerService.ListSkillsAsync(firstCampaign.Id, traveller.Id)).Single().Id);
     await travellerService.DeleteAsync(firstCampaign.Id, (await travellerService.ListAsync(firstCampaign.Id)).Single(t => t.TravellerName == "Second").Id);
     await travellerService.DeleteAsync(secondCampaign.Id, (await travellerService.ListAsync(secondCampaign.Id)).Single().Id);

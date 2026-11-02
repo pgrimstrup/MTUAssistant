@@ -427,6 +427,9 @@ namespace MTU.Core.Data.Migrations
                     b.Property<int>("HighestScoutRank")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("Inactive")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("NaturalDr")
                         .HasColumnType("INTEGER");
 

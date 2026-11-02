@@ -32,9 +32,21 @@ h2 { margin: 0; font-size: 1.15rem; }
 .destination-label { display:grid; gap:.3rem; color:var(--app-muted); font-size:.8rem; margin-bottom:.5rem; }
 .danger-badge { color:#ffaaaa; border-color:rgba(255,100,100,.55); background:rgba(190,45,45,.2); }
 
-.destination-codes { display:flex; flex-wrap:wrap; gap:.35rem; margin-bottom:1rem; }
-.trade-code-badge { --star-colour:#c6cfff; display:inline-grid; place-items:center; min-width:1.8rem; height:1.55rem; padding:0 .2rem; border-radius:.3rem; border:1px solid var(--star-colour); color:var(--star-colour); font:600 .8rem monospace; background:var(--app-bg); }
-.trade-code-badge[data-category="physical"] { --star-colour:#82d9cf; }
-.trade-code-badge[data-category="population"], .trade-code-badge[data-category="political"] { --star-colour:#c5b4ff; }
-.trade-code-badge[data-category="economic"] { --star-colour:#f6dd93; }
-.trade-code-badge[data-category="special"] { --star-colour:#ffb2a6; }
+.badge-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .75rem 1.5rem; margin-top: .65rem; }
+.badge-group { display: flex; flex-wrap: wrap; gap: .35rem; }
+.trade-badges { justify-content: flex-end; margin-left: auto; }
+.world-badge { --star-colour: #c6cfff; display: inline-grid; place-items: center; width: 1.55rem; height: 1.55rem; border-radius: .3rem; border: 1px solid var(--star-colour); color: var(--star-colour); font: 600 .8rem monospace; background: var(--app-bg); }
+.world-badge[data-attribute="Size"], .world-badge[data-attribute="Atmosphere"], .world-badge[data-attribute="Hydrographics"] { --star-colour: #82d9cf; }
+.world-badge[data-attribute="Population"], .world-badge[data-attribute="Government"], .world-badge[data-attribute="Law level"] { --star-colour: #c5b4ff; }
+.world-badge[data-attribute="Starport"], .world-badge[data-attribute="Tech level"] { --star-colour: #f6dd93; }
+.trade-badge { min-width: 1.8rem; width: auto; padding: 0 .2rem; }
+.trade-badge[data-category="physical"] { --star-colour: #82d9cf; }
+.trade-badge[data-category="population"], .trade-badge[data-category="political"] { --star-colour: #c5b4ff; }
+.trade-badge[data-category="economic"] { --star-colour: #f6dd93; }
+.trade-badge[data-category="special"] { --star-colour: #ffb2a6; }
+.zone-badge { width: auto; padding: 0 .4rem; white-space: nowrap; }
+.zone-badge[data-zone="Amber"] { color: #241900; border-color: #ffc107; background: #ffc107; }
+.zone-badge[data-zone="Red"] { color: #fff; border-color: #dc3545; background: #dc3545; }
+.badge-row { margin-bottom:1rem; }
+.trade-controls output.dm-input { width:auto; min-width:4rem; max-width:16rem; min-height:calc(1.5em + .75rem + 2px); }
+.traveller-select { min-width:11rem; max-width:100%; }

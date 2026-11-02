@@ -4,7 +4,7 @@ using MTU.Core.Data;
 namespace MTU.Core;
 
 public sealed record Traveller(int Id, int CampaignId, string PlayerName, string TravellerName, string Race,
-    string Upp, string TermsServed, int HighestNavalRank, int HighestScoutRank, int NaturalDr, byte[]? TokenImage = null, IReadOnlyList<TravellerSkill>? Skills = null);
+    string Upp, string TermsServed, int HighestNavalRank, int HighestScoutRank, int NaturalDr, byte[]? TokenImage = null, IReadOnlyList<TravellerSkill>? Skills = null, bool Inactive = false);
 
 public sealed record TravellerSkill(int Id, int TravellerId, string Name, int Level);
 public sealed record StewardModifier(int? Value, bool HasSkill, IReadOnlyList<string> MissingInt);
@@ -16,7 +16,7 @@ public sealed class TravellerService(MtuDbContext db)
         var travellers = await db.Travellers.AsNoTracking().Where(t => t.CampaignId == campaignId)
             .OrderBy(t => t.TravellerName).ThenBy(t => t.Id)
             .Select(t => new Traveller(t.Id, t.CampaignId, t.PlayerName, t.TravellerName, t.Race, t.Upp,
-                t.TermsServed, t.HighestNavalRank, t.HighestScoutRank, t.NaturalDr, t.TokenImage)).ToArrayAsync();
+                t.TermsServed, t.HighestNavalRank, t.HighestScoutRank, t.NaturalDr, t.TokenImage, null, t.Inactive)).ToArrayAsync();
         var skills = await db.TravellerSkills.AsNoTracking().Where(s => s.Traveller.CampaignId == campaignId)
             .OrderBy(s => s.Name).ThenBy(s => s.Id)
             .Select(s => new TravellerSkill(s.Id, s.TravellerId, s.Name, s.Level)).ToArrayAsync();
@@ -26,7 +26,7 @@ public sealed class TravellerService(MtuDbContext db)
 
     public async Task<(int Rank, int? SocDm)> MailModifiersAsync(int campaignId)
     {
-        var travellers = await db.Travellers.AsNoTracking().Where(t => t.CampaignId == campaignId)
+        var travellers = await db.Travellers.AsNoTracking().Where(t => t.CampaignId == campaignId && !t.Inactive)
             .Select(t => new { t.HighestNavalRank, t.HighestScoutRank, t.Upp }).ToArrayAsync();
         var rank = travellers.Select(t => Math.Max(t.HighestNavalRank, t.HighestScoutRank)).DefaultIfEmpty(0).Max();
         var soc = travellers.Select(t => SocialDm(t.Upp)).Where(dm => dm.HasValue).Max();
@@ -39,6 +39,29 @@ public sealed class TravellerService(MtuDbContext db)
     public static int? IntelligenceDm(string? upp)
         => CharacteristicDm(upp, 3);
 
+    public static int SkillDm(Traveller traveller, string requiredSkill)
+    {
+        var skills = traveller.Skills ?? [];
+        var trained = skills.Where(s => s.Name.Equals(requiredSkill, StringComparison.OrdinalIgnoreCase))
+            .Select(s => (int?)s.Level).Max();
+        if (trained.HasValue) return trained.Value;
+        var jackOfAllTrades = skills.Where(s => s.Name.Equals("Jack-of-All-Trades", StringComparison.OrdinalIgnoreCase))
+            .Select(s => s.Level).DefaultIfEmpty(0).Max();
+        return -3 + Math.Clamp(jackOfAllTrades, 0, 3);
+    }
+    public static int? EducationDm(string? upp) => CharacteristicDm(upp, 4);
+
+    public static int? TradingModifier(IEnumerable<Traveller> travellers, string mode)
+    {
+        if (mode is not ("Broker" or "Streetwise")) throw new ArgumentException("Unknown trading mode", nameof(mode));
+        return travellers.Where(t => !t.Inactive).Select(t =>
+        {
+            var intelligence = IntelligenceDm(t.Upp) ?? 0;
+            var education = EducationDm(t.Upp) ?? 0;
+            var skill = SkillDm(t, mode);
+            return (int?)(skill + Math.Max(intelligence, education));
+        }).Max();
+    }
     private static int? CharacteristicDm(string? upp, int index)
     {
         var profile = upp?.Trim().ToUpperInvariant() ?? "";
@@ -49,22 +72,14 @@ public sealed class TravellerService(MtuDbContext db)
 
     public async Task<StewardModifier> StewardModifierAsync(int campaignId)
     {
-        var skills = await db.TravellerSkills.AsNoTracking()
-            .Where(s => s.Traveller.CampaignId == campaignId && s.Name.ToLower() == "steward")
-            .Select(s => new { s.Level, s.Traveller.Upp, s.Traveller.TravellerName }).ToArrayAsync();
-        if (skills.Length == 0)
-        {
-            var travellers = await db.Travellers.AsNoTracking().Where(t => t.CampaignId == campaignId)
-                .Select(t => new { t.Upp, t.TravellerName }).ToArrayAsync();
-            var missingInt = travellers.Where(t => IntelligenceDm(t.Upp) is null).Select(t => t.TravellerName).ToArray();
-            var highestInt = travellers.Select(t => IntelligenceDm(t.Upp)).Max();
-            return new(highestInt - 3, false, missingInt);
-        }
-        var missing = skills.Where(s => IntelligenceDm(s.Upp) is null).Select(s => s.TravellerName).ToArray();
-        var best = skills.Select(s => IntelligenceDm(s.Upp) is { } dm ? (int?)(s.Level + dm) : null).Max();
-        return new(best, true, missing);
+        var active = (await ListAsync(campaignId)).Where(t => !t.Inactive).ToArray();
+        var trained = active.Where(t => (t.Skills ?? []).Any(s => s.Name.Equals("Steward", StringComparison.OrdinalIgnoreCase))).ToArray();
+        var hasSkill = trained.Length > 0;
+        var candidates = hasSkill ? trained : active;
+        var missing = candidates.Where(t => IntelligenceDm(t.Upp) is null).Select(t => t.TravellerName).ToArray();
+        var best = candidates.Select(t => IntelligenceDm(t.Upp) is { } dm ? (int?)(SkillDm(t, "Steward") + dm) : null).Max();
+        return new(best, hasSkill, missing);
     }
-
     public async Task SaveAsync(Traveller traveller)
     {
         var name = traveller.TravellerName?.Trim() ?? "";
@@ -86,7 +101,7 @@ public sealed class TravellerService(MtuDbContext db)
         entity.PlayerName = player; entity.TravellerName = name; entity.Race = race; entity.Upp = upp;
         entity.TermsServed = terms; entity.HighestNavalRank = traveller.HighestNavalRank;
         entity.HighestScoutRank = traveller.HighestScoutRank; entity.NaturalDr = traveller.NaturalDr;
-        entity.TokenImage = traveller.TokenImage;
+        entity.TokenImage = traveller.TokenImage; entity.Inactive = traveller.Inactive;
         await db.SaveChangesAsync();
     }
 

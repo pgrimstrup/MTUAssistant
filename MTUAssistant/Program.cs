@@ -23,6 +23,7 @@ namespace MTUAssistant
             builder.Services.AddScoped<TileRefreshService>();
             builder.Services.AddScoped<MapPointerLocation>();
             builder.Services.AddScoped<SelectedWorldState>();
+            builder.Services.AddScoped<TradingSelectionState>();
 
             var app = builder.Build();
 

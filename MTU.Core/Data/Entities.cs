@@ -147,6 +147,7 @@ public class TravellerEntity
     public int HighestScoutRank { get; set; }
     public int NaturalDr { get; set; }
     public byte[]? TokenImage { get; set; }
+    public bool Inactive { get; set; }
 }
 
 public class TravellerSkillEntity

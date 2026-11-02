@@ -84,7 +84,7 @@
             <div class="panel-body">
                 <div class="passenger-controls">
                     <label>Effect of Broker/Carouse/Streetwise <input class="form-control" type="number" min="-100" max="100" @bind="effect" disabled="@busy" /></label>
-                    <label>Steward + INT DM@(!hasSteward && steward.HasValue ? " (unskilled)" : "") <input class="form-control" value="@(stewardMissingInt.Count > 0 ? "INT needed" : steward.HasValue ? FormatDm(steward.Value) : "No Travellers")" readonly /></label>
+                    <label>Steward + INT DM@(!hasSteward && steward.HasValue ? " (unskilled)" : "") <input class="form-control" value="@(stewardMissingInt.Count > 0 ? "INT needed" : steward.HasValue ? FormatDm(steward.Value) : "No active Travellers")" readonly /></label>
                     <button class="btn btn-primary" type="button" @onclick="RollPassengers" disabled="@(WorldState.World is null || destination is null || busy)">Roll</button>
                 </div>
                 @if (passengerError is not null) { <p class="passenger-error" role="alert">@passengerError</p> }
@@ -356,7 +356,7 @@
                 passengerError = $"Add a valid INT to the UPP for: {string.Join(", ", stewardMissingInt)}.";
                 return;
             }
-            if (!steward.HasValue) { passengerError = "Add a Traveller to the campaign before rolling passengers."; return; }
+            if (!steward.HasValue) { passengerError = "Add or reactivate a Traveller in the campaign before rolling passengers."; return; }
             var result = PassengerTraffic.RollRoute(system.MainWorld.Uwp, system.MainWorld.Zone,
                 target.System.MainWorld.Uwp, target.System.MainWorld.Zone, target.Distance, target.Sector.Id, target.System.Hex, effect, steward.Value, hasSteward: hasSteward)
                 with { TargetDay = CampaignDates.Today(campaign) };

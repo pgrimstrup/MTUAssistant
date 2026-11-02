@@ -25,3 +25,6 @@ h2 { margin:0 0 1rem; font-size:1.15rem; }
 .token-thumbnail { width:2.75rem; height:2.75rem; }
 
 .traveller-table td.skills-summary { white-space:normal; min-width:12rem; font-size:.85em; font-weight:400; color:var(--app-muted); }
+.inactive-toggle { display:flex; align-items:center; gap:.5rem; margin-top:1rem; }
+.traveller-table .inactive-traveller > th, .traveller-table .inactive-traveller > td { color:var(--app-muted); }
+.inactive-traveller .token-thumbnail { filter:grayscale(1); opacity:.5; }

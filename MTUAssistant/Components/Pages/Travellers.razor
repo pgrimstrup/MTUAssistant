@@ -26,6 +26,7 @@
                     <label>Highest Scout Rank <input class="form-control" type="number" min="0" @bind="scout" disabled="@busy" /></label>
                     <label>Natural DR <input class="form-control" type="number" min="0" @bind="naturalDr" disabled="@busy" /></label>
                 </div>
+                <label class="inactive-toggle"><input type="checkbox" @bind="inactive" disabled="@busy" /> Inactive</label>
                 <div class="token-editor">
                     @if (TravellerToken.DataUri(tokenImage) is { } preview) { <img class="token-preview" src="@preview" alt="Token preview" /> }
                     <label>Player Token <InputFile @key="tokenInputKey" class="form-control" accept="image/png,image/jpeg,image/gif,image/webp" OnChange="SelectToken" disabled="@busy" /><span class="token-hint">PNG, JPEG, GIF or WebP, up to 2 MB</span></label>
@@ -45,7 +46,7 @@
                 <thead><tr><th>Token</th><th>Traveller Name</th><th>Race</th><th>UPP</th><th>Terms Served / Age</th><th>Ranks</th><th>Skills</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
                 <tbody>@foreach (var item in items)
                 {
-                    <tr><td>@if (TravellerToken.DataUri(item.TokenImage) is { } token) { <img class="token-thumbnail" src="@token" alt="@($"{item.TravellerName} token")" /> }</td><th scope="row">@item.TravellerName @if (!string.IsNullOrWhiteSpace(item.PlayerName)) { <span class="player-name">@item.PlayerName</span> }</th><td>@item.Race</td><td class="upp">@item.Upp</td><td>@item.TermsServed<span class="player-name">Age: @(TravellerAge.Calculate(item.TermsServed, campaign.Year)?.ToString() ?? "Unknown")</span></td><td>@if (item.HighestNavalRank > 0) { <span>Naval Rank @item.HighestNavalRank</span> } @if (item.HighestNavalRank > 0 && item.HighestScoutRank > 0) { <span> / </span> } @if (item.HighestScoutRank > 0) { <span>Scout Rank @item.HighestScoutRank</span> }</td><td class="skills-summary">@string.Join(", ", (item.Skills ?? []).Select(skill => $"{skill.Name} {skill.Level}"))</td><td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => selectedSkills = item" disabled="@busy">Skills</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(item)" disabled="@busy">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(item)" disabled="@busy">Delete</button></td></tr>
+                    <tr class="@(item.Inactive ? "inactive-traveller" : null)"><td>@if (TravellerToken.DataUri(item.TokenImage) is { } token) { <img class="token-thumbnail" src="@token" alt="@($"{item.TravellerName} token")" /> }</td><th scope="row">@item.TravellerName @if (item.Inactive) { <span class="player-name">Inactive</span> } @if (!string.IsNullOrWhiteSpace(item.PlayerName)) { <span class="player-name">@item.PlayerName</span> }</th><td>@item.Race</td><td class="upp">@item.Upp</td><td>@item.TermsServed<span class="player-name">Age: @(TravellerAge.Calculate(item.TermsServed, campaign.Year)?.ToString() ?? "Unknown")</span></td><td>@if (item.HighestNavalRank > 0) { <span>Naval Rank @item.HighestNavalRank</span> } @if (item.HighestNavalRank > 0 && item.HighestScoutRank > 0) { <span> / </span> } @if (item.HighestScoutRank > 0) { <span>Scout Rank @item.HighestScoutRank</span> }</td><td class="skills-summary">@string.Join(", ", (item.Skills ?? []).Select(skill => $"{skill.Name} {skill.Level}"))</td><td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => selectedSkills = item" disabled="@busy">Skills</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(item)" disabled="@busy">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(item)" disabled="@busy">Delete</button></td></tr>
                 }</tbody>
             </table></div>
         }
@@ -62,7 +63,7 @@
     private int naval, scout, naturalDr, tokenInputKey;
     private byte[]? tokenImage;
     private string? error;
-    private bool busy, disposed;
+    private bool busy, disposed, inactive;
     private int version;
 
     protected override async Task OnInitializedAsync()
@@ -101,7 +102,7 @@
         editing = item; pendingDelete = null; selectedSkills = null; error = null;
         playerName = item.PlayerName; travellerName = item.TravellerName; race = item.Race; upp = item.Upp;
         terms = item.TermsServed; naval = item.HighestNavalRank; scout = item.HighestScoutRank; naturalDr = item.NaturalDr;
-        tokenImage = item.TokenImage; tokenInputKey++;
+        tokenImage = item.TokenImage; inactive = item.Inactive; tokenInputKey++;
     }
     private void Cancel() { editing = null; tokenImage = null; error = null; }
     private void RemoveToken() { tokenImage = null; tokenInputKey++; error = null; }
@@ -133,7 +134,7 @@
         try
         {
             await TravellerStore.SaveAsync(current with { PlayerName = playerName, TravellerName = travellerName, Race = race, Upp = upp,
-                TermsServed = terms, HighestNavalRank = naval, HighestScoutRank = scout, NaturalDr = naturalDr, TokenImage = tokenImage });
+                TermsServed = terms, HighestNavalRank = naval, HighestScoutRank = scout, NaturalDr = naturalDr, TokenImage = tokenImage, Inactive = inactive });
             if (campaign?.Id == current.CampaignId) { items = await TravellerStore.ListAsync(current.CampaignId); editing = null; error = null; }
         }
         catch (ArgumentException ex) { error = ex.Message; }
