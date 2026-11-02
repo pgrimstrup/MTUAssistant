@@ -27,8 +27,12 @@ catch (ArgumentException) { }
 
 var selectedPassengers = PassengerTraffic.Select(passengers, "High", 2);
 selectedPassengers = PassengerTraffic.Select(selectedPassengers, "Low", 3);
-Check(PassengerTraffic.Fees[0].Payment(selectedPassengers) == 19100
-    && PassengerTraffic.Fees[5].Payment(selectedPassengers) == 1228000, "Passenger payments use selected classes and distance");
+Check(PassengerTraffic.Fees.Select(f => (f.High, f.Middle, f.Basic, f.Low)).SequenceEqual(new[] {
+    (9000, 6500, 2000, 700), (14000, 10000, 3000, 1300), (21000, 14000, 5000, 2200),
+    (34000, 23000, 8000, 3900), (60000, 40000, 14000, 7200), (210000, 130000, 55000, 27000)
+}), "Updated passage fees for all distances");
+Check(PassengerTraffic.Fees[0].Payment(selectedPassengers) == 20100
+    && PassengerTraffic.Fees[5].Payment(selectedPassengers) == 501000, "Passenger payments use selected classes and distance");
 try { PassengerTraffic.Select(passengers, "High", 4); throw new Exception("Too many passengers accepted"); }
 catch (ArgumentException) { }
 try { PassengerTraffic.Select(passengers, "Low", -1); throw new Exception("Negative passenger selection accepted"); }
@@ -56,9 +60,11 @@ catch (ArgumentException) { }
 Check(FreightTraffic.MailTrafficDm(-10) == -2 && FreightTraffic.MailTrafficDm(-9) == -1
     && FreightTraffic.MailTrafficDm(-4) == 0 && FreightTraffic.MailTrafficDm(4) == 0
     && FreightTraffic.MailTrafficDm(5) == 1 && FreightTraffic.MailTrafficDm(10) == 2, "Mail traffic modifier bands");
-var mailDice = new Queue<int>([4, 4, 3]);
+var mailDice = new Queue<int>([3, 3, 3]);
 var withMail = FreightTraffic.RollMail(freight, 2, 1, () => mailDice.Dequeue());
-Check(withMail.Mail is { FreightTrafficDm: 7, Effect: 4, TechDm: 0, Roll: 8, ModifiedRoll: 12, Containers: 3 }, "Mail succeeds at 12 and rolls containers");
+Check(withMail.Mail is { FreightTrafficDm: 7, Effect: 6, TechDm: 0, Roll: 6, ModifiedRoll: 12, Containers: 3, ArmedDm: 2 }, "Mail succeeds at 12 and rolls containers");
+var unarmedMail = FreightTraffic.RollMail(freight, 2, 1, () => 3, armed: false);
+Check(unarmedMail.Mail is { Effect: 4, ArmedDm: 0, Roll: 6, ModifiedRoll: 10, Containers: 0 }, "Unarmed ship omits mail DM");
 var lowTechMail = FreightTraffic.RollMail(freight with { Tech = "5" }, 0, 0, () => 1);
 Check(lowTechMail.Mail is { TechDm: -4, Containers: 0 }, "Mail failure and low tech penalty");
 var cannotFit = FreightTraffic.TakeMail(withMail, 14);
@@ -83,6 +89,16 @@ Check(CampaignDates.Status(today - 7, dateCampaign) == ("Expired 7 days", "expir
 Check(CampaignDates.Status(null, dateCampaign).Text == "Date unknown" && CampaignDates.Status(today, null).Text == "Select campaign", "Undated legacy and missing campaign status");
 Check(CampaignDates.RemoteTarget(today, 3, () => 1) == today - 7 && CampaignDates.RemoteTarget(today, 4, () => 6) == today - 19, "Remote destination delay and distance boundary");
 Check(CampaignDates.Status(today - 7, dateCampaign with { Day = 1, Year = 1105 }).Text == "Outdated 6 days", "Date status updates when campaign date changes");
+
+Check(TravellerSkillCatalogue.All.Count == 39 && TravellerSkillCatalogue.All.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() == 39, "Core skill catalogue coverage");
+Check(TravellerSkillCatalogue.Find("pilot")!.Specialities.Contains("Spacecraft") && TravellerSkillCatalogue.Find("Electronics")!.Specialities.Contains("Computers"), "Core skill specialities");
+Check(TravellerSkillCatalogue.Parse("pilot (Spacecraft)") is { Skill.Name: "Pilot", Speciality: "Spacecraft" }, "Saved specialised skill parses");
+Check(TravellerSkillCatalogue.Parse("Science (Custom/Field)") is { Skill.Name: "Science", Speciality: "Custom/Field" }, "Custom specialty parses");
+Check(TravellerSkillCatalogue.Parse("Custom skill") is { Skill: null } && TravellerSkillCatalogue.Parse("Broker") is { Skill.Name: "Broker", Speciality: null }, "Custom and unspecialised skills remain editable");
+
+Check(TravellerAge.Calculate("Navy 3, Diplomat 1", 1105) == 32 && TravellerAge.Calculate("3", 1106) == 29, "Age combines terms and campaign year");
+Check(TravellerAge.Calculate("Navy", 1105) is null && TravellerAge.Calculate("", 1105) is null
+    && TravellerAge.Calculate("Navy -3", 1105) is null && TravellerAge.Calculate("Navy 3,", 1105) is null, "Unparseable terms do not invent an age");
 
 Check(PoliticalColor.Resolve(null, "ImDd", false) == "red", "Imperial border fallback");
 Check(PoliticalColor.Resolve("", "Im", true) == "limegreen", "Imperial route fallback");
@@ -316,6 +332,25 @@ int[] reginaExpected = [11,12,13,14,15,16,21,23,25,31,32,34,35,36,42,43,44,45,46
 Check(reginaImports.Goods.Select(g => g.D66).SequenceEqual(reginaExpected), "Regina Imports match exact common and positive sale demand");
 Check(!TradePricing.HasSaleDemand(26, "An") && TradePricing.HasSaleDemand(26, "In"), "Demand matches complete codes, not substrings");
 Check(!TradePricing.HasSaleDemand(45, "Ag") && TradePricing.HasSaleDemand(45, "Ag Ht"), "Negative sale DM alone does not create demand");
+Check(MarketGenerator.PopulationFromUwp("A788A99-C") == 10 && MarketGenerator.PopulationFromUwp("A788099-C") == 0, "Population code including extended hex");
+try { MarketGenerator.PopulationFromUwp("A788?99-C"); throw new Exception("Unknown population accepted"); } catch (ArgumentException) { }
+Check(MarketGenerator.PopulationTonnageDm(3) == -3 && MarketGenerator.PopulationTonnageDm(4) == 0
+    && MarketGenerator.PopulationTonnageDm(8) == 0 && MarketGenerator.PopulationTonnageDm(9) == 3, "Population tonnage DM boundaries");
+Check(MarketGenerator.DemandTons(TradeGoods.All.Single(g => g.D66 == 11), () => 1, -3) == 0
+    && MarketGenerator.DemandTons(TradeGoods.All.Single(g => g.D66 == 11), () => 1, 3) == 50, "Population DMs apply before multiplier and clamp to zero");
+var highDemand = MarketGenerator.GenerateSales("Broker", 0, "", () => 1, population: 9);
+Check(highDemand.TonnageDm == 3 && highDemand.Goods.Single(g => g.D66 == 11).Tons == 50, "Destination population modifies selling demand");
+var lowPopulation = MarketGenerator.Generate("Broker", 0, "", () => 1, population: 0);
+var highPopulation = MarketGenerator.Generate("Broker", 0, "", () => 1, population: 10);
+Check(lowPopulation.RandomRolls == 0 && highPopulation.RandomRolls == 10 && highPopulation.Goods.Single(g => g.D66 == 11).Lots == 11, "Population code determines random goods and duplicates add quantity");
+Check(!TradePricing.HasSaleDemand(24, TradePricing.WithZone("Da Fo Fb", "")), "Remarks do not substitute for the stored travel zone");
+Check(TradePricing.HasSaleDemand(24, TradePricing.WithZone("", "A")) && TradePricing.HasSaleDemand(24, TradePricing.WithZone("", "R")), "Travel zone enables sale demand");
+var amberPrice = TradePricing.SalePrice(new MarketLine(24, "Weapons", 0, 0, false, false), 0, TradePricing.WithZone("", "A"), () => 1);
+var redPrice = TradePricing.SalePrice(new MarketLine(24, "Weapons", 0, 0, false, false), 0, TradePricing.WithZone("", "R"), () => 1);
+Check(amberPrice.SaleDm == 2 && redPrice.SaleDm == 4, "Stored zone modifies sale pricing");
+Check(TradePricing.Price(new MarketLine(24, "Weapons", 0, 0, false, false), 0, TradePricing.WithZone("Da", "R"), () => 1).SaleDm == 4, "Red travel zone overrides conflicting remarks for buying price");
+Check(TradePricing.Price(new MarketLine(24, "Weapons", 0, 0, false, false), 0, TradePricing.WithZone("Fo RedZone", "A"), () => 1).SaleDm == 2, "Amber travel zone overrides conflicting remarks");
+
 var noCodes = MarketGenerator.GenerateSales("Broker", 0, "", () => 3);
 Check(noCodes.Goods.Select(g => g.D66).SequenceEqual(new[] {11,12,13,14,15,16}), "No trade codes produces only common goods");
 var saleBroker = MarketGenerator.GenerateSales("Broker", 2, "In", () => 3);
@@ -326,14 +361,33 @@ Check(saleStreet.Goods.Any(g => g.D66 == 61 && g.Illegal) && saleStreet.Goods.Al
 Check(!saleStreet.Goods.Any(g => g.D66 == 62), "Imports exclude nonmatching sale demand");
 // Fixed dice streams cover random duplicates, illegal rerolls and stolen goods.
 static Func<int> Dice(params int[] values) { var queue = new Queue<int>(values); return () => queue.Count > 0 ? queue.Dequeue() : 1; }
-var brokerDice = Enumerable.Repeat(1, 12).Concat(new[] { 1, 6, 1, 1, 1, 1, 1 }).ToArray();
-var brokerMarket = MarketGenerator.Generate("Broker", 2, "", Dice(brokerDice));
+var brokerDice = Enumerable.Repeat(1, 12).Concat(new[] { 6, 1, 1, 1, 1, 1 }).ToArray();
+var brokerMarket = MarketGenerator.Generate("Broker", 2, "", Dice(brokerDice), population: 1);
 Check(brokerMarket.Goods.Count == 6 && brokerMarket.Goods.All(g => !g.Illegal && !g.Stolen), "Broker commons and illegal reroll");
-Check(brokerMarket.Goods.Single(g => g.D66 == 11) is { Lots: 2, Tons: 40 }, "Duplicate random good adds tonnage");
-var streetMarket = MarketGenerator.Generate("Streetwise", -1, "Ht", Dice(1, 1, 1, 1, 1, 1, 1));
+Check(brokerMarket.Goods.Single(g => g.D66 == 11) is { Lots: 2, Tons: 0 }, "Duplicate random good adds tonnage");
+var streetMarket = MarketGenerator.Generate("Streetwise", -1, "Ht", Dice(1, 1, 1, 1, 1, 1, 1), population: 1);
 Check(streetMarket.Goods.Count == 3 && streetMarket.Goods.Count(g => g.Illegal) == 2
     && streetMarket.Goods.Single(g => g.D66 == 11).Stolen, "Streetwise illegal availability and stolen random goods");
 Check(TradeGoods.All.Count == 36 && TradeGoods.All.Select(g => g.D66).Distinct().Count() == 36, "D66 commodity coverage");
+
+// Upgrade an existing numeric Terms Served value without losing Traveller skills or token.
+using (var termsConnection = new SqliteConnection("Data Source=:memory:"))
+{
+    await termsConnection.OpenAsync();
+    var termsOptions = new DbContextOptionsBuilder<MtuDbContext>().UseSqlite(termsConnection).Options;
+    await using var termsDb = new MtuDbContext(termsOptions);
+    var termsMigrator = termsDb.GetService<IMigrator>();
+    await termsMigrator.MigrateAsync("20261102103310_TravellerToken");
+    await termsDb.Database.ExecuteSqlRawAsync("INSERT INTO Campaigns (Id, Name, Day, Year, IsActive) VALUES (1, 'Old', 1, 1105, 1)");
+    await termsDb.Database.ExecuteSqlRawAsync("INSERT INTO Travellers (Id, CampaignId, PlayerName, TravellerName, Race, Upp, TermsServed, HighestNavalRank, HighestScoutRank, NaturalDr, TokenImage) VALUES (1, 1, 'P', 'T', '', '', 3, 0, 0, 0, X'89504E470D0A1A0A')");
+    await termsDb.Database.ExecuteSqlRawAsync("INSERT INTO TravellerSkills (Id, TravellerId, Name, Level) VALUES (1, 1, 'Pilot', 2)");
+    await termsMigrator.MigrateAsync();
+    var upgraded = (await new TravellerService(termsDb).ListAsync(1)).Single();
+    Check(upgraded.TermsServed == "3" && upgraded.TokenImage is { Length: 8 }
+        && upgraded.Skills!.Single() is { Name: "Pilot", Level: 2 }, "Terms migration preserves numeric value, token and skills");
+    await new TravellerService(termsDb).SaveAsync(upgraded with { TermsServed = "Navy 3, Diplomat 1" });
+    Check((await new TravellerService(termsDb).ListAsync(1)).Single().TermsServed == "Navy 3, Diplomat 1", "Text terms persist");
+}
 
 // Upgrade an existing database, then prove repeated refresh replaces metadata atomically.
 using (var importConnection = new SqliteConnection("Data Source=:memory:"))
@@ -394,8 +448,57 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     Check((await campaignService.ListAsync()).Single(c => c.Id == firstCampaign.Id) is { Name: "Updated Campaign", Day: 100, IsActive: true }, "Campaign editing preserves active status");
     try { await campaignService.SaveAsync(firstCampaign with { Day = 366 }); throw new Exception("Invalid day accepted"); }
     catch (ArgumentException) { }
+    var travellerService = new TravellerService(db);
+    var secondCampaign = (await campaignService.ListAsync()).Single(c => c.Id != firstCampaign.Id);
+    await travellerService.SaveAsync(new Traveller(0, firstCampaign.Id, "Player", "Kira", "Human", "a98765", "3", 2, 1, 4));
+    var traveller = (await travellerService.ListAsync(firstCampaign.Id)).Single();
+    Check(traveller is { PlayerName: "Player", TravellerName: "Kira", Race: "Human", Upp: "A98765", TermsServed: "3",
+        HighestNavalRank: 2, HighestScoutRank: 1, NaturalDr: 4 }, "Traveller fields are saved");
+    Check((await travellerService.ListAsync(secondCampaign.Id)).Count == 0, "Travellers are isolated by campaign");
+    await travellerService.SaveSkillAsync(firstCampaign.Id, new TravellerSkill(0, traveller.Id, "Pilot (spacecraft)", 0));
+    await travellerService.SaveSkillAsync(firstCampaign.Id, new TravellerSkill(0, traveller.Id, "Broker", 2));
+    var savedSkills = await travellerService.ListSkillsAsync(firstCampaign.Id, traveller.Id);
+    Check(savedSkills.Count == 2 && savedSkills[0] is { Name: "Broker", Level: 2 } && savedSkills[1].Level == 0, "Skills save and sort with level zero");
+    var listedSkills = (await travellerService.ListAsync(firstCampaign.Id)).Single().Skills!;
+    Check(listedSkills.Select(skill => (skill.Name, skill.Level)).SequenceEqual(savedSkills.Select(skill => (skill.Name, skill.Level))), "Traveller list includes named skill levels");
+    try { await travellerService.SaveSkillAsync(firstCampaign.Id, new TravellerSkill(0, traveller.Id, "broker", 1)); throw new Exception("Duplicate skill accepted"); }
+    catch (ArgumentException) { }
+    try { await travellerService.SaveSkillAsync(secondCampaign.Id, new TravellerSkill(0, traveller.Id, "Steward", 1)); throw new Exception("Cross-campaign skill accepted"); }
+    catch (ArgumentException) { }
+    await travellerService.SaveSkillAsync(firstCampaign.Id, savedSkills[0] with { Name = "Brokerage", Level = 3 });
+    await using (var reopened = new MtuDbContext(options))
+        Check((await new TravellerService(reopened).ListSkillsAsync(firstCampaign.Id, traveller.Id)).Any(skill => skill is { Name: "Brokerage", Level: 3 }), "Skill edits persist");
+    await travellerService.DeleteSkillAsync(firstCampaign.Id, traveller.Id, savedSkills[1].Id);
+    Check((await travellerService.ListSkillsAsync(firstCampaign.Id, traveller.Id)).Count == 1, "Skill removal");
+    await travellerService.SaveAsync(traveller with { TravellerName = "Kira Updated", NaturalDr = 5 });
+    await using (var reopened = new MtuDbContext(options))
+        Check((await new TravellerService(reopened).ListAsync(firstCampaign.Id)).Single() is { TravellerName: "Kira Updated", NaturalDr: 5 }, "Traveller edits persist");
+    var pngToken = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nL1sAAAAASUVORK5CYII=");
+    Check(TravellerToken.ContentType(pngToken) == "image/png" && TravellerToken.ContentType("not an image"u8.ToArray()) is null, "Token file type validation");
+    var withToken = (await travellerService.ListAsync(firstCampaign.Id)).Single() with { TokenImage = pngToken };
+    await travellerService.SaveAsync(withToken);
+    await using (var reopened = new MtuDbContext(options))
+    {
+        var restoredToken = (await new TravellerService(reopened).ListAsync(firstCampaign.Id)).Single();
+        Check(restoredToken.TokenImage!.SequenceEqual(pngToken), "Token image persists across database contexts");
+        await new TravellerService(reopened).SaveAsync(restoredToken with { PlayerName = "Renamed player" });
+    }
+    var unchangedToken = (await travellerService.ListAsync(firstCampaign.Id)).Single();
+    Check(unchangedToken.TokenImage!.SequenceEqual(pngToken), "Editing other fields preserves token");
+    await travellerService.SaveAsync(unchangedToken with { TokenImage = null });
+    Check((await travellerService.ListAsync(firstCampaign.Id)).Single().TokenImage is null, "Token can be removed");
+    try { await travellerService.SaveAsync(unchangedToken with { TokenImage = "bad"u8.ToArray() }); throw new Exception("Invalid token accepted"); }
+    catch (ArgumentException) { }
+    try { await travellerService.SaveAsync(traveller with { CampaignId = secondCampaign.Id }); throw new Exception("Cross-campaign edit allowed"); }
+    catch (InvalidOperationException) { }
+    await travellerService.SaveAsync(new Traveller(0, secondCampaign.Id, "P", "Other", "", "", "0", 0, 0, 0));
+    var otherTraveller = (await travellerService.ListAsync(secondCampaign.Id)).Single();
+    await travellerService.DeleteAsync(secondCampaign.Id, otherTraveller.Id);
+    Check((await travellerService.ListAsync(secondCampaign.Id)).Count == 0, "Traveller deletion");
     await campaignService.DeleteAsync(firstCampaign.Id);
     Check((await campaignService.ListAsync()).Single() is { Name: "Second Campaign", IsActive: true }, "Deleting active campaign selects another");
+    Check((await travellerService.ListAsync(firstCampaign.Id)).Count == 0, "Deleting a campaign deletes its Travellers");
+    Check(!await db.TravellerSkills.AnyAsync(s => s.TravellerId == traveller.Id), "Deleting a campaign cascades to Traveller skills");
     await campaignService.DeleteAsync((await campaignService.ListAsync()).Single().Id);
     Check((await campaignService.ListAsync()).Count == 0, "Deleting last campaign leaves no active campaign");
     var marketService = new TradingService(db);
@@ -408,6 +511,10 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     Check((await marketService.GetAsync(id, "1913", "Broker"))!.TargetDay == today, "Buying target date persists");
     var datedSales = await marketService.RollSalesAsync(id, "1914", "Broker", 0, "", targetDay: today - 14);
     Check((await marketService.GetSalesAsync(id, "1914", "Broker"))!.TargetDay == today - 14, "Selling target date persists");
+    var zoneSales = await marketService.RollSalesAsync(id, "1915", "Broker", 0, TradePricing.WithZone("", "R"), population: 9);
+    var savedZoneSales = await marketService.GetSalesAsync(id, "1915", "Broker");
+    Check(savedZoneSales!.TonnageDm == 3 && savedZoneSales.PopulationCode == 9
+        && savedZoneSales.Goods.Single(g => g.D66 == 24).SaleDm == 4, "Zone and population results persist with sale market");
     var savedSales = await marketService.RollSalesAsync(id, "1910", "Broker", 3, "In");
     var legacySale = savedSales with { DemandVersion = 0, BuyerDm = null, Goods = savedSales.Goods.Select(g => g with { Tons = null }).ToArray() };
     db.TradeMarkets.Add(new TradeMarketEntity { SectorId = id, Hex = "1912", Mode = "Sale:Broker", ResultJson = System.Text.Json.JsonSerializer.Serialize(legacySale) });
@@ -475,6 +582,8 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
         var restoredCargo = await new FreightMarketService(reopened).GetAsync(id, "1910");
         Check(restoredCargo?.CargoCapacity == 16 && restoredCargo.Lines.SequenceEqual(loadedCargo.Lines), "Cargo capacity and loaded tons persist");
     }
+    await freightService.SaveAsync(id, "1910", unarmedMail);
+    Check((await freightService.GetAsync(id, "1910"))!.Mail is { ArmedDm: 0, Effect: 4 }, "Unarmed choice persists with mail roll");
     await freightService.SaveAsync(id, "1910", acceptedMail);
     await using (var reopened = new MtuDbContext(options))
     {

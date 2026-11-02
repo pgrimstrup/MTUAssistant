@@ -18,6 +18,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SectorImporter>();
         services.AddScoped<TradingService>();
         services.AddScoped<CampaignService>();
+        services.AddScoped<TravellerService>();
         services.AddScoped<PassengerMarketService>();
         services.AddScoped<FreightMarketService>();
         services.AddMtuCatalogue();

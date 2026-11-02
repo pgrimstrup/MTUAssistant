@@ -45,3 +45,5 @@ h2 { margin: 0; font-size: 1.15rem; }
 .mail-danger { color: #ffaaaa; border-color: rgba(255, 100, 100, .55); background: rgba(190, 45, 45, .2); }
 
 .passenger-count { width: 5.5rem; margin-left: auto; text-align: right; }
+
+.passenger-controls label.armed-option { display:flex; align-items:center; gap:.4rem; min-height:2.4rem; }

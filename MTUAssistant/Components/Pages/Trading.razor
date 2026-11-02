@@ -39,7 +39,7 @@
                     @if (market is null) { <p>Roll to generate trade goods for this world.</p> }
                     else
                     {
-                        <p class="market-summary">@market.Mode · Skill DM @market.SkillDm · Supplier DM @(market.SupplierDm?.ToString() ?? "not recorded") · @market.RandomRolls additional rolls</p>
+                        <p class="market-summary">@market.Mode · Skill DM @market.SkillDm · Supplier DM @(market.SupplierDm?.ToString() ?? "not recorded") · @market.RandomRolls additional rolls @if (market.TonnageDm is { } buyingDm) { <text>· Supply DM @(buyingDm.ToString("+0;-0;0"))</text> }</p>
                         <div class="table-wrap"><table class="table trade-goods">
                             <thead><tr><th>Trade good</th><th title="World trade-code modifiers applied to the price roll">Trade DMs</th><th>Supply (T)</th><th>Base price / t</th><th>Modifier</th><th>Buy price / t</th></tr></thead>
                             <tbody>@foreach (var good in market.Goods.OrderBy(g => g.PricePercent ?? int.MaxValue).ThenBy(g => g.Name)) {
@@ -76,7 +76,7 @@
                     @if (sales is null) { <p>Roll to find goods this world wants to buy.</p> }
                     else
                     {
-                        <p class="market-summary">@sales.Mode · Skill DM @sales.SkillDm · Buyer DM @(sales.BuyerDm?.ToString() ?? "not recorded")</p>
+                        <p class="market-summary">@sales.Mode · Skill DM @sales.SkillDm · Buyer DM @(sales.BuyerDm?.ToString() ?? "not recorded") @if (sales.TonnageDm is { } demandDm) { <text>· Demand DM @(demandDm.ToString("+0;-0;0"))</text> }</p>
                         <div class="table-wrap"><table class="table trade-goods">
                             <thead><tr><th>Trade good</th><th title="World trade-code modifiers applied to the price roll">Trade DMs</th><th>Demand (T)</th><th>Base price / t</th><th>Modifier</th><th>Sale price / t</th></tr></thead>
                             <tbody>@foreach (var good in sales.Goods.OrderByDescending(g => g.PricePercent ?? int.MinValue).ThenBy(g => g.Name)) {
@@ -106,6 +106,15 @@
     private IReadOnlyList<TradeDestination> destinations = [];
     private TradeDestination? destination => destinations.FirstOrDefault(d => d.System.Id == destinationId);
     private bool isRemoteDestination => destinationId != 0;
+    private string? CurrentZone()
+    {
+        if (world is null) return null;
+        var data = SystemData.Catalogue;
+        return data.SectorsById.TryGetValue(world.SectorId, out var sector)
+            && data.SystemsByHex.TryGetValue((sector.Milieu, sector.X, sector.Y, world.Hex), out var system)
+            ? system.MainWorld.Zone : null;
+    }
+    private string CurrentPricingCodes() => TradePricing.WithZone(world?.Remarks, CurrentZone());
     private MarketResult? market;
     private MarketResult? sales;
     private string? salesError;
@@ -125,7 +134,7 @@
     {
         if (world is null) return;
         busy = true;
-        try { market = await TradeService.GetAsync(world.SectorId, world.Hex, mode, world.Remarks); skillDm = market?.SkillDm ?? 0; supplierDm = market?.SupplierDm ?? -2; error = null; }
+        try { market = await TradeService.GetAsync(world.SectorId, world.Hex, mode, CurrentPricingCodes()); skillDm = market?.SkillDm ?? 0; supplierDm = market?.SupplierDm ?? -2; error = null; }
         catch (Exception) { error = "Unable to load the saved market."; }
         finally { busy = false; }
     }
@@ -173,7 +182,8 @@
     {
         if (world is null || busy) return;
         busy = true;
-        try { if (activeCampaign is null) { error = "Select a campaign to generate dated results."; return; } market = await TradeService.RollAsync(world.SectorId, world.Hex, mode, skillDm, world.Remarks, supplierDm, targetDay: CampaignDates.Today(activeCampaign)); error = null; }
+        try { if (activeCampaign is null) { error = "Select a campaign to generate dated results."; return; } market = await TradeService.RollAsync(world.SectorId, world.Hex, mode, skillDm, CurrentPricingCodes(), supplierDm, targetDay: CampaignDates.Today(activeCampaign), population: MarketGenerator.PopulationFromUwp(world.Uwp)); error = null; }
+        catch (ArgumentException ex) { error = ex.Message; }
         catch (Exception) { error = "Unable to save the generated market. Please try again."; }
         finally { busy = false; }
     }
@@ -189,9 +199,12 @@
             var today = CampaignDates.Today(activeCampaign);
             var targetDay = target is null ? today : CampaignDates.RemoteTarget(today, target.Distance, () => System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, 7));
             sales = await TradeService.RollSalesAsync(target?.System.SectorId ?? world.SectorId,
-                target?.System.Hex ?? world.Hex, sellMode, sellSkillDm, target?.System.MainWorld.Remarks ?? world.Remarks, buyerDm, targetDay: targetDay);
+                target?.System.Hex ?? world.Hex, sellMode, sellSkillDm,
+                TradePricing.WithZone(target?.System.MainWorld.Remarks ?? world.Remarks, target is null ? CurrentZone() : target.System.MainWorld.Zone),
+                buyerDm, targetDay: targetDay, population: MarketGenerator.PopulationFromUwp(target?.System.MainWorld.Uwp ?? world.Uwp));
             salesError = null;
         }
+        catch (ArgumentException ex) { salesError = ex.Message; }
         catch (Exception) { salesError = "Unable to save the generated sale prices. Please try again."; }
         finally { busy = false; }
     }

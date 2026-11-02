@@ -8,7 +8,7 @@ public sealed record TradeGood(int D66, string Name, string Availability, int Di
 public sealed record MarketLine(int D66, string Name, int Lots, int? Tons, bool Illegal, bool Stolen,
     long? BasePrice = null, int? PricePercent = null, long? BuyPrice = null, int? PriceRoll = null, int? PurchaseDm = null, int? SaleDm = null, long? SalePrice = null);
 public sealed record MarketResult(string Mode, int SkillDm, DateTime RolledUtc, int RandomRolls, IReadOnlyList<MarketLine> Goods, int PricingVersion = 0, int? SupplierDm = null,
-    [property: System.Text.Json.Serialization.JsonIgnore] bool IsOutdated = false, int? BuyerDm = null, int DemandVersion = 0, long? TargetDay = null);
+    [property: System.Text.Json.Serialization.JsonIgnore] bool IsOutdated = false, int? BuyerDm = null, int DemandVersion = 0, long? TargetDay = null, int? PopulationCode = null, int? TonnageDm = null);
 
 /// <summary>Goods and lot sizes based on Tim Heiderich's Traveller 2e (2016) trade-goods aid,
 /// https://github.com/timtoon/trade-goods, CC BY-NC 4.0 as stated in the aid.</summary>
@@ -38,16 +38,17 @@ public static class TradeGoods
 
 public static class MarketGenerator
 {
-    public static MarketResult Generate(string mode, int skillDm, string? remarks, Func<int>? d6 = null, int supplierDm = -2)
+    public static MarketResult Generate(string mode, int skillDm, string? remarks, Func<int>? d6 = null, int supplierDm = -2, int population = 6)
     {
         if (mode is not ("Broker" or "Streetwise")) throw new ArgumentException("Unknown trading mode", nameof(mode));
         d6 ??= () => System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, 7);
+        var tonnageDm = PopulationTonnageDm(population);
         var codes = new HashSet<string>((remarks ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries), StringComparer.OrdinalIgnoreCase);
         var goods = TradeGoods.All;
         var lots = new Dictionary<int, (int Count, int? Tons)>();
         void Add(TradeGood item)
         {
-            int? tons = item.Dice == 0 ? null : Enumerable.Range(0, item.Dice).Sum(_ => d6()) * item.Multiplier;
+            int? tons = item.Dice == 0 ? null : Math.Max(0, Enumerable.Range(0, item.Dice).Sum(_ => d6()) + tonnageDm) * item.Multiplier;
             var old = lots.GetValueOrDefault(item.D66);
             lots[item.D66] = (old.Count + 1, tons is null ? null : (old.Tons ?? 0) + tons);
         }
@@ -57,7 +58,7 @@ public static class MarketGenerator
                 .Any(code => code.Equals("All", StringComparison.OrdinalIgnoreCase) || codes.Contains(code));
             if (available && (mode == "Broker" ? !item.Illegal : item.Illegal)) Add(item);
         }
-        var rolls = d6();
+        var rolls = population;
         for (var i = 0; i < rolls; i++)
         {
             TradeGood item;
@@ -71,20 +72,34 @@ public static class MarketGenerator
                 mode == "Streetwise" && !good.Illegal);
         }).ToArray();
         return new MarketResult(mode, skillDm, DateTime.UtcNow, rolls,
-            lines.Select(line => TradePricing.Price(line, skillDm, remarks, d6, supplierDm)).ToArray(), 1, supplierDm);
+            lines.Select(line => TradePricing.Price(line, skillDm, remarks, d6, supplierDm)).ToArray(), 1, supplierDm, PopulationCode: population, TonnageDm: tonnageDm);
     }
-    public static int? DemandTons(TradeGood good, Func<int> d6) => good.Dice == 0 ? null
-        : Enumerable.Range(0, good.Dice).Sum(_ => d6()) * good.Multiplier;
+    public static int PopulationFromUwp(string? uwp)
+    {
+        var profile = uwp?.Trim().ToUpperInvariant() ?? "";
+        const string digits = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+        if (profile.Length != 9 || profile[7] != '-' || digits.IndexOf(profile[4]) < 0)
+            throw new ArgumentException("The world's population code is unknown.");
+        return digits.IndexOf(profile[4]);
+    }
+    public static int PopulationTonnageDm(int population)
+    {
+        if (population is < 0 or > 33) throw new ArgumentOutOfRangeException(nameof(population));
+        return population <= 3 ? -3 : population >= 9 ? 3 : 0;
+    }
+    public static int? DemandTons(TradeGood good, Func<int> d6, int tonnageDm = 0) => good.Dice == 0 ? null
+        : Math.Max(0, Enumerable.Range(0, good.Dice).Sum(_ => d6()) + tonnageDm) * good.Multiplier;
 
-    public static MarketResult GenerateSales(string mode, int skillDm, string? remarks, Func<int>? d6 = null, int buyerDm = -2)
+    public static MarketResult GenerateSales(string mode, int skillDm, string? remarks, Func<int>? d6 = null, int buyerDm = -2, int population = 6)
     {
         if (mode is not ("Broker" or "Streetwise")) throw new ArgumentException("Unknown trading mode", nameof(mode));
         d6 ??= () => System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, 7);
+        var tonnageDm = PopulationTonnageDm(population);
         var lines = TradeGoods.All.Where(g => (mode == "Streetwise" || !g.Illegal)
                 && (g.Availability == "All" ? mode == "Broker" : TradePricing.HasSaleDemand(g.D66, remarks)))
-            .Select(g => TradePricing.SalePrice(new MarketLine(g.D66, g.Name, 0, DemandTons(g, d6), g.Illegal, false), skillDm, remarks, d6, buyerDm))
+            .Select(g => TradePricing.SalePrice(new MarketLine(g.D66, g.Name, 0, DemandTons(g, d6, tonnageDm), g.Illegal, false), skillDm, remarks, d6, buyerDm))
             .ToArray();
-        return new MarketResult(mode, skillDm, DateTime.UtcNow, 0, lines, 1, BuyerDm: buyerDm, DemandVersion: 1);
+        return new MarketResult(mode, skillDm, DateTime.UtcNow, 0, lines, 1, BuyerDm: buyerDm, DemandVersion: 1, PopulationCode: population, TonnageDm: tonnageDm);
     }
 
 }
@@ -108,9 +123,9 @@ public sealed class TradingService(MtuDbContext db)
         // A stored market is always considered outdated when reopened.
         return market with { IsOutdated = true };
     }
-    public async Task<MarketResult> RollAsync(int sectorId, string hex, string mode, int skillDm, string? remarks, int supplierDm = -2, CancellationToken ct = default, long? targetDay = null)
+    public async Task<MarketResult> RollAsync(int sectorId, string hex, string mode, int skillDm, string? remarks, int supplierDm = -2, CancellationToken ct = default, long? targetDay = null, int population = 6)
     {
-        var result = MarketGenerator.Generate(mode, skillDm, remarks, supplierDm: supplierDm) with { TargetDay = targetDay };
+        var result = MarketGenerator.Generate(mode, skillDm, remarks, supplierDm: supplierDm, population: population) with { TargetDay = targetDay };
         var market = await db.TradeMarkets.SingleOrDefaultAsync(m => m.SectorId == sectorId && m.Hex == hex && m.Mode == mode, ct);
         if (market is null) { market = new TradeMarketEntity { SectorId = sectorId, Hex = hex, Mode = mode }; db.TradeMarkets.Add(market); }
         market.ResultJson = JsonSerializer.Serialize(result);
@@ -132,9 +147,9 @@ public sealed class TradingService(MtuDbContext db)
         return result;
     }
 
-    public async Task<MarketResult> RollSalesAsync(int sectorId, string hex, string mode, int skillDm, string? remarks, int buyerDm = -2, CancellationToken ct = default, long? targetDay = null)
+    public async Task<MarketResult> RollSalesAsync(int sectorId, string hex, string mode, int skillDm, string? remarks, int buyerDm = -2, CancellationToken ct = default, long? targetDay = null, int population = 6)
     {
-        var result = MarketGenerator.GenerateSales(mode, skillDm, remarks, buyerDm: buyerDm) with { TargetDay = targetDay };
+        var result = MarketGenerator.GenerateSales(mode, skillDm, remarks, buyerDm: buyerDm, population: population) with { TargetDay = targetDay };
         var key = "Sale:" + mode;
         var market = await db.TradeMarkets.SingleOrDefaultAsync(m => m.SectorId == sectorId && m.Hex == hex && m.Mode == key, ct);
         if (market is null) { market = new TradeMarketEntity { SectorId = sectorId, Hex = hex, Mode = key }; db.TradeMarkets.Add(market); }

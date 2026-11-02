@@ -1,0 +1,14 @@
+.skills-panel { margin-top:1rem; padding:1.2rem; border:1px solid var(--app-border); border-radius:var(--app-radius); background:var(--app-surface); }
+.skills-heading { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:1rem; }
+h2 { font-size:1.15rem; margin:0; }
+.skills-list { overflow-x:auto; }
+.skills-table { max-width:40rem; font-size:.86rem; }
+.skills-table td, .skills-table th { vertical-align:middle; }
+.skill-actions { text-align:right; white-space:nowrap; }
+.skill-editor { display:flex; flex-wrap:wrap; align-items:end; gap:.7rem; margin-top:1rem; }
+.skill-editor label { display:grid; gap:.3rem; color:var(--app-muted); font-size:.8rem; }
+.skill-level { width:6rem; }
+.empty-message { color:var(--app-muted); }
+.error { color:#ffaaaa; }
+
+.skill-select { min-width: 12rem; }

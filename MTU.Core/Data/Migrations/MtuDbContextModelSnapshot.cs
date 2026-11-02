@@ -412,6 +412,79 @@ namespace MTU.Core.Data.Migrations
                     b.ToTable("TransportMarkets");
                 });
 
+            modelBuilder.Entity("MTU.Core.Data.TravellerEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CampaignId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HighestNavalRank")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HighestScoutRank")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("NaturalDr")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PlayerName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Race")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TermsServed")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<byte[]>("TokenImage")
+                        .HasColumnType("BLOB");
+
+                    b.Property<string>("TravellerName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Upp")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CampaignId", "TravellerName");
+
+                    b.ToTable("Travellers");
+                });
+
+            modelBuilder.Entity("MTU.Core.Data.TravellerSkillEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .UseCollation("NOCASE");
+
+                    b.Property<int>("TravellerId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TravellerId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("TravellerSkills");
+                });
+
             modelBuilder.Entity("MTU.Core.Data.AllegianceEntity", b =>
                 {
                     b.HasOne("MTU.Core.Data.SectorEntity", "Sector")
@@ -498,6 +571,28 @@ namespace MTU.Core.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Sector");
+                });
+
+            modelBuilder.Entity("MTU.Core.Data.TravellerEntity", b =>
+                {
+                    b.HasOne("MTU.Core.Data.CampaignEntity", "Campaign")
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Campaign");
+                });
+
+            modelBuilder.Entity("MTU.Core.Data.TravellerSkillEntity", b =>
+                {
+                    b.HasOne("MTU.Core.Data.TravellerEntity", "Traveller")
+                        .WithMany()
+                        .HasForeignKey("TravellerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Traveller");
                 });
 
             modelBuilder.Entity("MTU.Core.Data.SectorEntity", b =>

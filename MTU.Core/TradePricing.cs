@@ -59,16 +59,32 @@ public static class TradePricing
     }
     private static readonly int[] SalePercentages = [30,40,45,50,55,60,65,70,75,80,85,90,100,105,110,115,120,125,130,135,140,145,150,155,160];
     public static int SalePercentage(int modifiedRoll) => SalePercentages[Math.Clamp(modifiedRoll, -1, 23) + 1];
-    public static bool HasSaleDemand(int d66, string? remarks)
+    private static HashSet<string> Codes(string? remarks)
     {
         var codes = new HashSet<string>((remarks ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries), StringComparer.OrdinalIgnoreCase);
+        return codes;
+    }
+    public static string WithZone(string? remarks, string? zone)
+    {
+        // Zone modifiers come only from the world's Zone field, never its remarks.
+        var codes = (remarks ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            .Where(code => !code.Equals("AmberZone", StringComparison.OrdinalIgnoreCase)
+                && !code.Equals("RedZone", StringComparison.OrdinalIgnoreCase));
+        var zoneCode = zone?.Trim().ToUpperInvariant() switch {
+            "A" or "AMBER" or "AMBERZONE" => "AmberZone", "R" or "RED" or "REDZONE" => "RedZone", _ => null
+        };
+        return string.Join(" ", zoneCode is null ? codes : codes.Append(zoneCode));
+    }
+    public static bool HasSaleDemand(int d66, string? remarks)
+    {
+        var codes = Codes(remarks);
         return MatchingModifier(Get(d66).SaleModifiers, codes) > 0;
     }
     public static MarketLine SalePrice(MarketLine line, int skillDm, string? remarks, Func<int> d6, int buyerDm = 0)
     {
         var info = Get(line.D66);
         if (info.BasePrice is null) return line;
-        var codes = new HashSet<string>((remarks ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries), StringComparer.OrdinalIgnoreCase);
+        var codes = Codes(remarks);
         var roll = d6() + d6() + d6();
         var purchaseDm = MatchingModifier(info.PurchaseModifiers, codes);
         var saleDm = MatchingModifier(info.SaleModifiers, codes);
@@ -88,7 +104,7 @@ public static class TradePricing
     {
         var info = Get(line.D66);
         if (info.BasePrice is null) return line with { BasePrice = null, PricePercent = null, BuyPrice = null };
-        var codes = new HashSet<string>((remarks ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries), StringComparer.OrdinalIgnoreCase);
+        var codes = Codes(remarks);
         var roll = d6() + d6() + d6();
         var purchaseDm = MatchingModifier(info.PurchaseModifiers, codes);
         var saleDm = MatchingModifier(info.SaleModifiers, codes);

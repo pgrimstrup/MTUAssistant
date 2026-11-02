@@ -1,0 +1,27 @@
+.travellers-page { max-width:90rem; margin:0 auto; }
+.page-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.5rem; }
+h1 { margin:0; font-size:1.8rem; }
+.page-header p, .empty-message { color:var(--app-muted); margin:.4rem 0; }
+.editor { margin-bottom:1rem; padding:1.2rem; border:1px solid var(--app-border); border-radius:var(--app-radius); background:var(--app-surface); }
+h2 { margin:0 0 1rem; font-size:1.15rem; }
+.fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(12rem,1fr)); gap:.8rem; }
+.fields label { display:grid; gap:.3rem; color:var(--app-muted); font-size:.8rem; }
+.actions { display:flex; justify-content:flex-end; gap:.5rem; margin-top:1rem; }
+.table-wrap { overflow-x:auto; border:1px solid var(--app-border); border-radius:var(--app-radius); }
+.traveller-table { margin:0; font-size:.86rem; }
+.traveller-table th, .traveller-table td { white-space:nowrap; vertical-align:middle; }
+.row-actions { text-align:right; }
+.confirm { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin:1rem 0; color:#ffaaaa; }
+.error { color:#ffaaaa; }
+
+.player-name { display:block; font-size:.85em; font-weight:400; color:var(--app-muted); }
+.upp { text-transform:uppercase; }
+
+.token-editor { display:flex; flex-wrap:wrap; align-items:end; gap:.8rem; margin-top:1rem; }
+.token-editor label { display:grid; gap:.3rem; color:var(--app-muted); font-size:.8rem; }
+.token-hint { font-size:.75rem; }
+.token-preview, .token-thumbnail { object-fit:cover; border-radius:50%; border:1px solid var(--app-border); background:var(--app-surface); }
+.token-preview { width:4rem; height:4rem; }
+.token-thumbnail { width:2.75rem; height:2.75rem; }
+
+.traveller-table td.skills-summary { white-space:normal; min-width:12rem; font-size:.85em; font-weight:400; color:var(--app-muted); }

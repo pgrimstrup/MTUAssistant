@@ -5,7 +5,7 @@ public sealed record FreightResult(int Effect, int PopulationDm, int StarportDm,
     string Population, string Starport, string Tech, string Zone, IReadOnlyList<FreightLine> Lines, int? CargoCapacity = null, MailResult? Mail = null, long? TargetDay = null);
 
 public sealed record MailResult(int Rank, int SocDm, int FreightTrafficDm, int Effect, int TechDm,
-    int Roll, int ModifiedRoll, int Containers, int? CargoTaken = null, bool InsufficientSpace = false);
+    int Roll, int ModifiedRoll, int Containers, int? CargoTaken = null, bool InsufficientSpace = false, int ArmedDm = 0);
 
 /// <summary>Freight traffic using the 2016 Mongoose Traveller 2e rules.</summary>
 public static class FreightTraffic
@@ -44,18 +44,19 @@ public static class FreightTraffic
         <= -10 => -2, <= -5 => -1, <= 4 => 0, <= 9 => 1, _ => 2
     };
 
-    public static FreightResult RollMail(FreightResult freight, int rank, int socDm, Func<int>? d6 = null)
+    public static FreightResult RollMail(FreightResult freight, int rank, int socDm, Func<int>? d6 = null, bool armed = true)
     {
         if (rank is < 0 or > 100 || socDm is < -100 or > 100)
             throw new ArgumentException("Enter a rank from 0 to 100 and a SOC DM from -100 to 100.");
         d6 ??= () => System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, 7);
         var freightDm = freight.Effect + freight.PopulationDm + freight.StarportDm + freight.TechDm + freight.ZoneDm;
-        var effect = MailTrafficDm(freightDm) + rank + socDm;
+        var armedDm = armed ? 2 : 0;
+        var effect = MailTrafficDm(freightDm) + rank + socDm + armedDm;
         var techDm = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ".IndexOf(freight.Tech, StringComparison.Ordinal) <= 5 ? -4 : 0;
         var roll = d6() + d6();
         var modified = roll + effect + techDm;
         var containers = modified >= 12 ? d6() : 0;
-        return freight with { Mail = new(rank, socDm, freightDm, effect, techDm, roll, modified, containers) };
+        return freight with { Mail = new(rank, socDm, freightDm, effect, techDm, roll, modified, containers, ArmedDm: armedDm) };
     }
 
     public static FreightResult TakeMail(FreightResult freight, int capacity)

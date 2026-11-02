@@ -1,0 +1,152 @@
+@page "/travellers"
+@implements IDisposable
+@inject CampaignService Campaigns
+@inject TravellerService TravellerStore
+
+<PageTitle>Travellers</PageTitle>
+<div class="travellers-page">
+    <header class="page-header"><div><h1>Travellers</h1>@if (campaign is not null) { <p>@campaign.Name</p> }</div>
+        @if (campaign is not null) { <button type="button" class="btn btn-primary" @onclick="Add" disabled="@busy">Add Traveller</button> }
+    </header>
+    @if (campaign is null) { <p class="empty-message">Select a campaign to view its Travellers.</p> }
+    else
+    {
+        @if (error is not null) { <p class="error" role="alert">@error</p> }
+        @if (editing is { } traveller)
+        {
+            <section class="editor" aria-labelledby="editor-heading">
+                <h2 id="editor-heading">@(traveller.Id == 0 ? "Add Traveller" : "Edit Traveller")</h2>
+                <div class="fields">
+                    <label>Player Name <input class="form-control" maxlength="120" @bind="playerName" disabled="@busy" /></label>
+                    <label>Traveller Name <input class="form-control" maxlength="120" @bind="travellerName" disabled="@busy" /></label>
+                    <label>Race <input class="form-control" maxlength="120" @bind="race" disabled="@busy" /></label>
+                    <label>UPP <input class="form-control" maxlength="40" @bind="upp" disabled="@busy" /></label>
+                    <label>Terms Served <input class="form-control" maxlength="240" placeholder="Navy 3, Diplomat 1" @bind="terms" disabled="@busy" /></label>
+                    <label>Highest Naval Rank <input class="form-control" type="number" min="0" @bind="naval" disabled="@busy" /></label>
+                    <label>Highest Scout Rank <input class="form-control" type="number" min="0" @bind="scout" disabled="@busy" /></label>
+                    <label>Natural DR <input class="form-control" type="number" min="0" @bind="naturalDr" disabled="@busy" /></label>
+                </div>
+                <div class="token-editor">
+                    @if (TravellerToken.DataUri(tokenImage) is { } preview) { <img class="token-preview" src="@preview" alt="Token preview" /> }
+                    <label>Player Token <InputFile @key="tokenInputKey" class="form-control" accept="image/png,image/jpeg,image/gif,image/webp" OnChange="SelectToken" disabled="@busy" /><span class="token-hint">PNG, JPEG, GIF or WebP, up to 2 MB</span></label>
+                    @if (tokenImage is not null) { <button type="button" class="btn btn-outline-secondary" @onclick="RemoveToken" disabled="@busy">Remove token</button> }
+                </div>
+                <div class="actions"><button type="button" class="btn btn-outline-secondary" @onclick="Cancel" disabled="@busy">Cancel</button><button type="button" class="btn btn-primary" @onclick="Save" disabled="@busy">Save</button></div>
+            </section>
+        }
+        @if (pendingDelete is { } deleting)
+        {
+            <div class="confirm" role="alert"><span>Delete @deleting.TravellerName?</span><button type="button" class="btn btn-danger" @onclick="Delete" disabled="@busy">Delete Traveller</button><button type="button" class="btn btn-outline-secondary" @onclick="() => pendingDelete = null" disabled="@busy">Cancel</button></div>
+        }
+        @if (!busy && items.Count == 0) { <p class="empty-message">No Travellers in this campaign yet.</p> }
+        else if (items.Count > 0)
+        {
+            <div class="table-wrap"><table class="table traveller-table">
+                <thead><tr><th>Token</th><th>Traveller Name</th><th>Race</th><th>UPP</th><th>Terms Served / Age</th><th>Ranks</th><th>Skills</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+                <tbody>@foreach (var item in items)
+                {
+                    <tr><td>@if (TravellerToken.DataUri(item.TokenImage) is { } token) { <img class="token-thumbnail" src="@token" alt="@($"{item.TravellerName} token")" /> }</td><th scope="row">@item.TravellerName @if (!string.IsNullOrWhiteSpace(item.PlayerName)) { <span class="player-name">@item.PlayerName</span> }</th><td>@item.Race</td><td class="upp">@item.Upp</td><td>@item.TermsServed<span class="player-name">Age: @(TravellerAge.Calculate(item.TermsServed, campaign.Year)?.ToString() ?? "Unknown")</span></td><td>@if (item.HighestNavalRank > 0) { <span>Naval Rank @item.HighestNavalRank</span> } @if (item.HighestNavalRank > 0 && item.HighestScoutRank > 0) { <span> / </span> } @if (item.HighestScoutRank > 0) { <span>Scout Rank @item.HighestScoutRank</span> }</td><td class="skills-summary">@string.Join(", ", (item.Skills ?? []).Select(skill => $"{skill.Name} {skill.Level}"))</td><td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => selectedSkills = item" disabled="@busy">Skills</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(item)" disabled="@busy">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(item)" disabled="@busy">Delete</button></td></tr>
+                }</tbody>
+            </table></div>
+        }
+        @if (selectedSkills is { } selected) { <TravellerSkills @key="selected.Id" Traveller="selected" OnChanged="RefreshSkills" OnClose="() => selectedSkills = null" /> }
+    }
+</div>
+
+@code {
+    private Campaign? campaign;
+    private IReadOnlyList<Traveller> items = [];
+    private Traveller? editing, pendingDelete, selectedSkills;
+    private string playerName = "", travellerName = "", race = "", upp = "";
+    private string terms = "0";
+    private int naval, scout, naturalDr, tokenInputKey;
+    private byte[]? tokenImage;
+    private string? error;
+    private bool busy, disposed;
+    private int version;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Campaigns.Changed += CampaignChanged;
+        try { await SetCampaign((await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive)); }
+        catch (Exception) { error = "Unable to load the active campaign."; }
+    }
+    private void CampaignChanged(Campaign? value) => _ = InvokeAsync(async () => { await SetCampaign(value); if (!disposed) StateHasChanged(); });
+    private async Task SetCampaign(Campaign? value)
+    {
+        if (campaign?.Id == value?.Id) { campaign = value; return; }
+        campaign = value; editing = null; pendingDelete = null; selectedSkills = null; items = []; error = null;
+        var request = ++version;
+        if (value is null) return;
+        try
+        {
+            var loaded = await TravellerStore.ListAsync(value.Id);
+            if (!disposed && request == version) items = loaded;
+        }
+        catch (Exception) { if (!disposed && request == version) error = "Unable to load Travellers."; }
+    }
+    private async Task RefreshSkills()
+    {
+        if (campaign is not { } current) return;
+        try
+        {
+            var loaded = await TravellerStore.ListAsync(current.Id);
+            if (campaign?.Id == current.Id) items = loaded;
+        }
+        catch (Exception) { error = "Unable to refresh the Traveller list."; }
+    }
+    private void Add() { if (campaign is { } current) Edit(new Traveller(0, current.Id, "", "", "", "", "0", 0, 0, 0)); }
+    private void Edit(Traveller item)
+    {
+        editing = item; pendingDelete = null; selectedSkills = null; error = null;
+        playerName = item.PlayerName; travellerName = item.TravellerName; race = item.Race; upp = item.Upp;
+        terms = item.TermsServed; naval = item.HighestNavalRank; scout = item.HighestScoutRank; naturalDr = item.NaturalDr;
+        tokenImage = item.TokenImage; tokenInputKey++;
+    }
+    private void Cancel() { editing = null; tokenImage = null; error = null; }
+    private void RemoveToken() { tokenImage = null; tokenInputKey++; error = null; }
+    private async Task SelectToken(InputFileChangeEventArgs args)
+    {
+        if (editing is null || busy) return;
+        var current = editing;
+        busy = true;
+        try
+        {
+            if (args.File.Size > TravellerToken.MaxBytes) throw new ArgumentException("Choose an image no larger than 2 MB.");
+            await using var source = args.File.OpenReadStream(TravellerToken.MaxBytes);
+            using var memory = new MemoryStream();
+            await source.CopyToAsync(memory);
+            var bytes = memory.ToArray();
+            if (TravellerToken.ContentType(bytes) is null) throw new ArgumentException("Choose a PNG, JPEG, GIF or WebP image.");
+            if (editing != current || disposed) return;
+            tokenImage = bytes; error = null;
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to read this image. Please choose it again."; }
+        finally { busy = false; }
+    }
+    private void ConfirmDelete(Traveller item) { pendingDelete = item; editing = null; selectedSkills = null; error = null; }
+    private async Task Save()
+    {
+        if (editing is not { } current || campaign?.Id != current.CampaignId || busy) return;
+        busy = true;
+        try
+        {
+            await TravellerStore.SaveAsync(current with { PlayerName = playerName, TravellerName = travellerName, Race = race, Upp = upp,
+                TermsServed = terms, HighestNavalRank = naval, HighestScoutRank = scout, NaturalDr = naturalDr, TokenImage = tokenImage });
+            if (campaign?.Id == current.CampaignId) { items = await TravellerStore.ListAsync(current.CampaignId); editing = null; error = null; }
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to save this Traveller."; }
+        finally { busy = false; }
+    }
+    private async Task Delete()
+    {
+        if (pendingDelete is not { } current || campaign?.Id != current.CampaignId || busy) return;
+        busy = true;
+        try { await TravellerStore.DeleteAsync(current.CampaignId, current.Id); if (campaign?.Id == current.CampaignId) { items = await TravellerStore.ListAsync(current.CampaignId); pendingDelete = null; error = null; } }
+        catch (Exception) { error = "Unable to delete this Traveller."; }
+        finally { busy = false; }
+    }
+    public void Dispose() { disposed = true; version++; Campaigns.Changed -= CampaignChanged; }
+}

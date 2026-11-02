@@ -114,3 +114,5 @@
 .bi-arrow-left-right-nav-menu {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M11.5 3.5a.5.5 0 0 1 .707 0l3 3a.5.5 0 0 1-.707.707L12.354 5.06H1a.5.5 0 0 1 0-1h11.354L11.5 4.207a.5.5 0 0 1 0-.707zM4.5 12.5a.5.5 0 0 1-.707 0l-3-3a.5.5 0 1 1 .707-.707l2.146 2.146H15a.5.5 0 0 1 0 1H3.646l.854.854a.5.5 0 0 1 0 .707z'/%3E%3C/svg%3E");
 }
+
+.bi-person-nav-menu { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.5 5c0-2 2.5-3.5 5.5-3.5s5.5 1.5 5.5 3.5v1h-11z'/%3E%3C/svg%3E"); }

@@ -132,3 +132,28 @@ public class CampaignEntity
     public string? LocationHex { get; set; }
     public bool IsActive { get; set; }
 }
+
+public class TravellerEntity
+{
+    public int Id { get; set; }
+    public int CampaignId { get; set; }
+    public CampaignEntity Campaign { get; set; } = null!;
+    public string PlayerName { get; set; } = "";
+    public string TravellerName { get; set; } = "";
+    public string Race { get; set; } = "";
+    public string Upp { get; set; } = "";
+    public string TermsServed { get; set; } = "0";
+    public int HighestNavalRank { get; set; }
+    public int HighestScoutRank { get; set; }
+    public int NaturalDr { get; set; }
+    public byte[]? TokenImage { get; set; }
+}
+
+public class TravellerSkillEntity
+{
+    public int Id { get; set; }
+    public int TravellerId { get; set; }
+    public TravellerEntity Traveller { get; set; } = null!;
+    public string Name { get; set; } = "";
+    public int Level { get; set; }
+}

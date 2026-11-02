@@ -55,7 +55,7 @@
             @if (error is not null) { <p class="dialog-error" role="alert">@error</p> }
             @if (confirmDelete)
             {
-                <div class="delete-confirm"><span>Delete this campaign?</span><button type="button" class="btn btn-danger" @onclick="Delete" disabled="@busy">Delete campaign</button><button type="button" class="btn btn-outline-secondary" @onclick="() => confirmDelete = false">Keep</button></div>
+                <div class="delete-confirm"><span>Delete this campaign and its Travellers?</span><button type="button" class="btn btn-danger" @onclick="Delete" disabled="@busy">Delete campaign</button><button type="button" class="btn btn-outline-secondary" @onclick="() => confirmDelete = false">Keep</button></div>
             }
             <div class="dialog-actions">
                 @if (editingId != 0 && !confirmDelete) { <button type="button" class="btn btn-outline-danger delete-button" @onclick="() => confirmDelete = true" disabled="@busy">Delete</button> }

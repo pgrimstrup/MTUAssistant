@@ -15,9 +15,9 @@ public static class PassengerTraffic
     }
 
     public static IReadOnlyList<PassageFee> Fees { get; } = Array.AsReadOnly<PassageFee>([
-        new(1, 8500, 6200, 2200, 700), new(2, 12000, 9000, 2900, 1300),
-        new(3, 20000, 15000, 4400, 2200), new(4, 41000, 31000, 8600, 4300),
-        new(5, 45000, 34000, 9400, 13000), new(6, 470000, 350000, 93000, 96000)
+        new(1, 9000, 6500, 2000, 700), new(2, 14000, 10000, 3000, 1300),
+        new(3, 21000, 14000, 5000, 2200), new(4, 34000, 23000, 8000, 3900),
+        new(5, 60000, 40000, 14000, 7200), new(6, 210000, 130000, 55000, 27000)
     ]);
 
     public static PassengerResult Select(PassengerResult result, string passage, int count)

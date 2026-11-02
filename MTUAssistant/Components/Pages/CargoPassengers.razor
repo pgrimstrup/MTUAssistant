@@ -82,6 +82,7 @@
                     <label>Effect of Broker/Streetwise <input class="form-control" type="number" min="-100" max="100" @bind="freightEffect" disabled="@busy" /></label>
                     <label>Highest Naval/Scout Rank <input class="form-control" type="number" min="0" max="100" @bind="mailRank" disabled="@busy" /></label>
                     <label>Highest SOC DM <input class="form-control" type="number" min="-100" max="100" @bind="mailSoc" disabled="@busy" /></label>
+                    <label class="armed-option"><input type="checkbox" class="form-check-input" @bind="shipArmed" disabled="@busy" /> Armed Ship</label>
                     <button class="btn btn-primary" type="button" @onclick="RollFreight" disabled="@(WorldState.World is null || busy)">Roll</button>
                     <div class="cargo-controls">
                         <label>Cargo Capacity (T) <input class="form-control" type="number" min="0" @bind="cargoCapacity" disabled="@busy" /></label>
@@ -101,7 +102,7 @@
                             }
                             @if (freight.Mail is { } mail)
                             {
-                                <tr><th scope="row">Mail Containers</th><td>@mail.Roll</td><td title="Mail traffic DM plus rank and SOC DMs">@FormatDm(mail.Effect)</td><td></td><td></td><td>@(mail.TechDm == 0 ? "" : FormatDm(mail.TechDm))</td><td></td><td></td><td>@mail.ModifiedRoll</td><td>@(mail.Containers > 0 ? "1D" : "")</td><td>@mail.Containers</td><td>@(mail.CargoTaken?.ToString("N0") ?? "")</td></tr>
+                                <tr><th scope="row">Mail Containers</th><td>@mail.Roll</td><td title="@($"Mail traffic DM plus rank, SOC and armed ship DM {mail.ArmedDm:+0;-0;0}")">@FormatDm(mail.Effect)</td><td></td><td></td><td>@(mail.TechDm == 0 ? "" : FormatDm(mail.TechDm))</td><td></td><td></td><td>@mail.ModifiedRoll</td><td>@(mail.Containers > 0 ? "1D" : "")</td><td>@mail.Containers</td><td>@(mail.CargoTaken?.ToString("N0") ?? "")</td></tr>
                             }
                         </tbody>
                         <tfoot><tr><th colspan="11" scope="row">Total cargo taken (T)</th><td>@(freight.CargoCapacity is not null ? TotalCargo(freight).ToString("N0") : "")</td></tr></tfoot>
@@ -138,8 +139,9 @@
     private int freightEffect;
     private int mailRank;
     private int mailSoc;
+    private bool shipArmed = true;
     private int cargoCapacity;
-    private static readonly (int Distance, int Fee)[] freightFees = [(1, 1000), (2, 1600), (3, 3000), (4, 7000), (5, 7700), (6, 86000)];
+    private static readonly (int Distance, int Fee)[] freightFees = [(1, 1000), (2, 1600), (3, 2600), (4, 4400), (5, 8500), (6, 32000)];
     private FreightResult? freightResult;
     private string? freightError;
     private bool busy;
@@ -169,6 +171,7 @@
                 freightEffect = freight.Effect;
                 mailRank = freight.Mail?.Rank ?? 0;
                 mailSoc = freight.Mail?.SocDm ?? 0;
+                shipArmed = freight.Mail is null || freight.Mail.ArmedDm != 0;
                 cargoCapacity = freight.CargoCapacity ?? 0;
             }
         }
@@ -242,7 +245,7 @@
         {
             if (activeCampaign is null) { freightError = "Select a campaign to generate dated results."; return; }
             var result = FreightTraffic.Roll(system.MainWorld.Uwp, system.MainWorld.Zone, freightEffect) with { TargetDay = CampaignDates.Today(activeCampaign) };
-            result = FreightTraffic.RollMail(result, mailRank, mailSoc);
+            result = FreightTraffic.RollMail(result, mailRank, mailSoc, armed: shipArmed);
             await FreightMarkets.SaveAsync(world.SectorId, world.Hex, result);
             freightResult = result;
             freightError = null;

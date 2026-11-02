@@ -10,6 +10,8 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MTU", FileName);
 
     public DbSet<CampaignEntity> Campaigns => Set<CampaignEntity>();
+    public DbSet<TravellerEntity> Travellers => Set<TravellerEntity>();
+    public DbSet<TravellerSkillEntity> TravellerSkills => Set<TravellerSkillEntity>();
     public DbSet<SectorEntity> Sectors => Set<SectorEntity>();
     public DbSet<SectorNameEntity> SectorNames => Set<SectorNameEntity>();
     public DbSet<SubsectorEntity> Subsectors => Set<SubsectorEntity>();
@@ -34,6 +36,11 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
             e.HasMany(s => s.Systems).WithOne(n => n.Sector).HasForeignKey(n => n.SectorId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<TravellerSkillEntity>().HasOne(s => s.Traveller).WithMany().HasForeignKey(s => s.TravellerId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<TravellerSkillEntity>().Property(s => s.Name).UseCollation("NOCASE");
+        modelBuilder.Entity<TravellerSkillEntity>().HasIndex(s => new { s.TravellerId, s.Name }).IsUnique();
+        modelBuilder.Entity<TravellerEntity>().HasOne(t => t.Campaign).WithMany().HasForeignKey(t => t.CampaignId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<TravellerEntity>().HasIndex(t => new { t.CampaignId, t.TravellerName });
         modelBuilder.Entity<CampaignEntity>().HasIndex(c => c.IsActive).IsUnique().HasFilter("\"IsActive\" = 1");
         modelBuilder.Entity<TradeMarketEntity>().HasIndex(m => new { m.SectorId, m.Hex, m.Mode }).IsUnique();
         modelBuilder.Entity<TransportMarketEntity>().HasIndex(m => new { m.SectorId, m.Hex, m.Kind }).IsUnique();
