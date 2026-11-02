@@ -11,11 +11,10 @@ public class SearchResult
     public int SubsectorId { get; set; }
     public string SubsectorLetter { get; set; } = string.Empty;
     public string SubsectorName { get; set; } = string.Empty;
-    public int SystemId { get; set; } 
+    public int SystemId { get; set; }
     public string SystemName { get; set; } = string.Empty;
     public string SectorHex { get; set; } = string.Empty;
     public string SubsectorHex { get; set; } = string.Empty;
-
 
     public string DisplayText
     {

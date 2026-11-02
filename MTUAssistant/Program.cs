@@ -13,8 +13,7 @@ namespace MTUAssistant
             var builder = WebApplication.CreateBuilder(args);
 
             // Add services to the container.
-            builder.Services.AddRazorComponents()
-                .AddInteractiveServerComponents();
+            builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 
             builder.Services.AddTravellerMapClient();
             builder.Services.AddMtuDatabase();
@@ -43,13 +42,11 @@ namespace MTUAssistant
             app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
             app.UseHttpsRedirection();
 
-
             app.UseAntiforgery();
 
             app.MapStaticAssets();
             app.MapMtuMap();
-            app.MapRazorComponents<App>()
-                .AddInteractiveServerRenderMode();
+            app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
             await app.RunAsync();
         }

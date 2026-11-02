@@ -15,15 +15,14 @@ namespace MTU.Core.Data.Migrations
                 table: "Travellers",
                 type: "INTEGER",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: false
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "Inactive",
-                table: "Travellers");
+            migrationBuilder.DropColumn(name: "Inactive", table: "Travellers");
         }
     }
 }

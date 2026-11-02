@@ -7,7 +7,7 @@ public enum SectorImageScale
     Scale16 = 16,
     Scale32 = 32,
     Scale64 = 64,
-    Scale128 = 128
+    Scale128 = 128,
 }
 
 public static class SectorImageScaleExtensions
@@ -15,5 +15,6 @@ public static class SectorImageScaleExtensions
     public const int FirstSubsectorScale = 64;
 
     /// <summary>At these scales whole sectors are too large, so the 16 subsectors are downloaded individually.</summary>
-    public static bool UsesSubsectorImages(this SectorImageScale scale) => (int)scale >= FirstSubsectorScale;
+    public static bool UsesSubsectorImages(this SectorImageScale scale) =>
+        (int)scale >= FirstSubsectorScale;
 }

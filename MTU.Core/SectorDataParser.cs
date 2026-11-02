@@ -55,26 +55,29 @@ public static partial class SectorDataParser
             }
 
             var values = ReadColumns(line, columns);
-            var map = columns.Select((_, i) => (Key: ReadColumns(header, columns)[i], Value: values[i]))
-                             .ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
+            var map = columns
+                .Select((_, i) => (Key: ReadColumns(header, columns)[i], Value: values[i]))
+                .ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
 
-            sector.Systems.Add(new StarSystem
-            {
-                Hex = Get(map, "Hex"),
-                Name = Get(map, "Name"),
-                Uwp = Get(map, "UWP"),
-                Remarks = Get(map, "Remarks"),
-                Ix = Get(map, "{Ix}"),
-                Ex = Get(map, "(Ex)"),
-                Cx = Get(map, "[Cx]"),
-                N = Dash(Get(map, "N")),
-                B = Dash(Get(map, "B")),
-                Z = Dash(Get(map, "Z")),
-                Pbg = Get(map, "PBG"),
-                W = Get(map, "W"),
-                A = Get(map, "A"),
-                Stellar = Get(map, "Stellar")
-            });
+            sector.Systems.Add(
+                new StarSystem
+                {
+                    Hex = Get(map, "Hex"),
+                    Name = Get(map, "Name"),
+                    Uwp = Get(map, "UWP"),
+                    Remarks = Get(map, "Remarks"),
+                    Ix = Get(map, "{Ix}"),
+                    Ex = Get(map, "(Ex)"),
+                    Cx = Get(map, "[Cx]"),
+                    N = Dash(Get(map, "N")),
+                    B = Dash(Get(map, "B")),
+                    Z = Dash(Get(map, "Z")),
+                    Pbg = Get(map, "PBG"),
+                    W = Get(map, "W"),
+                    A = Get(map, "A"),
+                    Stellar = Get(map, "Stellar"),
+                }
+            );
         }
 
         if (string.IsNullOrEmpty(sector.Name) && sector.Names.Count > 0)
@@ -88,11 +91,15 @@ public static partial class SectorDataParser
         Match m;
         if ((m = SubsectorRegex().Match(line)).Success)
         {
-            sector.Subsectors.Add(new Subsector { Letter = m.Groups[1].Value, Name = m.Groups[2].Value.Trim() });
+            sector.Subsectors.Add(
+                new Subsector { Letter = m.Groups[1].Value, Name = m.Groups[2].Value.Trim() }
+            );
         }
         else if ((m = AllegianceRegex().Match(line)).Success)
         {
-            sector.Allegiances.Add(new Allegiance { Code = m.Groups[1].Value, Name = m.Groups[2].Value });
+            sector.Allegiances.Add(
+                new Allegiance { Code = m.Groups[1].Value, Name = m.Groups[2].Value }
+            );
         }
         else if ((m = CoordinatesRegex().Match(line)).Success)
         {
@@ -106,16 +113,30 @@ public static partial class SectorDataParser
             {
                 case "Name":
                     var lang = LangNameRegex().Match(value);
-                    sector.Names.Add(lang.Success
-                        ? new SectorName { Text = lang.Groups[1].Value, Lang = lang.Groups[2].Value }
-                        : new SectorName { Text = value });
+                    sector.Names.Add(
+                        lang.Success
+                            ? new SectorName
+                            {
+                                Text = lang.Groups[1].Value,
+                                Lang = lang.Groups[2].Value,
+                            }
+                            : new SectorName { Text = value }
+                    );
                     if (string.IsNullOrEmpty(sector.Name))
                         sector.Name = sector.Names[^1].Text;
                     break;
-                case "Abbreviation": sector.Abbreviation = value; break;
-                case "Milieu": sector.Milieu = value; break;
-                case "Credits": sector.Credits = value; break;
-                case "Source": sector.Source = value; break;
+                case "Abbreviation":
+                    sector.Abbreviation = value;
+                    break;
+                case "Milieu":
+                    sector.Milieu = value;
+                    break;
+                case "Credits":
+                    sector.Credits = value;
+                    break;
+                case "Source":
+                    sector.Source = value;
+                    break;
             }
         }
     }
@@ -127,9 +148,14 @@ public static partial class SectorDataParser
         var i = 0;
         while (i < dashes.Length)
         {
-            if (dashes[i] != '-') { i++; continue; }
+            if (dashes[i] != '-')
+            {
+                i++;
+                continue;
+            }
             var start = i;
-            while (i < dashes.Length && dashes[i] == '-') i++;
+            while (i < dashes.Length && dashes[i] == '-')
+                i++;
             columns.Add((start, i - start));
         }
         return columns;

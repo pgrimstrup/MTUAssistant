@@ -11,6 +11,7 @@ public class SectorEntity
     public string? Tags { get; set; }
     public string? Credits { get; set; }
     public string? Source { get; set; }
+
     /// <summary>Set when systems were last imported; null if only the sector list entry has been stored.</summary>
     public DateTime? DataImportedUtc { get; set; }
 
@@ -38,6 +39,7 @@ public class SubsectorEntity
     public int Id { get; set; }
     public int SectorId { get; set; }
     public SectorEntity Sector { get; set; } = null!;
+
     /// <summary>Letter A-P.</summary>
     public string Letter { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
@@ -59,11 +61,14 @@ public class SystemEntity
     public int Id { get; set; }
     public int SectorId { get; set; }
     public SectorEntity Sector { get; set; } = null!;
+
     /// <summary>Subsector letter A-P derived from the hex location.</summary>
     public string SubsectorLetter { get; set; } = string.Empty;
     public string Hex { get; set; } = string.Empty;
+
     /// <summary>Parsecs trailing (+) / spinward (-) of Reference (Core 0140).</summary>
     public int RelX { get; set; }
+
     /// <summary>Parsecs rimward (+) / coreward (-) of Reference (Core 0140).</summary>
     public int RelY { get; set; }
     public string Name { get; set; } = string.Empty;
@@ -77,6 +82,7 @@ public class SystemEntity
     public string Z { get; set; } = string.Empty;
     public string Pbg { get; set; } = string.Empty;
     public string W { get; set; } = string.Empty;
+
     /// <summary>Allegiance code; matches <see cref="AllegianceEntity.Code"/> within the same sector.</summary>
     public string A { get; set; } = string.Empty;
     public string Stellar { get; set; } = string.Empty;
@@ -84,19 +90,32 @@ public class SystemEntity
 
 public class BorderEntity
 {
-    public int Id { get; set; } public int SectorId { get; set; } public SectorEntity Sector { get; set; } = null!;
-    public string Path { get; set; } = ""; public string? Allegiance { get; set; }
-    public string? Color { get; set; } public string? Style { get; set; }
+    public int Id { get; set; }
+    public int SectorId { get; set; }
+    public SectorEntity Sector { get; set; } = null!;
+    public string Path { get; set; } = "";
+    public string? Allegiance { get; set; }
+    public string? Color { get; set; }
+    public string? Style { get; set; }
     public string RawJson { get; set; } = "{}";
 }
+
 public class RouteEntity
 {
-    public int Id { get; set; } public int SectorId { get; set; } public SectorEntity Sector { get; set; } = null!;
-    public string Start { get; set; } = ""; public string End { get; set; } = "";
-    public int StartOffsetX { get; set; } public int StartOffsetY { get; set; }
-    public int EndOffsetX { get; set; } public int EndOffsetY { get; set; }
-    public string? Allegiance { get; set; } public string? Type { get; set; }
-    public string? Color { get; set; } public string? Style { get; set; } public double? Width { get; set; }
+    public int Id { get; set; }
+    public int SectorId { get; set; }
+    public SectorEntity Sector { get; set; } = null!;
+    public string Start { get; set; } = "";
+    public string End { get; set; } = "";
+    public int StartOffsetX { get; set; }
+    public int StartOffsetY { get; set; }
+    public int EndOffsetX { get; set; }
+    public int EndOffsetY { get; set; }
+    public string? Allegiance { get; set; }
+    public string? Type { get; set; }
+    public string? Color { get; set; }
+    public string? Style { get; set; }
+    public double? Width { get; set; }
     public string RawJson { get; set; } = "{}";
 }
 
