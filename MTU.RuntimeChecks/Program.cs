@@ -22,6 +22,26 @@ Check(passengers.Lines.Count == 4 && passengers.Lines[0] is { Passage: "High", R
 var sparsePassengers = PassengerTraffic.Roll("X000100-0", "R", 0, 0, () => 1);
 Check(sparsePassengers.PopulationDm == -4 && sparsePassengers.StarportDm == -3 && sparsePassengers.ZoneDm == -4
     && sparsePassengers.Lines.All(line => line.Passengers == 0), "Low population red zone passenger modifiers");
+var routePassengers = PassengerTraffic.RollRoute("A788899-C", "A", "X000100-0", "R", 3, 42, "0101", 1, 2, () => 1);
+Check(routePassengers.Destination is { PopulationDm: -4, StarportDm: -3, ZoneDm: -4 }
+    && routePassengers.Distance == 3 && routePassengers.Lines[0].ModifiedRoll == -6, "Passenger route applies both worlds and distance");
+var nearPassengers = PassengerTraffic.RollRoute("A788899-C", "A", "A788899-C", "A", 1, 42, "0101", 1, 2, () => 1);
+var farPassengers = PassengerTraffic.RollRoute("A788899-C", "A", "A788899-C", "A", 6, 42, "0101", 1, 2, () => 1);
+Check(nearPassengers.Lines[0].ModifiedRoll - farPassengers.Lines[0].ModifiedRoll == 5, "Distance DM starts after the first parsec");
+var withoutSteward = PassengerTraffic.RollRoute("A788899-C", "A", "A788899-C", "A", 1, 42, "0101", 0, 0, () => 1, hasSteward: false);
+Check(!withoutSteward.HasSteward && withoutSteward.Lines[0] is { Passage: "High", Available: false, Passengers: 0 }
+    && withoutSteward.Lines.Skip(1).All(l => l.Available), "High passage unavailable without a Steward");
+var unskilledSteward = PassengerTraffic.RollRoute("A788899-C", "A", "A788899-C", "A", 1, 42, "0101", 0, -2, () => 1, hasSteward: false);
+Check(unskilledSteward.Lines[1].ModifiedRoll == withoutSteward.Lines[1].ModifiedRoll - 2 && !unskilledSteward.Lines[0].Available,
+    "Unskilled Steward DM applies to available passage classes");
+Check(System.Text.Json.JsonSerializer.Deserialize<PassengerResult>(System.Text.Json.JsonSerializer.Serialize(withoutSteward))?.Lines[0].Available == false,
+    "Unavailable High passage survives serialization");
+Check(System.Text.Json.JsonSerializer.Deserialize<PassengerLine>("{\"Passage\":\"High\",\"Roll\":2,\"PassageDm\":-4,\"ModifiedRoll\":4,\"Dice\":1,\"Passengers\":1}")?.Available == true,
+    "Earlier saved passenger lines remain available");
+var negativeSteward = PassengerTraffic.RollRoute("A788899-C", "A", "A788899-C", "A", 1, 42, "0101", 0, -2, () => 1);
+Check(negativeSteward.Lines[0].Available && negativeSteward.Steward == -2, "A Steward with a negative combined DM still enables High passage");
+try { PassengerTraffic.RollRoute("A788899-C", "A", "A788899-C", "A", 0, 42, "0101", 0, 0); throw new Exception("Invalid distance accepted"); }
+catch (ArgumentException) { }
 try { PassengerTraffic.Roll("???????-?", "", 0, 0); throw new Exception("Unknown UWP accepted"); }
 catch (ArgumentException) { }
 
@@ -45,6 +65,16 @@ Check(freight.PopulationDm == 4 && freight.StarportDm == 2 && freight.TechDm == 
 Check(freight.Lines[0] is { Type: "Major", ModifiedRoll: 5, Dice: 2, Lots: 2 }
     && freight.Lines[1] is { Type: "Minor", ModifiedRoll: 9, Dice: 4, Lots: 4 }
     && freight.Lines[2] is { Type: "Incidental", ModifiedRoll: 11, Dice: 4, Lots: 4 }, "Freight type modifiers and independent rolls");
+var routeFreight = FreightTraffic.RollRoute("A788899-C", "A", "X000100-0", "R", 3, 42, "0101", 1, () => 1);
+Check(routeFreight.Destination is { PopulationDm: -4, StarportDm: -3, TechDm: -1, ZoneDm: -6 }
+    && routeFreight.Distance == 3 && routeFreight.Lines[0].ModifiedRoll == -11, "Freight route applies both worlds and distance");
+var nearFreight = FreightTraffic.RollRoute("A788899-C", "A", "A788899-C", "A", 1, 42, "0101", 1, () => 1);
+var farFreight = FreightTraffic.RollRoute("A788899-C", "A", "A788899-C", "A", 6, 42, "0101", 1, () => 1);
+Check(nearFreight.Lines[0].ModifiedRoll - farFreight.Lines[0].ModifiedRoll == 5, "Freight distance DM starts after the first parsec");
+Check(FreightTraffic.RollMail(routeFreight, 0, 0, () => 1, armed: false).Mail is { FreightTrafficDm: -9, Effect: -1 },
+    "Mail traffic uses the full freight route DM");
+try { FreightTraffic.RollRoute("A788899-C", "A", "A788899-C", "A", 7, 42, "0101", 0); throw new Exception("Invalid freight distance accepted"); }
+catch (ArgumentException) { }
 var loadingInput = freight with { Lines = freight.Lines.Select(line => line with {
     Lots = line.Type switch { "Major" => 3, "Minor" => 1, _ => 1 } }).Reverse().ToArray() };
 var cargoDice = new Queue<int>([6, 2, 1, 2, 6]);
@@ -455,6 +485,32 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     Check(traveller is { PlayerName: "Player", TravellerName: "Kira", Race: "Human", Upp: "A98765", TermsServed: "3",
         HighestNavalRank: 2, HighestScoutRank: 1, NaturalDr: 4 }, "Traveller fields are saved");
     Check((await travellerService.ListAsync(secondCampaign.Id)).Count == 0, "Travellers are isolated by campaign");
+    Check((await travellerService.MailModifiersAsync(secondCampaign.Id)) == (0, null), "Empty campaign has no mail modifiers");
+    Check(new[] { '0', '1', '2', '3', '5', '6', '8', '9', 'B', 'C', 'E', 'F' }
+        .Select(c => TravellerService.SocialDm("12345" + c)).SequenceEqual(new int?[] { -3, -2, -2, -1, -1, 0, 0, 1, 1, 2, 2, 3 })
+        && TravellerService.SocialDm("12345?") is null && TravellerService.SocialDm("123") is null, "SOC DM boundaries and incomplete UPP");
+    await travellerService.SaveAsync(new Traveller(0, firstCampaign.Id, "", "Second", "", "12345C", "", 0, 4, 0));
+    await travellerService.SaveAsync(new Traveller(0, secondCampaign.Id, "", "Other", "", "12345F", "", 9, 0, 0));
+    Check((await travellerService.MailModifiersAsync(firstCampaign.Id)) == (4, 2), "Campaign mail modifiers select highest rank and SOC");
+    Check((await travellerService.MailModifiersAsync(secondCampaign.Id)) == (9, 3), "Mail modifiers exclude other campaigns");
+    Check(await travellerService.StewardModifierAsync(firstCampaign.Id) is { Value: -3, HasSkill: false }, "Unskilled Steward uses highest campaign INT minus three");
+    var secondTraveller = (await travellerService.ListAsync(firstCampaign.Id)).Single(t => t.TravellerName == "Second");
+    var otherSteward = (await travellerService.ListAsync(secondCampaign.Id)).Single();
+    await travellerService.SaveAsync(secondTraveller with { Upp = "123C5C" });
+    Check(await travellerService.StewardModifierAsync(firstCampaign.Id) is { Value: -1, HasSkill: false }, "Unskilled Steward uses best INT in group");
+    await travellerService.SaveAsync(secondTraveller with { Upp = "123?5C" });
+    Check((await travellerService.StewardModifierAsync(firstCampaign.Id)).MissingInt.SequenceEqual(new[] { "Second" }), "Unknown unskilled INT is identified");
+    await travellerService.SaveAsync(secondTraveller);
+    await travellerService.SaveSkillAsync(firstCampaign.Id, new TravellerSkill(0, secondTraveller.Id, "Steward", 0));
+    await travellerService.SaveSkillAsync(secondCampaign.Id, new TravellerSkill(0, otherSteward.Id, "Steward", 9));
+    Check((await travellerService.StewardModifierAsync(firstCampaign.Id)).Value == -1, "Steward zero and negative INT DM are used together");
+    await travellerService.SaveSkillAsync(firstCampaign.Id, new TravellerSkill(0, traveller.Id, "Steward", 1));
+    Check((await travellerService.StewardModifierAsync(firstCampaign.Id)).Value == 1, "Best same-traveller Steward plus INT excludes other campaigns");
+    await travellerService.SaveAsync(secondTraveller with { Upp = "123?5C" });
+    Check((await travellerService.StewardModifierAsync(firstCampaign.Id)).MissingInt.SequenceEqual(new[] { "Second" }), "Unknown Steward intelligence is identified");
+    await travellerService.DeleteSkillAsync(firstCampaign.Id, traveller.Id, (await travellerService.ListSkillsAsync(firstCampaign.Id, traveller.Id)).Single().Id);
+    await travellerService.DeleteAsync(firstCampaign.Id, (await travellerService.ListAsync(firstCampaign.Id)).Single(t => t.TravellerName == "Second").Id);
+    await travellerService.DeleteAsync(secondCampaign.Id, (await travellerService.ListAsync(secondCampaign.Id)).Single().Id);
     await travellerService.SaveSkillAsync(firstCampaign.Id, new TravellerSkill(0, traveller.Id, "Pilot (spacecraft)", 0));
     await travellerService.SaveSkillAsync(firstCampaign.Id, new TravellerSkill(0, traveller.Id, "Broker", 2));
     var savedSkills = await travellerService.ListSkillsAsync(firstCampaign.Id, traveller.Id);
@@ -535,6 +591,13 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     Check(await marketService.GetAsync(id, "1911", "Broker") is null && await marketService.GetAsync(id, "1910", "Streetwise") is null, "Markets isolated by world and mode");
     var passengerService = new PassengerMarketService(db);
     Check(await passengerService.GetAsync(id, "1910") is null, "No passenger roll before generation");
+    await passengerService.SaveAsync(id, "1910", routePassengers);
+    await using (var reopenedRoute = new MtuDbContext(options))
+    {
+        var loadedRoute = await new PassengerMarketService(reopenedRoute).GetAsync(id, "1910");
+        Check(loadedRoute is { DestinationSectorId: 42, DestinationHex: "0101", Distance: 3 }
+            && loadedRoute.Destination == routePassengers.Destination && loadedRoute.Lines.SequenceEqual(routePassengers.Lines), "Passenger route survives reopening");
+    }
     var passengerRoll = PassengerTraffic.Roll("A788899-C", "A", 2, 1, () => 1);
     await passengerService.SaveAsync(id, "1910", passengerRoll);
     await using (var reopened = new MtuDbContext(options))
@@ -560,6 +623,13 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
         && await db.TransportMarkets.CountAsync() == 1, "Reroll replaces the saved passenger market");
     var freightService = new FreightMarketService(db);
     Check(await freightService.GetAsync(id, "1910") is null, "Freight is separate from passenger results");
+    await freightService.SaveAsync(id, "1910", routeFreight);
+    await using (var reopenedRoute = new MtuDbContext(options))
+    {
+        var loadedRoute = await new FreightMarketService(reopenedRoute).GetAsync(id, "1910");
+        Check(loadedRoute is { DestinationSectorId: 42, DestinationHex: "0101", Distance: 3 }
+            && loadedRoute.Destination == routeFreight.Destination && loadedRoute.Lines.SequenceEqual(routeFreight.Lines), "Freight route survives reopening");
+    }
     await freightService.SaveAsync(id, "1910", freight);
     await using (var reopened = new MtuDbContext(options))
     {

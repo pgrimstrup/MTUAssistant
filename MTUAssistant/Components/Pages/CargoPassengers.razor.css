@@ -2,6 +2,8 @@
 .page-header { margin-bottom: 1.5rem; }
 h1 { margin: 0; font-size: 1.8rem; }
 .world-details { margin-bottom: 1.5rem; }
+.world-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
+@media (max-width: 700px) { .world-columns { grid-template-columns: 1fr; gap: 0; } }
 .world-label { display: grid; gap: .3rem; color: var(--app-muted); font-size: .8rem; }
 .badge-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .75rem 1.5rem; margin-top: .65rem; }
 .badge-group { display: flex; flex-wrap: wrap; gap: .35rem; }
@@ -15,6 +17,9 @@ h1 { margin: 0; font-size: 1.8rem; }
 .trade-badge[data-category="population"], .trade-badge[data-category="political"] { --star-colour: #c5b4ff; }
 .trade-badge[data-category="economic"] { --star-colour: #f6dd93; }
 .trade-badge[data-category="special"] { --star-colour: #ffb2a6; }
+.zone-badge { width: auto; padding: 0 .4rem; white-space: nowrap; }
+.zone-badge[data-zone="Amber"] { color: #241900; border-color: #ffc107; background: #ffc107; }
+.zone-badge[data-zone="Red"] { color: #fff; border-color: #dc3545; background: #dc3545; }
 .empty-message { color: var(--app-muted); margin-bottom: 1.5rem; }
 .sections { display: grid; gap: 1rem; }
 .cargo-panel { min-height: 8rem; border: 1px solid var(--app-border); border-radius: var(--app-radius); background: var(--app-surface); overflow: hidden; }
@@ -24,11 +29,12 @@ h2 { margin: 0; font-size: 1.15rem; }
 .panel-body { padding: 1.2rem; color: var(--app-muted); }
 .passenger-controls { display: flex; flex-wrap: wrap; align-items: end; gap: .8rem; margin-bottom: 1rem; }
 .passenger-controls label { display: grid; gap: .3rem; font-size: .8rem; }
-.passenger-controls input { width: 7rem; }
+.passenger-controls input:not([type="checkbox"]) { width: 7rem; }
 .table-wrap { overflow-x: auto; }
 .passenger-table { width: 100%; font-size: .86rem; }
 .passenger-table th, .passenger-table td { white-space: nowrap; text-align: right; }
 .passenger-table th:first-child { text-align: left; }
+.passenger-table tr.selected-distance > * { --bs-table-bg: var(--app-accent-soft); color: var(--app-text); }
 .passenger-error { color: #ffb6b6; }
 
 .fees-heading { margin: 1.5rem 0 .3rem; color: var(--app-text); font-size: 1rem; }

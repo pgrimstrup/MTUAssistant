@@ -7,6 +7,7 @@ public sealed record Traveller(int Id, int CampaignId, string PlayerName, string
     string Upp, string TermsServed, int HighestNavalRank, int HighestScoutRank, int NaturalDr, byte[]? TokenImage = null, IReadOnlyList<TravellerSkill>? Skills = null);
 
 public sealed record TravellerSkill(int Id, int TravellerId, string Name, int Level);
+public sealed record StewardModifier(int? Value, bool HasSkill, IReadOnlyList<string> MissingInt);
 
 public sealed class TravellerService(MtuDbContext db)
 {
@@ -21,6 +22,47 @@ public sealed class TravellerService(MtuDbContext db)
             .Select(s => new TravellerSkill(s.Id, s.TravellerId, s.Name, s.Level)).ToArrayAsync();
         var byTraveller = skills.ToLookup(s => s.TravellerId);
         return travellers.Select(t => t with { Skills = byTraveller[t.Id].ToArray() }).ToArray();
+    }
+
+    public async Task<(int Rank, int? SocDm)> MailModifiersAsync(int campaignId)
+    {
+        var travellers = await db.Travellers.AsNoTracking().Where(t => t.CampaignId == campaignId)
+            .Select(t => new { t.HighestNavalRank, t.HighestScoutRank, t.Upp }).ToArrayAsync();
+        var rank = travellers.Select(t => Math.Max(t.HighestNavalRank, t.HighestScoutRank)).DefaultIfEmpty(0).Max();
+        var soc = travellers.Select(t => SocialDm(t.Upp)).Where(dm => dm.HasValue).Max();
+        return (rank, soc);
+    }
+
+    public static int? SocialDm(string? upp)
+        => CharacteristicDm(upp, 5);
+
+    public static int? IntelligenceDm(string? upp)
+        => CharacteristicDm(upp, 3);
+
+    private static int? CharacteristicDm(string? upp, int index)
+    {
+        var profile = upp?.Trim().ToUpperInvariant() ?? "";
+        if (profile.Length <= index) return null;
+        var score = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ".IndexOf(profile[index]);
+        return score switch { < 0 => null, 0 => -3, <= 2 => -2, <= 5 => -1, <= 8 => 0, <= 11 => 1, <= 14 => 2, _ => 3 };
+    }
+
+    public async Task<StewardModifier> StewardModifierAsync(int campaignId)
+    {
+        var skills = await db.TravellerSkills.AsNoTracking()
+            .Where(s => s.Traveller.CampaignId == campaignId && s.Name.ToLower() == "steward")
+            .Select(s => new { s.Level, s.Traveller.Upp, s.Traveller.TravellerName }).ToArrayAsync();
+        if (skills.Length == 0)
+        {
+            var travellers = await db.Travellers.AsNoTracking().Where(t => t.CampaignId == campaignId)
+                .Select(t => new { t.Upp, t.TravellerName }).ToArrayAsync();
+            var missingInt = travellers.Where(t => IntelligenceDm(t.Upp) is null).Select(t => t.TravellerName).ToArray();
+            var highestInt = travellers.Select(t => IntelligenceDm(t.Upp)).Max();
+            return new(highestInt - 3, false, missingInt);
+        }
+        var missing = skills.Where(s => IntelligenceDm(s.Upp) is null).Select(s => s.TravellerName).ToArray();
+        var best = skills.Select(s => IntelligenceDm(s.Upp) is { } dm ? (int?)(s.Level + dm) : null).Max();
+        return new(best, true, missing);
     }
 
     public async Task SaveAsync(Traveller traveller)

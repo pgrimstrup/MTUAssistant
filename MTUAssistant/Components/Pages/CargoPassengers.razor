@@ -1,6 +1,7 @@
 @page "/cargo-passengers"
 @implements IDisposable
 @inject CampaignService Campaigns
+@inject TravellerService TravellerStore
 @page "/passengers-cargo"
 @inject MTUAssistant.Services.SelectedWorldState WorldState
 @inject SystemDataProvider SystemData
@@ -15,6 +16,7 @@
     </header>
     @if (WorldState.World is { } world)
     {
+        <div class="world-columns">
         <div class="world-details">
             <label class="world-label">Current world
                 <input class="form-control" value="@($"{world.Name} · {world.Sector} {world.Hex}")" readonly />
@@ -27,12 +29,49 @@
                     }
                 </div>
                 <div class="badge-group trade-badges" aria-label="World trade codes">
+                    @if (ZoneName(CurrentZone()) is { } originZone)
+                    {
+                        <span class="world-badge zone-badge" data-zone="@originZone">@originZone Zone</span>
+                    }
                     @foreach (var tradeCode in TradeCodeLookup.Describe(world.Remarks))
                     {
                         <span class="world-badge trade-badge" data-category="@tradeCode.Category" title="@tradeCode.Name">@tradeCode.Code</span>
                     }
                 </div>
             </div>
+        </div>
+        <div class="world-details">
+            <label class="world-label">Destination world
+                <select class="form-select" value="@destinationId" @onchange="ChangeDestination" disabled="@busy">
+                    <option value="0">Select a destination</option>
+                    @foreach (var item in destinations)
+                    {
+                        <option value="@item.System.Id">@item.System.MainWorld.Name · @item.Sector.Name @item.System.Hex (@item.Distance pc)</option>
+                    }
+                </select>
+            </label>
+            @if (destination is { } selectedDestination)
+            {
+                <div class="badge-row">
+                    <div class="badge-group uwp-badges" aria-label="Destination universal world profile">
+                        @foreach (var item in UwpLookup.Describe(selectedDestination.System.MainWorld.Uwp, selectedDestination.System.MainWorld.Pbg))
+                        {
+                            <span class="world-badge" data-attribute="@item.Name" title="@($"{item.Name}: {item.Description}")">@item.Code</span>
+                        }
+                    </div>
+                    <div class="badge-group trade-badges" aria-label="Destination world trade codes">
+                        @if (ZoneName(selectedDestination.System.MainWorld.Zone) is { } destinationZone)
+                        {
+                            <span class="world-badge zone-badge" data-zone="@destinationZone">@destinationZone Zone</span>
+                        }
+                        @foreach (var tradeCode in TradeCodeLookup.Describe(selectedDestination.System.MainWorld.Remarks))
+                        {
+                            <span class="world-badge trade-badge" data-category="@tradeCode.Category" title="@tradeCode.Name">@tradeCode.Code</span>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
         </div>
     }
     else
@@ -45,18 +84,25 @@
             <div class="panel-body">
                 <div class="passenger-controls">
                     <label>Effect of Broker/Carouse/Streetwise <input class="form-control" type="number" min="-100" max="100" @bind="effect" disabled="@busy" /></label>
-                    <label>Highest Steward Skill <input class="form-control" type="number" min="0" max="100" @bind="steward" disabled="@busy" /></label>
-                    <button class="btn btn-primary" type="button" @onclick="RollPassengers" disabled="@(WorldState.World is null || busy)">Roll</button>
+                    <label>Steward + INT DM@(!hasSteward && steward.HasValue ? " (unskilled)" : "") <input class="form-control" value="@(stewardMissingInt.Count > 0 ? "INT needed" : steward.HasValue ? FormatDm(steward.Value) : "No Travellers")" readonly /></label>
+                    <button class="btn btn-primary" type="button" @onclick="RollPassengers" disabled="@(WorldState.World is null || destination is null || busy)">Roll</button>
                 </div>
                 @if (passengerError is not null) { <p class="passenger-error" role="alert">@passengerError</p> }
                 @if (passengerResult is { } result)
                 {
                     <div class="table-wrap"><table class="table passenger-table">
-                        <thead><tr><th>Passage</th><th>2D</th><th>Effect</th><th>Steward</th><th>Population (@result.Population)</th><th>Starport (@result.Starport)</th><th>Zone (@result.Zone)</th><th>Passage DM</th><th>Modified roll</th><th>Passenger dice</th><th>Passengers</th><th>Passengers Taken</th></tr></thead>
+                        <thead><tr><th>Passage</th><th>2D</th><th>Effect</th><th>Steward</th><th>Population (@result.Population@(result.Destination is null ? "" : $" / {result.Destination.Population}"))</th><th>Starport (@result.Starport@(result.Destination is null ? "" : $" / {result.Destination.Starport}"))</th><th>Zone (@result.Zone@(result.Destination is null ? "" : $" / {result.Destination.Zone}"))</th><th>Distance DM</th><th>Passage DM</th><th>Modified roll</th><th>Passenger dice</th><th>Passengers</th><th>Passengers Taken</th></tr></thead>
                         <tbody>
                             @foreach (var line in result.Lines)
                             {
-                                <tr><th scope="row">@line.Passage</th><td>@line.Roll</td><td>@FormatDm(result.Effect)</td><td>@FormatDm(result.Steward)</td><td>@FormatDm(result.PopulationDm)</td><td>@FormatDm(result.StarportDm)</td><td>@FormatDm(result.ZoneDm)</td><td>@FormatDm(line.PassageDm)</td><td>@line.ModifiedRoll</td><td>@(line.Dice == 0 ? "—" : $"{line.Dice}D")</td><td>@line.Passengers</td><td><input @key="(line.Passage, line.Taken, passengerError)" class="form-control passenger-count" type="number" min="0" max="@line.Passengers" value="@line.Taken" aria-label="@($"{line.Passage} passengers taken")" disabled="@busy" @onchange="args => SelectPassengers(line.Passage, args)" /></td></tr>
+                                @if (!line.Available)
+                                {
+                                    <tr><th scope="row">@line.Passage</th><td colspan="12">Unavailable: no Traveller has Steward skill.</td></tr>
+                                }
+                                else
+                                {
+                                <tr><th scope="row">@line.Passage</th><td>@line.Roll</td><td>@FormatDm(result.Effect)</td><td>@FormatDm(result.Steward)</td><td>@FormatPair(result.PopulationDm, result.Destination?.PopulationDm)</td><td>@FormatPair(result.StarportDm, result.Destination?.StarportDm)</td><td>@FormatPair(result.ZoneDm, result.Destination?.ZoneDm)</td><td>@(result.Distance > 0 ? FormatDm(1 - result.Distance) : "—")</td><td>@FormatDm(line.PassageDm)</td><td>@line.ModifiedRoll</td><td>@(line.Dice == 0 ? "—" : $"{line.Dice}D")</td><td>@line.Passengers</td><td><input @key="(line.Passage, line.Taken, passengerError)" class="form-control passenger-count" type="number" min="0" max="@line.Passengers" value="@line.Taken" aria-label="@($"{line.Passage} passengers taken")" disabled="@busy" @onchange="args => SelectPassengers(line.Passage, args)" /></td></tr>
+                                }
                             }
                         </tbody>
                     </table></div>
@@ -69,7 +115,7 @@
                     <tbody>
                         @foreach (var fee in PassengerTraffic.Fees)
                         {
-                            <tr><th scope="row">@fee.Distance pc</th><td>Cr @fee.High.ToString("N0")</td><td>Cr @fee.Middle.ToString("N0")</td><td>Cr @fee.Basic.ToString("N0")</td><td>Cr @fee.Low.ToString("N0")</td><td>@(passengerResult is not null ? $"Cr {fee.Payment(passengerResult):N0}" : "")</td></tr>
+                            <tr class="@(destination?.Distance == fee.Distance ? "selected-distance" : null)"><th scope="row">@fee.Distance pc</th><td>Cr @fee.High.ToString("N0")</td><td>Cr @fee.Middle.ToString("N0")</td><td>Cr @fee.Basic.ToString("N0")</td><td>Cr @fee.Low.ToString("N0")</td><td>@(passengerResult is not null ? $"Cr {fee.Payment(passengerResult):N0}" : "")</td></tr>
                         }
                     </tbody>
                 </table></div>
@@ -80,10 +126,10 @@
             <div class="panel-body">
                 <div class="passenger-controls">
                     <label>Effect of Broker/Streetwise <input class="form-control" type="number" min="-100" max="100" @bind="freightEffect" disabled="@busy" /></label>
-                    <label>Highest Naval/Scout Rank <input class="form-control" type="number" min="0" max="100" @bind="mailRank" disabled="@busy" /></label>
-                    <label>Highest SOC DM <input class="form-control" type="number" min="-100" max="100" @bind="mailSoc" disabled="@busy" /></label>
+                    <label>Highest Naval/Scout Rank <input class="form-control" value="@mailRank" readonly /></label>
+                    <label>Highest SOC DM <input class="form-control" value="@(mailSoc.HasValue ? FormatDm(mailSoc.Value) : "—")" readonly /></label>
                     <label class="armed-option"><input type="checkbox" class="form-check-input" @bind="shipArmed" disabled="@busy" /> Armed Ship</label>
-                    <button class="btn btn-primary" type="button" @onclick="RollFreight" disabled="@(WorldState.World is null || busy)">Roll</button>
+                    <button class="btn btn-primary" type="button" @onclick="RollFreight" disabled="@(WorldState.World is null || destination is null || busy)">Roll</button>
                     <div class="cargo-controls">
                         <label>Cargo Capacity (T) <input class="form-control" type="number" min="0" @bind="cargoCapacity" disabled="@busy" /></label>
                         <button class="btn btn-primary" type="button" @onclick="TakeCargo" disabled="@(freightResult is null || busy)">Take Cargo</button>
@@ -94,18 +140,18 @@
                 @if (freightResult is { } freight)
                 {
                     <div class="table-wrap"><table class="table passenger-table">
-                        <thead><tr><th>Cargo</th><th>2D</th><th>Effect</th><th>Population (@freight.Population)</th><th>Starport (@freight.Starport)</th><th>Tech (@freight.Tech)</th><th>Zone (@freight.Zone)</th><th>Cargo DM</th><th>Modified roll</th><th>Lot dice</th><th>Lots</th><th>Cargo Taken (T)</th></tr></thead>
+                        <thead><tr><th>Cargo</th><th>2D</th><th>Effect</th><th>Population (@freight.Population@(freight.Destination is null ? "" : $" / {freight.Destination.Population}"))</th><th>Starport (@freight.Starport@(freight.Destination is null ? "" : $" / {freight.Destination.Starport}"))</th><th>Tech (@freight.Tech@(freight.Destination is null ? "" : $" / {freight.Destination.Tech}"))</th><th>Zone (@freight.Zone@(freight.Destination is null ? "" : $" / {freight.Destination.Zone}"))</th><th>Distance DM</th><th>Cargo DM</th><th>Modified roll</th><th>Lot dice</th><th>Lots</th><th>Cargo Taken (T)</th></tr></thead>
                         <tbody>
                             @foreach (var line in freight.Lines)
                             {
-                                <tr><th scope="row">@line.Type</th><td>@line.Roll</td><td>@FormatDm(freight.Effect)</td><td>@FormatDm(freight.PopulationDm)</td><td>@FormatDm(freight.StarportDm)</td><td>@FormatDm(freight.TechDm)</td><td>@FormatDm(freight.ZoneDm)</td><td>@FormatDm(line.TypeDm)</td><td>@line.ModifiedRoll</td><td>@(line.Dice == 0 ? "—" : $"{line.Dice}D")</td><td>@line.Lots</td><td>@(line.CargoTaken?.ToString("N0") ?? "")</td></tr>
+                                <tr><th scope="row">@line.Type</th><td>@line.Roll</td><td>@FormatDm(freight.Effect)</td><td>@FormatPair(freight.PopulationDm, freight.Destination?.PopulationDm)</td><td>@FormatPair(freight.StarportDm, freight.Destination?.StarportDm)</td><td>@FormatPair(freight.TechDm, freight.Destination?.TechDm)</td><td>@FormatPair(freight.ZoneDm, freight.Destination?.ZoneDm)</td><td>@(freight.Distance > 0 ? FormatDm(1 - freight.Distance) : "—")</td><td>@FormatDm(line.TypeDm)</td><td>@line.ModifiedRoll</td><td>@(line.Dice == 0 ? "—" : $"{line.Dice}D")</td><td>@line.Lots</td><td>@(line.CargoTaken?.ToString("N0") ?? "")</td></tr>
                             }
                             @if (freight.Mail is { } mail)
                             {
-                                <tr><th scope="row">Mail Containers</th><td>@mail.Roll</td><td title="@($"Mail traffic DM plus rank, SOC and armed ship DM {mail.ArmedDm:+0;-0;0}")">@FormatDm(mail.Effect)</td><td></td><td></td><td>@(mail.TechDm == 0 ? "" : FormatDm(mail.TechDm))</td><td></td><td></td><td>@mail.ModifiedRoll</td><td>@(mail.Containers > 0 ? "1D" : "")</td><td>@mail.Containers</td><td>@(mail.CargoTaken?.ToString("N0") ?? "")</td></tr>
+                                <tr><th scope="row">Mail Containers</th><td>@mail.Roll</td><td title="@($"Mail traffic DM plus rank, SOC and armed ship DM {mail.ArmedDm:+0;-0;0}")">@FormatDm(mail.Effect)</td><td></td><td></td><td>@(mail.TechDm == 0 ? "" : FormatDm(mail.TechDm))</td><td></td><td></td><td></td><td>@mail.ModifiedRoll</td><td>@(mail.Containers > 0 ? "1D" : "")</td><td>@mail.Containers</td><td>@(mail.CargoTaken?.ToString("N0") ?? "")</td></tr>
                             }
                         </tbody>
-                        <tfoot><tr><th colspan="11" scope="row">Total cargo taken (T)</th><td>@(freight.CargoCapacity is not null ? TotalCargo(freight).ToString("N0") : "")</td></tr></tfoot>
+                        <tfoot><tr><th colspan="12" scope="row">Total cargo taken (T)</th><td>@(freight.CargoCapacity is not null ? TotalCargo(freight).ToString("N0") : "")</td></tr></tfoot>
                     </table></div>
                 }
                 else if (WorldState.World is not null) { <p>Roll to find available freight.</p> }
@@ -119,7 +165,7 @@
                             var cargoValue = freightResult is null ? 0 : fee * (long)FreightCargo(freightResult);
                             var mailValue = (freightResult?.Mail?.CargoTaken ?? 0) / 5 * 25000L;
                             var hasCargoSelection = freightResult?.CargoCapacity is not null;
-                            <tr><th scope="row">@distance pc</th><td>Cr @fee.ToString("N0")</td><td>@(hasCargoSelection ? $"Cr {cargoValue:N0}" : "")</td><td>@(hasCargoSelection ? $"Cr {mailValue:N0}" : "")</td><td>@(hasCargoSelection ? $"Cr {(cargoValue + mailValue):N0}" : "")</td></tr>
+                            <tr class="@(destination?.Distance == distance ? "selected-distance" : null)"><th scope="row">@distance pc</th><td>Cr @fee.ToString("N0")</td><td>@(hasCargoSelection ? $"Cr {cargoValue:N0}" : "")</td><td>@(hasCargoSelection ? $"Cr {mailValue:N0}" : "")</td><td>@(hasCargoSelection ? $"Cr {(cargoValue + mailValue):N0}" : "")</td></tr>
                         }
                     </tbody>
                 </table></div>
@@ -130,19 +176,84 @@
 
 @code {
     private Campaign? activeCampaign;
-    private void CampaignChanged(Campaign? campaign) { activeCampaign = campaign; _ = InvokeAsync(StateHasChanged); }
+    private void CampaignChanged(Campaign? campaign) => _ = InvokeAsync(async () =>
+    {
+        var changed = activeCampaign?.Id != campaign?.Id;
+        activeCampaign = campaign;
+        if (changed) { await LoadMailModifiers(); await LoadStewardModifier(); }
+        StateHasChanged();
+    });
+
+    private async Task LoadMailModifiers()
+    {
+        var campaign = activeCampaign;
+        mailRank = 0; mailSoc = null;
+        if (campaign is null) return;
+        try
+        {
+            var modifiers = await TravellerStore.MailModifiersAsync(campaign.Id);
+            if (activeCampaign?.Id == campaign.Id) { mailRank = modifiers.Rank; mailSoc = modifiers.SocDm; }
+        }
+        catch (Exception) { freightError = "Unable to load campaign Traveller modifiers."; }
+    }
+    private async Task LoadStewardModifier()
+    {
+        var campaign = activeCampaign;
+        steward = null; hasSteward = false; stewardMissingInt = [];
+        if (campaign is null) return;
+        try
+        {
+            var modifier = await TravellerStore.StewardModifierAsync(campaign.Id);
+            if (activeCampaign?.Id == campaign.Id) { steward = modifier.Value; hasSteward = modifier.HasSkill; stewardMissingInt = modifier.MissingInt; }
+        }
+        catch (Exception) { passengerError = "Unable to load campaign Steward skill."; }
+    }
     public void Dispose() => Campaigns.Changed -= CampaignChanged;
     private int effect;
-    private int steward;
+    private int? steward;
+    private bool hasSteward;
+    private IReadOnlyList<string> stewardMissingInt = [];
     private PassengerResult? passengerResult;
+    private PassengerResult? savedPassengerResult;
+    private IReadOnlyList<TradeDestination> destinations = [];
+    private int destinationId;
+    private TradeDestination? destination => destinations.FirstOrDefault(item => item.System.Id == destinationId);
+
+    private string? CurrentZone()
+    {
+        var world = WorldState.World;
+        var data = SystemData.Catalogue;
+        return world is not null && data.SectorsById.TryGetValue(world.SectorId, out var sector)
+            && data.SystemsByHex.TryGetValue((sector.Milieu, sector.X, sector.Y, world.Hex), out var system)
+            ? system.MainWorld.Zone : null;
+    }
+
+    private static string? ZoneName(string? zone) => zone?.Trim().ToUpperInvariant() switch
+    {
+        "A" or "AMBER" or "AMBERZONE" => "Amber",
+        "R" or "RED" or "REDZONE" => "Red",
+        _ => null
+    };
+
+    private void ChangeDestination(ChangeEventArgs args)
+    {
+        destinationId = int.TryParse(args.Value?.ToString(), out var id) ? id : 0;
+        passengerResult = destination is { } selected && savedPassengerResult is { } saved
+            && saved.DestinationSectorId == selected.Sector.Id && saved.DestinationHex == selected.System.Hex ? saved : null;
+        freightResult = destination is { } freightDestination && savedFreightResult is { } savedFreight
+            && savedFreight.DestinationSectorId == freightDestination.Sector.Id && savedFreight.DestinationHex == freightDestination.System.Hex ? savedFreight : null;
+        passengerError = null;
+        freightError = null;
+    }
     private string? passengerError;
     private int freightEffect;
     private int mailRank;
-    private int mailSoc;
+    private int? mailSoc;
     private bool shipArmed = true;
     private int cargoCapacity;
     private static readonly (int Distance, int Fee)[] freightFees = [(1, 1000), (2, 1600), (3, 2600), (4, 4400), (5, 8500), (6, 32000)];
     private FreightResult? freightResult;
+    private FreightResult? savedFreightResult;
     private string? freightError;
     private bool busy;
 
@@ -150,30 +261,44 @@
     {
         Campaigns.Changed += CampaignChanged;
         activeCampaign = (await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive);
+        await LoadMailModifiers();
+        await LoadStewardModifier();
         var world = WorldState.World;
         if (world is null) return;
+        destinations = TradeDestinations.Within(SystemData.Catalogue, world.SectorId, world.Hex);
         busy = true;
         try
         {
-            passengerResult = await PassengerMarkets.GetAsync(world.SectorId, world.Hex);
+            passengerResult = savedPassengerResult = await PassengerMarkets.GetAsync(world.SectorId, world.Hex);
             if (passengerResult is { } result)
             {
                 effect = result.Effect;
-                steward = result.Steward;
+                var savedDestination = destinations.FirstOrDefault(item => item.Sector.Id == result.DestinationSectorId && item.System.Hex == result.DestinationHex);
+                if (savedDestination is not null) destinationId = savedDestination.System.Id;
+                else if (result.Destination is not null) passengerResult = null;
             }
         }
         catch (Exception) { passengerError = "Unable to load saved passenger results."; }
         try
         {
-            freightResult = await FreightMarkets.GetAsync(world.SectorId, world.Hex);
+            freightResult = savedFreightResult = await FreightMarkets.GetAsync(world.SectorId, world.Hex);
             if (freightResult is { } freight)
             {
                 freightEffect = freight.Effect;
-                mailRank = freight.Mail?.Rank ?? 0;
-                mailSoc = freight.Mail?.SocDm ?? 0;
                 shipArmed = freight.Mail is null || freight.Mail.ArmedDm != 0;
                 cargoCapacity = freight.CargoCapacity ?? 0;
+                if (destination is null && freight.Destination is not null)
+                {
+                    var savedDestination = destinations.FirstOrDefault(item => item.Sector.Id == freight.DestinationSectorId && item.System.Hex == freight.DestinationHex);
+                    if (savedDestination is not null) destinationId = savedDestination.System.Id;
+                }
             }
+            if (destination is { } selected)
+            {
+                if (passengerResult?.DestinationSectorId != selected.Sector.Id || passengerResult?.DestinationHex != selected.System.Hex) passengerResult = null;
+                if (freightResult?.DestinationSectorId != selected.Sector.Id || freightResult?.DestinationHex != selected.System.Hex) freightResult = null;
+            }
+            else if (freightResult?.Destination is not null) freightResult = null;
         }
         catch (Exception) { freightError = "Unable to load saved freight results."; }
         finally { busy = false; }
@@ -181,6 +306,7 @@
     private static int FreightCargo(FreightResult result) => result.Lines.Sum(line => line.CargoTaken ?? 0);
     private static int TotalCargo(FreightResult result) => FreightCargo(result) + (result.Mail?.CargoTaken ?? 0);
     private static string FormatDm(int value) => value.ToString("+0;-0;0", System.Globalization.CultureInfo.InvariantCulture);
+    private static string FormatPair(int origin, int? target) => target.HasValue ? $"{FormatDm(origin)}/{FormatDm(target.Value)}" : FormatDm(origin);
 
     private async Task SelectPassengers(string passage, ChangeEventArgs args)
     {
@@ -196,7 +322,7 @@
         {
             var updated = PassengerTraffic.Select(passengerResult, passage, count);
             await PassengerMarkets.SaveAsync(world.SectorId, world.Hex, updated);
-            passengerResult = updated;
+            passengerResult = savedPassengerResult = updated;
             passengerError = null;
         }
         catch (ArgumentException ex) { passengerError = ex.Message; }
@@ -207,7 +333,8 @@
     private async Task RollPassengers()
     {
         var world = WorldState.World;
-        if (world is null || busy) return;
+        var target = destination;
+        if (world is null || target is null || busy) return;
         var data = SystemData.Catalogue;
         if (!data.SectorsById.TryGetValue(world.SectorId, out var sector)
             || !data.SystemsByHex.TryGetValue((sector.Milieu, sector.X, sector.Y, world.Hex), out var system))
@@ -220,9 +347,21 @@
         try
         {
             if (activeCampaign is null) { passengerError = "Select a campaign to generate dated results."; return; }
-            var result = PassengerTraffic.Roll(system.MainWorld.Uwp, system.MainWorld.Zone, effect, steward) with { TargetDay = CampaignDates.Today(activeCampaign) };
+            var campaign = activeCampaign;
+            var modifier = await TravellerStore.StewardModifierAsync(campaign.Id);
+            if (activeCampaign?.Id != campaign.Id) { passengerError = "Campaign changed. Please roll again."; return; }
+            steward = modifier.Value; hasSteward = modifier.HasSkill; stewardMissingInt = modifier.MissingInt;
+            if (stewardMissingInt.Count > 0)
+            {
+                passengerError = $"Add a valid INT to the UPP for: {string.Join(", ", stewardMissingInt)}.";
+                return;
+            }
+            if (!steward.HasValue) { passengerError = "Add a Traveller to the campaign before rolling passengers."; return; }
+            var result = PassengerTraffic.RollRoute(system.MainWorld.Uwp, system.MainWorld.Zone,
+                target.System.MainWorld.Uwp, target.System.MainWorld.Zone, target.Distance, target.Sector.Id, target.System.Hex, effect, steward.Value, hasSteward: hasSteward)
+                with { TargetDay = CampaignDates.Today(campaign) };
             await PassengerMarkets.SaveAsync(world.SectorId, world.Hex, result);
-            passengerResult = result;
+            passengerResult = savedPassengerResult = result;
             passengerError = null;
         }
         catch (ArgumentException ex) { passengerError = ex.Message; }
@@ -232,7 +371,8 @@
     private async Task RollFreight()
     {
         var world = WorldState.World;
-        if (world is null || busy) return;
+        var target = destination;
+        if (world is null || target is null || busy) return;
         var data = SystemData.Catalogue;
         if (!data.SectorsById.TryGetValue(world.SectorId, out var sector)
             || !data.SystemsByHex.TryGetValue((sector.Milieu, sector.X, sector.Y, world.Hex), out var system))
@@ -244,10 +384,16 @@
         try
         {
             if (activeCampaign is null) { freightError = "Select a campaign to generate dated results."; return; }
-            var result = FreightTraffic.Roll(system.MainWorld.Uwp, system.MainWorld.Zone, freightEffect) with { TargetDay = CampaignDates.Today(activeCampaign) };
-            result = FreightTraffic.RollMail(result, mailRank, mailSoc, armed: shipArmed);
+            var campaign = activeCampaign;
+            var modifiers = await TravellerStore.MailModifiersAsync(campaign.Id);
+            if (activeCampaign?.Id != campaign.Id) { freightError = "Campaign changed. Please roll again."; return; }
+            mailRank = modifiers.Rank; mailSoc = modifiers.SocDm;
+            var result = FreightTraffic.RollRoute(system.MainWorld.Uwp, system.MainWorld.Zone,
+                target.System.MainWorld.Uwp, target.System.MainWorld.Zone, target.Distance, target.Sector.Id, target.System.Hex, freightEffect)
+                with { TargetDay = CampaignDates.Today(campaign) };
+            result = FreightTraffic.RollMail(result, mailRank, mailSoc ?? 0, armed: shipArmed);
             await FreightMarkets.SaveAsync(world.SectorId, world.Hex, result);
-            freightResult = result;
+            freightResult = savedFreightResult = result;
             freightError = null;
         }
         catch (ArgumentException ex) { freightError = ex.Message; }
@@ -264,7 +410,7 @@
         {
             var result = FreightTraffic.TakeCargo(freightResult, cargoCapacity);
             await FreightMarkets.SaveAsync(world.SectorId, world.Hex, result);
-            freightResult = result;
+            freightResult = savedFreightResult = result;
             freightError = null;
         }
         catch (ArgumentException ex) { freightError = ex.Message; }
@@ -281,7 +427,7 @@
         {
             var result = FreightTraffic.TakeMail(freightResult, cargoCapacity);
             await FreightMarkets.SaveAsync(world.SectorId, world.Hex, result);
-            freightResult = result;
+            freightResult = savedFreightResult = result;
             freightError = null;
         }
         catch (ArgumentException ex) { freightError = ex.Message; }
