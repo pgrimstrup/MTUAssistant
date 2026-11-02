@@ -77,6 +77,14 @@ export class DynamicMap {
             this.viewport.addChild(layer);
         }
         this.removeClickObserver = observeClicks(this.app.canvas, event => this.selectWorld(event));
+        this.onPointerMove = event => {
+            if (event.pointerType === "touch") return;
+            this.pointerPosition = { x:event.clientX, y:event.clientY };
+            this.updatePointerLocation();
+        };
+        this.onPointerLeave = () => { this.pointerPosition = null; this.updatePointerLocation(); };
+        this.app.canvas.addEventListener("pointermove", this.onPointerMove, { passive:true });
+        this.app.canvas.addEventListener("pointerleave", this.onPointerLeave, { passive:true });
         this.resizeObserver = new ResizeObserver(() => this.onResize());
         this.resizeObserver.observe(this.host);
         this.onResize();
@@ -115,6 +123,7 @@ export class DynamicMap {
         await this.loadOverview();
         if (this.disposed) return;
         this.selected = null;
+        this.updatePointerLocation();
         this.onResize();
         if (centre && previousOverview) this.viewport.moveCenter(
             centre.x + (previousOverview.minSectorX - this.overview.minSectorX) * SECTOR_WIDTH,
@@ -174,6 +183,7 @@ export class DynamicMap {
             this.lastView = signature;
             this.lastUpdate = performance.now();
             this.update();
+            this.updatePointerLocation();
             this.saveView();
         }
     }
@@ -340,7 +350,7 @@ export class DynamicMap {
         const { worldDiameter: size, zoneDiameter, gasDiameter, baseSize } = mapAppearance(zoom, level);
         if (level >= 2 && ["A", "R"].includes(world.zone?.trim()))
             this.marker("zone", world.x, world.y, zoneDiameter,
-                world.zone.trim() === "R" ? 0xff727f : 0xf1c36c, zoom, .35);
+                world.zone.trim() === "R" ? 0xff727f : 0xf1c36c, zoom);
         this.marker(kind, world.x, world.y, size, colour, zoom);
         // Halfway along a ray from the circle surface to the flat-topped hex edge.
         const worldRadius = size / zoom / 2;
@@ -537,6 +547,31 @@ export class DynamicMap {
         return true;
     }
 
+    updatePointerLocation() {
+        if (this.disposed || !this.viewport || (!this.pointerPosition && !this.pointerLocationKey)) return;
+        let sectorName = null, subsectorName = null;
+        if (this.pointerPosition) {
+            const bounds = this.app.canvas.getBoundingClientRect();
+            const px = (this.pointerPosition.x - bounds.left) * this.host.clientWidth / bounds.width;
+            const py = (this.pointerPosition.y - bounds.top) * this.host.clientHeight / bounds.height;
+            const point = this.viewport.toWorld(px, py);
+            const hex = findHex(point.x, point.y);
+            const sector = this.sectors.find(s => s.col === hex.sectorColumn && s.row === hex.sectorRow);
+            if (sector) {
+                sectorName = sector.name;
+                const index = Math.floor((hex.row - 1) / 10) * 4 + Math.floor((hex.column - 1) / 8);
+                const letter = String.fromCharCode(65 + index);
+                const subsector = sector.subsectors.find(s => s.letter === letter);
+                subsectorName = subsector?.name || letter;
+            }
+        }
+        const key = JSON.stringify([sectorName, subsectorName]);
+        if (this.pointerLocationKey === key) return;
+        this.pointerLocationKey = key;
+        this.callback.invokeMethodAsync("SetPointerLocation", sectorName, subsectorName)
+            .catch(error => { if (!this.disposed) console.warn("Pointer location update failed", error); });
+    }
+
     async selectWorld(event) {
         const bounds = this.app.canvas.getBoundingClientRect();
         let point = this.viewport.toWorld((event.clientX - bounds.left) * this.host.clientWidth / bounds.width,
@@ -581,6 +616,10 @@ export class DynamicMap {
         this.saveView();
         this.abort.abort();
         this.removeClickObserver?.();
+        if (this.app?.canvas) {
+            this.app.canvas.removeEventListener("pointermove", this.onPointerMove);
+            this.app.canvas.removeEventListener("pointerleave", this.onPointerLeave);
+        }
         this.resizeObserver?.disconnect();
         for (const entry of this.sectorCache.values()) entry.controller.abort();
         this.sectorCache.clear();

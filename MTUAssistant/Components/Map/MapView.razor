@@ -2,6 +2,7 @@
 @inject IJSRuntime JS
 @inject WorldSelectionService Worlds
 @inject SystemDataProvider SystemData
+@inject MTUAssistant.Services.MapPointerLocation PointerLocation
 @inject ILogger<MapView> Logger
 
 <div class="map-shell">
@@ -169,6 +170,13 @@
     }
 
     [JSInvokable]
+    public Task SetPointerLocation(string? sector, string? subsector)
+    {
+        if (!disposed) PointerLocation.Set(sector, subsector);
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
     public async Task SelectHex(int sectorX, int sectorY, int column, int row)
     {
         var version = ++selectionVersion;
@@ -227,6 +235,7 @@
     {
         disposed = true;
         SystemData.Reloaded -= OnCatalogueReloaded;
+        PointerLocation.Set(null, null);
         selectionVersion++;
         try
         {

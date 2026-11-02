@@ -14,7 +14,7 @@ export const DETAIL_LEVELS = [
 export function worldLabelRules(world, zoom) {
     const codes = new Set((world.remarks ?? "").split(/\s+/));
     const capital = codes.has("Cp") || codes.has("Cs") || codes.has("Cx");
-    const highPopulation = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ".indexOf(world.uwp?.[4] ?? "?") >= 8;
+    const highPopulation = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ".indexOf(world.uwp?.[4] ?? "?") >= 9;
     return {
         name: zoom < 10 ? false : zoom < 25 ? codes.has("Cp")
             : zoom < 55 ? capital || highPopulation : true,
@@ -135,7 +135,7 @@ export function isSubsectorCapital(world) {
 
 export function worldName(world) {
     const population = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ".indexOf(world.uwp?.[4] ?? "?");
-    return population >= 8 ? world.name.toUpperCase() : world.name;
+    return population >= 9 ? world.name.toUpperCase() : world.name;
 }
 
 // MSEC perimeter traversal follows TravellerMap PathUtil.ComputeBorderPath

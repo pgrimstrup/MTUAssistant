@@ -1,4 +1,6 @@
 ﻿@inherits LayoutComponentBase
+@implements IDisposable
+@inject MTUAssistant.Services.MapPointerLocation PointerLocation
 
 <div class="page">
     <div class="sidebar">
@@ -7,7 +9,17 @@
 
     <main>
         <div class="top-row px-4">
-            <SearchBox />
+            <div class="map-location" aria-label="Map pointer location">
+                @if (PointerLocation.Sector is { } sector)
+                {
+                    <span class="map-location-sector">@sector</span>
+                    @if (PointerLocation.Subsector is { } subsector)
+                    {
+                        <span class="map-location-separator" aria-hidden="true"> / </span><span>@subsector</span>
+                    }
+                }
+            </div>
+            <div class="top-search"><SearchBox /></div>
         </div>
 
         <article class="content px-4">
@@ -23,3 +35,9 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    protected override void OnInitialized() => PointerLocation.Changed += OnLocationChanged;
+    private void OnLocationChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() => PointerLocation.Changed -= OnLocationChanged;
+}

@@ -21,6 +21,7 @@ namespace MTUAssistant
             builder.Services.AddMtuMapping();
             builder.Services.AddTransient<TileRefreshWorker>();
             builder.Services.AddScoped<TileRefreshService>();
+            builder.Services.AddScoped<MapPointerLocation>();
 
             var app = builder.Build();
 

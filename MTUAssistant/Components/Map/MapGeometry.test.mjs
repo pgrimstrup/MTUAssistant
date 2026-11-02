@@ -53,7 +53,7 @@ const cases = [
     {uwp:'C000900-0', expected:[false,false,true,true,true]},
     {uwp:'A000700-0', expected:[false,false,false,true,true]},
     {uwp:'B000700-0', expected:[false,false,false,true,true]},
-    {uwp:'C000800-0', expected:[false,false,true,true,true]},
+    {uwp:'C000800-0', expected:[false,false,false,true,true]},
     {expected:[false,false,false,true,true]},
 ];
 for (const zoom of [1,9.99,10,24.99,25,54.99,55,94.99,95,192]) {
@@ -77,7 +77,7 @@ for (const zoom of [1,9.99,10,24.99,25,54.99,55,94.99,95,192]) {
             assert.equal(gas.y,naval.y);
             assert.ok(Math.abs(gas.x-w.x + naval.x-w.x) < 1e-10);
             assert.equal(gas.size,mapAppearance(zoom).gasDiameter * .8);
-            assert.equal(markers.find(m => m.kind === 'zone').alpha,.35);
+            assert.equal(markers.find(m => m.kind === 'zone').alpha,1);
             const name = text.find(t => t.value === worldName(w));
             assert.ok(Math.abs(name.y + (name.size+4)/zoom - (w.y+.5)) < 1e-10);
         }
@@ -99,7 +99,8 @@ for (const zoom of [60,30,8,96,40,60]) {
     assert.deepEqual(text.map(t=>t.value),zoom>=95 ? ['Example','0101',world.uwp]
         : zoom>=55 ? ['Example',world.uwp] : zoom>=25 ? ['Example','C'] : zoom>=10 ? ['Example'] : []);
 }
-assert.equal(worldName({...world,uwp:'C000800-0'}),'EXAMPLE');
+assert.equal(worldName({...world,uwp:'C000800-0'}),'Example');
+assert.equal(worldName({...world,uwp:'C000900-0'}),'EXAMPLE');
 console.log('Fixed map detail bands, world classifications, symbols, boundaries and history-independent labels passed.');
 
 // Inspect raster instructions and convert texture units back to CSS pixels.
@@ -221,3 +222,24 @@ for(const [a,b] of borderSegments('0101',0,0)) {
     const inner={x:(ia.x+ib.x)/2,y:(ia.y+ib.y)/2};
     assert.ok(Math.hypot(inner.x-centreOfHex.x,inner.y-centreOfHex.y)<Math.hypot(midpoint.x-centreOfHex.x,midpoint.y-centreOfHex.y));
 }
+
+// Pointer location follows hex geography and sends only changed sector/subsector pairs.
+const locationCalls=[];
+const locationMap=new DynamicMap({clientWidth:100,clientHeight:100}, {}, {invokeMethodAsync(...args){locationCalls.push(args);return Promise.resolve();}});
+locationMap.app={canvas:{getBoundingClientRect(){return {left:0,top:0,width:100,height:100};}}};
+let mapPoint=hexCenter(0,0);
+locationMap.viewport={toWorld(){return mapPoint;}};
+locationMap.sectors=[{col:0,row:0,name:'Spinward Marches',subsectors:[{letter:'A',name:'Cronor'},{letter:'B',name:'Jewell'}]}];
+locationMap.pointerPosition={x:50,y:50};
+locationMap.updatePointerLocation();
+locationMap.updatePointerLocation();
+assert.deepEqual(locationCalls,[['SetPointerLocation','Spinward Marches','Cronor']]);
+mapPoint=hexCenter(8,0);
+locationMap.updatePointerLocation();
+assert.deepEqual(locationCalls.at(-1),['SetPointerLocation','Spinward Marches','Jewell']);
+mapPoint=hexCenter(40,0);
+locationMap.updatePointerLocation();
+assert.deepEqual(locationCalls.at(-1),['SetPointerLocation',null,null]);
+locationMap.pointerPosition=null;
+locationMap.updatePointerLocation();
+assert.equal(locationCalls.length,3);
