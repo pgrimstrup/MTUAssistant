@@ -12,6 +12,15 @@ static void Check(bool condition, string message)
     if (!condition) throw new Exception(message);
 }
 
+Check(PoliticalColor.Resolve(null, "ImDd", false) == "red", "Imperial border fallback");
+Check(PoliticalColor.Resolve("", "Im", true) == "limegreen", "Imperial route fallback");
+Check(PoliticalColor.Resolve(null, "ZhIN", false) == "blue", "Zhodani border fallback");
+Check(PoliticalColor.Resolve(null, "ZhCo", true) == "lightblue", "Zhodani route fallback");
+Check(PoliticalColor.Resolve("orange", "ImDd", false) == "orange", "Stored colours take precedence");
+Check(PoliticalColor.Resolve(null, "DaCf", true) is null && PoliticalColor.Resolve(null, null, true) is null, "Other allegiances retain existing fallback");
+Check(PoliticalColor.Resolve(null, "AsMw", false) == "yellow", "Aslan border fallback");
+Check(PoliticalColor.Resolve("purple", "AsMw", false) == "purple", "Aslan stored border colour takes precedence");
+Check(PoliticalColor.Resolve(null, "AsMw", true) is null, "Aslan route colour unchanged");
 var profile = UwpLookup.Describe("a788899-c");
 Check(profile.Count == 8 && profile[0].Code == 'A' && profile[7].Code == 'C', "UWP positions or case handling");
 Check(profile.All(a => !a.Description.Contains("Unrecognised")), "Known profile descriptions");
@@ -113,11 +122,11 @@ using (var scope = provider.CreateScope())
 commands.Reads = 0;
 var catalogueProvider = provider.GetRequiredService<SystemDataProvider>();
 await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => catalogueProvider.InitializeAsync()));
-Check(commands.Reads == 4, "Concurrent initialization reads each catalogue table exactly once");
+Check(commands.Reads == 6, "Concurrent initialization reads each catalogue table exactly once");
 var snapshot = catalogueProvider.Catalogue;
 
 await catalogueProvider.InitializeAsync();
-Check(ReferenceEquals(snapshot, catalogueProvider.Catalogue) && commands.Reads == 4, "Initialization reuses the published snapshot");
+Check(ReferenceEquals(snapshot, catalogueProvider.Catalogue) && commands.Reads == 6, "Initialization reuses the published snapshot");
 Check(snapshot.Systems.Length == 4 && snapshot.Systems.All(s => s.Bodies.IsEmpty), "All milieus loaded with no invented system bodies");
 commands.Reads = 0;
 // Destroy the in-memory database: every consumer must now work solely from the snapshot.
@@ -226,6 +235,8 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     var oldSnapshot = reloadProvider.Catalogue;
     var mapService = reloadContainer.GetRequiredService<MapDataService>();
     Check((await mapService.GetSectorAsync(id))!.Single().Name == "Original", "Initial cached map data");
+    var mapSector = (await mapService.GetOverviewAsync()).Sectors.Single();
+    Check(mapSector.Borders.Single().Color == "lightblue" && mapSector.Routes.Single().EndOffsetX == 1, "Map overview exposes imported border and route geometry");
     var notifications = 0;
     reloadProvider.Reloaded += () => notifications++;
     mock.Version = 2;
@@ -237,7 +248,8 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     Check(notifications == 1 && !ReferenceEquals(oldSnapshot, reloadProvider.Catalogue), "Reload publishes one new catalogue");
     Check(oldSnapshot.Systems.Single().MainWorld.Name == "Original", "Readers retain an intact old snapshot");
     Check((await mapService.GetSectorAsync(id))!.Single().Name == "Updated", "Existing map service rebuilds after reload");
-    Check((await mapService.GetOverviewAsync()).Sectors.Single().Worlds.Single().Name == "Updated", "Overview rebuilds after reload");
+    var refreshedSector = (await mapService.GetOverviewAsync()).Sectors.Single();
+    Check(refreshedSector.Worlds.Single().Name == "Updated" && refreshedSector.Borders.Single().Color == "red" && refreshedSector.Routes.Single().Color == "orange", "Overview rebuilds world and geometry after reload");
     Check((await reloadContainer.GetRequiredService<ISearchService>().SearchAsync("Updated")).Single().SystemName == "Updated", "Search sees reloaded system");
     Check((await reloadContainer.GetRequiredService<WorldSelectionService>().FindAsync(-4,-1,19,10))!.Name == "Updated", "Selection sees reloaded system");
     mock.FailMetadata = true;

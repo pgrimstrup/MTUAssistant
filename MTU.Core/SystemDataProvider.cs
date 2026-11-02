@@ -7,6 +7,8 @@ using MTU.Core.Data;
 namespace MTU.Core;
 
 public sealed record CatalogueSector(int Id, string Name, int X, int Y, string Milieu);
+public sealed record CatalogueBorder(int SectorId, string Path, string? Allegiance, string? Color);
+public sealed record CatalogueRoute(int SectorId, string Start, string End, int StartOffsetX, int StartOffsetY, int EndOffsetX, int EndOffsetY, string? Allegiance, string? Color);
 public sealed record CatalogueSubsector(int Id, int SectorId, string Letter, string Name);
 public sealed record MainWorldData(string Name, string Uwp, string Remarks, string Ix, string Ex,
     string Cx, string Nobility, string Bases, string Zone, string Pbg, string WorldCount,
@@ -31,14 +33,18 @@ public sealed class SystemCatalogue
     public ImmutableArray<CatalogueSector> Sectors { get; }
     public ImmutableArray<CatalogueSubsector> Subsectors { get; }
     public ImmutableArray<CatalogueSystem> Systems { get; }
+    public ImmutableArray<CatalogueBorder> Borders { get; }
+    public ImmutableArray<CatalogueRoute> Routes { get; }
     public FrozenDictionary<int, CatalogueSector> SectorsById { get; }
     public FrozenDictionary<int, CatalogueSystem> SystemsById { get; }
     public FrozenDictionary<(string Milieu, int X, int Y, string Hex), CatalogueSystem> SystemsByHex { get; }
     public FrozenDictionary<(int SectorId, string Letter), CatalogueSubsector> SubsectorsByLetter { get; }
 
     internal SystemCatalogue(IEnumerable<CatalogueSector> sectors, IEnumerable<CatalogueSubsector> subsectors,
-        IEnumerable<CatalogueSystem> systems)
+        IEnumerable<CatalogueSystem> systems, IEnumerable<CatalogueBorder> borders, IEnumerable<CatalogueRoute> routes)
     {
+        Borders = borders.ToImmutableArray();
+        Routes = routes.ToImmutableArray();
         Sectors = sectors.OrderBy(s => s.Name).ThenBy(s => s.Id).ToImmutableArray();
         Subsectors = subsectors.OrderBy(s => s.Name).ThenBy(s => s.Id).ToImmutableArray();
         Systems = systems.OrderBy(s => s.MainWorld.Name).ThenBy(s => s.Id).ToImmutableArray();
@@ -95,6 +101,8 @@ public sealed class SystemDataProvider(IServiceScopeFactory scopeFactory)
             .Select(s => new CatalogueSubsector(s.Id, s.SectorId, s.Letter, s.Name)).ToListAsync();
         var allegiances = (await db.Allegiances.AsNoTracking().ToListAsync())
             .ToDictionary(a => (a.SectorId, a.Code), a => a.Name);
+        var borders = await db.Borders.AsNoTracking().Select(b => new CatalogueBorder(b.SectorId, b.Path, b.Allegiance, b.Color)).ToListAsync();
+        var routes = await db.Routes.AsNoTracking().Select(r => new CatalogueRoute(r.SectorId, r.Start, r.End, r.StartOffsetX, r.StartOffsetY, r.EndOffsetX, r.EndOffsetY, r.Allegiance, r.Color)).ToListAsync();
         var rows = await db.Systems.AsNoTracking().ToListAsync();
         var systems = rows.Select(s => {
             var (letter, hex) = SubsectorPosition(s.Hex);
@@ -102,7 +110,7 @@ public sealed class SystemDataProvider(IServiceScopeFactory scopeFactory)
                 new MainWorldData(s.Name, s.Uwp, s.Remarks, s.Ix, s.Ex, s.Cx, s.N, s.B, s.Z, s.Pbg,
                     s.W, s.A, allegiances.GetValueOrDefault((s.SectorId, s.A)), s.Stellar));
         });
-        Volatile.Write(ref _catalogue, new SystemCatalogue(sectors, subsectors, systems));
+        Volatile.Write(ref _catalogue, new SystemCatalogue(sectors, subsectors, systems, borders, routes));
     }
 
     private static (string Letter, string Hex) SubsectorPosition(string hex)

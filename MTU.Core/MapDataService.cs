@@ -6,7 +6,8 @@ namespace MTU.Core;
 public sealed record MapSubsector(string Letter, string Name);
 public sealed record MapOverviewWorld(string Hex, string Name, string Uwp, string Remarks);
 public sealed record MapSector(int Id, string Name, int X, int Y, IReadOnlyList<string> Hexes,
-    IReadOnlyList<MapSubsector> Subsectors, IReadOnlyList<MapOverviewWorld> Worlds);
+    IReadOnlyList<MapSubsector> Subsectors, IReadOnlyList<MapOverviewWorld> Worlds,
+    IReadOnlyList<CatalogueBorder> Borders, IReadOnlyList<CatalogueRoute> Routes);
 public sealed record MapOverview(int MinSectorX, int MinSectorY, int Columns, int Rows,
     IReadOnlyList<MapSector> Sectors);
 public sealed record MapWorld(string Hex, string Name, string Uwp, string Bases, string Zone,
@@ -29,6 +30,8 @@ public sealed class MapDataService
             .OrderBy(s => s.Y).ThenBy(s => s.X).ToArray();
         var worlds = data.Systems.ToLookup(s => s.SectorId);
         var subsectors = data.Subsectors.ToLookup(s => s.SectorId);
+        var borders = data.Borders.ToLookup(s => s.SectorId);
+        var routes = data.Routes.ToLookup(s => s.SectorId);
         _worlds = sectors.ToFrozenDictionary(s => s.Id, s => (IReadOnlyList<MapWorld>)worlds[s.Id]
             .OrderBy(w => w.Hex).Select(w => new MapWorld(w.Hex, w.MainWorld.Name, w.MainWorld.Uwp,
                 w.MainWorld.Bases, w.MainWorld.Zone, w.MainWorld.Pbg, w.MainWorld.Remarks,
@@ -41,7 +44,9 @@ public sealed class MapDataService
             sectors.Select(s => new MapSector(s.Id, s.Name, s.X, s.Y,
                 _worlds[s.Id].Select(w => w.Hex).ToImmutableArray(),
                 subsectors[s.Id].Select(ss => new MapSubsector(ss.Letter, ss.Name)).ToImmutableArray(),
-                _worlds[s.Id].Select(w => new MapOverviewWorld(w.Hex, w.Name, w.Uwp, w.Remarks)).ToImmutableArray()))
+                _worlds[s.Id].Select(w => new MapOverviewWorld(w.Hex, w.Name, w.Uwp, w.Remarks)).ToImmutableArray(),
+                borders[s.Id].Select(b => b with { Color = PoliticalColor.Resolve(b.Color, b.Allegiance, false) }).ToImmutableArray(),
+                routes[s.Id].Select(r => r with { Color = PoliticalColor.Resolve(r.Color, r.Allegiance, true) }).ToImmutableArray()))
                 .ToImmutableArray());
     }
 
@@ -55,5 +60,21 @@ public sealed class MapDataService
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_gate) { var data = _provider.Catalogue; if (!ReferenceEquals(_source, data)) { Update(data); _source = data; } return Task.FromResult(_worlds.GetValueOrDefault(sectorId)); }
+    }
+}
+
+/// <summary>Fallback map colours when metadata supplies none.</summary>
+public static class PoliticalColor
+{
+    public static string? Resolve(string? color, string? allegiance, bool route)
+    {
+        if (!string.IsNullOrWhiteSpace(color)) return color;
+        if (allegiance?.StartsWith("Im", StringComparison.OrdinalIgnoreCase) == true)
+            return route ? "limegreen" : "red";
+        if (allegiance?.StartsWith("Zh", StringComparison.OrdinalIgnoreCase) == true)
+            return route ? "lightblue" : "blue";
+        if (!route && allegiance?.StartsWith("As", StringComparison.OrdinalIgnoreCase) == true)
+            return "yellow";
+        return null;
     }
 }

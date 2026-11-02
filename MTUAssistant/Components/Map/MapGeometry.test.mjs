@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { HEX_X, hexCenter, findHex, detailLevel, LabelLayout, parseHex, worldPriority, mapAppearance, baseSymbols, isSubsectorCapital, worldName, worldLabelRules } from '../../wwwroot/js/MapGeometry.js';
+import { HEX_X, hexCenter, findHex, detailLevel, LabelLayout, parseHex, worldPriority, mapAppearance, baseSymbols, isSubsectorCapital, worldName, worldLabelRules, borderSegments, routePoints, insetBorderSegment } from '../../wwwroot/js/MapGeometry.js';
 import { readFile } from 'node:fs/promises';
 // Collocated browser modules use public /js URLs; map those to physical wwwroot files in Node.
 let rendererSource = await readFile(new URL('./MapView.razor.js', import.meta.url), 'utf8');
@@ -47,9 +47,9 @@ map.label = (value,x,y,size,colour) => text.push({value,x,y,size,colour});
 map.marker = (kind,x,y,size,tint,zoom,alpha=1) => markers.push({kind,x,y,size,alpha});
 const world = {name:'Example',hex:'0101',x:5,y:5,uwp:'C000700-0',remarks:'',bases:'NS',pbg:'703',zone:'R',priority:7};
 const cases = [
-    {remarks:'Cp', expected:[true,true,true,true,true]},
-    {remarks:'Cx', expected:[true,false,true,true,true]},
-    {remarks:'Cs', expected:[true,false,true,true,true]},
+    {remarks:'Cp', expected:[false,true,true,true,true]},
+    {remarks:'Cx', expected:[false,false,true,true,true]},
+    {remarks:'Cs', expected:[false,false,true,true,true]},
     {uwp:'C000900-0', expected:[false,false,true,true,true]},
     {uwp:'A000700-0', expected:[false,false,false,true,true]},
     {uwp:'B000700-0', expected:[false,false,false,true,true]},
@@ -97,7 +97,7 @@ for (const zoom of [60,30,8,96,40,60]) {
     text.length=0;
     map.drawWorldLabels({...world,remarks:'Cp'},{x:.1,y:.2},detailLevel(zoom),zoom);
     assert.deepEqual(text.map(t=>t.value),zoom>=95 ? ['Example','0101',world.uwp]
-        : zoom>=55 ? ['Example',world.uwp] : zoom>=25 ? ['Example','C'] : ['Example']);
+        : zoom>=55 ? ['Example',world.uwp] : zoom>=25 ? ['Example','C'] : zoom>=10 ? ['Example'] : []);
 }
 assert.equal(worldName({...world,uwp:'C000800-0'}),'EXAMPLE');
 console.log('Fixed map detail bands, world classifications, symbols, boundaries and history-independent labels passed.');
@@ -196,3 +196,28 @@ assert.ok(Math.abs(moved.x-(100+32*HEX_X))<1e-10);
 assert.equal(moved.y,90);
 assert.equal(resized,1);
 assert.equal(redrawn,1);
+
+const ring = borderSegments('0101',0,0);
+assert.equal(ring.length,6);
+for (const [a,b] of ring) assert.ok(Math.hypot(a.x-b.x,a.y-b.y)>0);
+assert.equal(borderSegments('0000',0,0).length,0);
+assert.deepEqual(routePoints({start:'3209',end:'0208',endOffsetX:1},0,0), [hexCenter(31,8),hexCenter(33,7)]);
+assert.deepEqual(routePoints({start:'3201',end:'0103',startOffsetX:-1},1,0), [hexCenter(31,0),hexCenter(32,2)]);
+assert.equal(routePoints({start:'oops',end:'0101'},0,0),null);
+
+// Opposing borders on the same edge inset toward their respective hex interiors.
+for (const zoom of [10,55,95,192]) {
+    const a={x:1,y:1}, b={x:2,y:1};
+    const [one] = insetBorderSegment(a,b,zoom);
+    const [two] = insetBorderSegment(b,a,zoom);
+    assert.ok(one.y > 1 && two.y < 1);
+    assert.ok(Math.abs((one.y-1)*zoom-2)<1e-9);
+    assert.ok(Math.abs((1-two.y)*zoom-2)<1e-9);
+}
+const centreOfHex=hexCenter(0,0);
+for(const [a,b] of borderSegments('0101',0,0)) {
+    const [ia,ib]=insetBorderSegment(a,b,95);
+    const midpoint={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+    const inner={x:(ia.x+ib.x)/2,y:(ia.y+ib.y)/2};
+    assert.ok(Math.hypot(inner.x-centreOfHex.x,inner.y-centreOfHex.y)<Math.hypot(midpoint.x-centreOfHex.x,midpoint.y-centreOfHex.y));
+}

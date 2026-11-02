@@ -1,6 +1,6 @@
 # MTUAssistant
 
-The home-page atlas is drawn directly from the M1105 sector/world database using PixiJS and pixi-viewport. Political borders and routes are not rendered. Downloaded PNG tiles are not required by the map. Refresh Sector Data downloads system data and TravellerMap metadata instead.
+The home-page atlas is drawn directly from the M1105 sector/world database using PixiJS and pixi-viewport. Imported political borders and routes render above the grid using their stored colours. Downloaded PNG tiles are not required by the map. Refresh Sector Data downloads system data and TravellerMap metadata instead.
 
 ## Map detail
 
@@ -8,7 +8,7 @@ Detail switches according to CSS pixels per parsec (not device pixel ratio):
 
 | Zoom | Detail |
 | --- | --- |
-| Below 10 | World circles; capital names (Cp, Cs, Cx); no hex grid |
+| Below 10 | World circles and borders; no routes, world names or hex grid |
 | 10–below 25 | World circles and hex grid; subsector capital (Cp) names only |
 | 25–below 55 | World circles, hex grid, gas giants, bases and travel-zone rings; starport class; names for capitals and population 8+ |
 | 55–below 95 | World circles, hex grid, gas giants, bases and travel-zone rings; full UWP and every world name |

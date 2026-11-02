@@ -1,7 +1,7 @@
 import { observeClicks } from "../../js/WorldSelection.js";
 import { HEX_X, SECTOR_WIDTH, SECTOR_HEIGHT, MAP_PADDING, DETAIL_LEVELS,
     hexCenter, findHex, parseHex, detailLevel, intersects, worldPriority, worldLabelRules,
-    mapAppearance, baseSymbols, isSubsectorCapital, worldName } from "../../js/MapGeometry.js";
+    mapAppearance, baseSymbols, isSubsectorCapital, worldName, borderSegments, routePoints, insetBorderSegment } from "../../js/MapGeometry.js";
 
 const MAX_ZOOM = 192;
 const VIEW_STORAGE_KEY = "mtu.map.view";
@@ -68,10 +68,11 @@ export class DynamicMap {
 
         this.grid = new PIXI.Graphics();
         this.boundaries = new PIXI.Graphics();
+        this.political = new PIXI.Graphics();
         this.markerLayer = new PIXI.Container();
         this.labelLayer = new PIXI.Container();
         this.selection = new PIXI.Graphics();
-        for (const layer of [this.grid, this.boundaries, this.markerLayer, this.labelLayer, this.selection]) {
+        for (const layer of [this.grid, this.boundaries, this.political, this.markerLayer, this.labelLayer, this.selection]) {
             layer.eventMode = "none";
             this.viewport.addChild(layer);
         }
@@ -97,6 +98,8 @@ export class DynamicMap {
             const result = { ...sector, col, row,
                 rect: { x: MAP_PADDING + col * SECTOR_WIDTH, y: MAP_PADDING + row * SECTOR_HEIGHT,
                     w: SECTOR_WIDTH, h: SECTOR_HEIGHT + .5 } };
+            result.borders = (sector.borders ?? []).map(b => ({ color:b.color, segments:borderSegments(b.path,col,row) }));
+            result.routes = (sector.routes ?? []).map(r => ({ color:r.color, points:routePoints(r,col,row) })).filter(r => r.points);
             result.points = sector.worlds.map(world => this.positionWorld(result, world)).filter(Boolean);
             return result;
         });
@@ -185,6 +188,7 @@ export class DynamicMap {
         this.ensureDetails(level >= 1 ? sectors : []);
         this.markerIndex = this.labelIndex = 0;
         this.drawGrid(view, sectors, level, zoom);
+        this.drawPolitical(view, zoom);
         this.drawRegionLabels(sectors, view, level, zoom);
         const worlds = sectors.flatMap(sector => this.sectorCache.get(sector.id)?.worlds ?? sector.points)
             .filter(world => world.x >= expanded.x && world.x <= expanded.x + expanded.w
@@ -252,6 +256,24 @@ export class DynamicMap {
         } finally {
             this.activeRequests--;
             this.lastView = "";
+        }
+    }
+
+    drawPolitical(view, zoom) {
+        const g=this.political;
+        g.clear();
+        const visible=(a,b) => Math.max(a.x,b.x)>=view.x-1 && Math.min(a.x,b.x)<=view.x+view.w+1
+            && Math.max(a.y,b.y)>=view.y-1 && Math.min(a.y,b.y)<=view.y+view.h+1;
+        const draw=(a,b,color,width) => {
+            if(!visible(a,b)) return;
+            g.moveTo(a.x,a.y).lineTo(b.x,b.y).stroke({color:color || 0x91a9c4,width:width/zoom,alpha:.85});
+        };
+        for(const sector of this.sectors) {
+            for(const border of sector.borders) for(const [a,b] of border.segments) {
+                const [insideA,insideB]=insetBorderSegment(a,b,zoom);
+                draw(insideA,insideB,border.color,1.5);
+            }
+            if (zoom >= 10) for(const route of sector.routes) draw(route.points[0],route.points[1],route.color,1.2);
         }
     }
 

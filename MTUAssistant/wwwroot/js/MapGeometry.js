@@ -16,7 +16,7 @@ export function worldLabelRules(world, zoom) {
     const capital = codes.has("Cp") || codes.has("Cs") || codes.has("Cx");
     const highPopulation = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ".indexOf(world.uwp?.[4] ?? "?") >= 8;
     return {
-        name: zoom < 10 ? capital : zoom < 25 ? codes.has("Cp")
+        name: zoom < 10 ? false : zoom < 25 ? codes.has("Cp")
             : zoom < 55 ? capital || highPopulation : true,
         port: zoom >= 25 && zoom < 55,
         uwp: zoom >= 55,
@@ -136,4 +136,59 @@ export function isSubsectorCapital(world) {
 export function worldName(world) {
     const population = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ".indexOf(world.uwp?.[4] ?? "?");
     return population >= 8 ? world.name.toUpperCase() : world.name;
+}
+
+// MSEC perimeter traversal follows TravellerMap PathUtil.ComputeBorderPath
+// (https://github.com/inexorabletash/travellermap/blob/main/server/RenderUtil.cs).
+// Perimeter hexes are traversed clockwise; edges, not centre-to-centre
+// lines, form the border. Buffer hexes outside the sector guide the traversal.
+export function borderSegments(path, sectorColumn, sectorRow) {
+    const hexes = (path ?? '').trim().split(/\s+/).filter(h => /^\d{4}$/.test(h))
+        .map(h => ({x:Number(h.slice(0,2)),y:Number(h.slice(2))}));
+    if (!hexes.length) return [];
+    const present = new Set(hexes.map(h => h.x+','+h.y));
+    const edgeX = [-1/Math.sqrt(3)/2,-1/Math.sqrt(3),-1/Math.sqrt(3)/2,1/Math.sqrt(3)/2,1/Math.sqrt(3),1/Math.sqrt(3)/2];
+    const edgeY = [.5,0,-.5,-.5,0,.5];
+    const vertex = (h,i) => { const c=hexCenter(sectorColumn*32+h.x-1,sectorRow*40+h.y-1); return {x:c.x+edgeX[i],y:c.y+edgeY[i]}; };
+    const neighbor = (h,i) => { let x=h.x,y=h.y, odd=((x%2)+2)%2;
+        switch(i) {case 0:x--;y+=1-odd;break;case 1:x--;y-=odd;break;case 2:y--;break;case 3:x++;y-=odd;break;case 4:x++;y+=1-odd;break;case 5:y++;}
+        return x+','+y; };
+    let first=0,start=hexes[0],previous=vertex(start,0),visited=false; const segments=[];
+    for (const h of hexes) {
+        let last=first+5;
+        if (visited && h.x===start.x && h.y===start.y) { last=5; if(first<3) break; }
+        visited=true;
+        let i=first;
+        for(let check=first;check<=last;check++) {
+            i=check;
+            if(present.has(neighbor(h,i%6))) break;
+            const next=vertex(h,(i+1)%6);
+            if(h.x>=1 && h.x<=32 && h.y>=1 && h.y<=40) segments.push([previous,next]);
+            previous=next;
+        }
+        first=(i%6+4)%6;
+    }
+    return segments;
+}
+export function routePoints(route, sectorColumn, sectorRow) {
+    const point=(hex,dx,dy)=>{
+        if(!/^\d{4}$/.test(hex ?? '')) return null;
+        return hexCenter((sectorColumn+dx)*32+Number(hex.slice(0,2))-1,
+            (sectorRow+dy)*40+Number(hex.slice(2))-1);
+    };
+    const start=point(route.start,route.startOffsetX ?? 0,route.startOffsetY ?? 0);
+    const end=point(route.end,route.endOffsetX ?? 0,route.endOffsetY ?? 0);
+    return start && end ? [start,end] : null;
+}
+
+// Clockwise perimeter segments have their interior on the right in screen coordinates.
+export function insetBorderSegment(a, b, zoom) {
+    const dx=b.x-a.x, dy=b.y-a.y, length=Math.hypot(dx,dy);
+    if (!length || zoom <= 0) return [a,b];
+    const inset=Math.min(2 / zoom, .2);
+    const nx=-dy/length*inset, ny=dx/length*inset;
+    // Extend joins so inset edges meet cleanly at the 120-degree hex corners.
+    const extension=Math.min(inset/Math.sqrt(3), length/4);
+    const tx=dx/length*extension, ty=dy/length*extension;
+    return [{x:a.x+nx-tx,y:a.y+ny-ty},{x:b.x+nx+tx,y:b.y+ny+ty}];
 }
