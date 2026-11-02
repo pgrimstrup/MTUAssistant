@@ -1,4 +1,6 @@
 @page "/trading"
+@implements IDisposable
+@inject CampaignService Campaigns
 @inject TradingService TradeService
 @inject SystemDataProvider SystemData
 @inject MTUAssistant.Services.SelectedWorldState WorldState
@@ -14,7 +16,7 @@
     </header>
     <div class="trade-columns">
         <section class="trade-panel buying" aria-labelledby="buying-heading">
-            <header class="panel-header"><div><span class="panel-label">Exports</span><h2 id="buying-heading">Buying</h2></div><div class="header-status">@if (market?.IsOutdated == true) { <span class="outdated-badge">Outdated</span> }<span class="direction" aria-hidden="true">↗</span></div></header>
+            <header class="panel-header"><div><span class="panel-label">Exports</span><h2 id="buying-heading">Buying</h2></div><div class="header-status">@if (market is not null) { <FreshnessBadge TargetDay="market.TargetDay" Campaign="activeCampaign" /> }<span class="direction" aria-hidden="true">↗</span></div></header>
             <div class="panel-body">
                 @if (world is not null)
                 {
@@ -50,7 +52,7 @@
             </div>
         </section>
         <section class="trade-panel selling" aria-labelledby="selling-heading">
-            <header class="panel-header"><div><span class="panel-label">Imports</span><h2 id="selling-heading">Selling</h2></div><div class="header-status">@if (sales is not null && isRemoteDestination) { <span class="outdated-badge danger-badge">Prices are @(destination?.Distance >= 4 ? 14 : 7) days old</span> } else if (sales?.IsOutdated == true) { <span class="outdated-badge">Outdated</span> }<span class="direction" aria-hidden="true">↙</span></div></header>
+            <header class="panel-header"><div><span class="panel-label">Imports</span><h2 id="selling-heading">Selling</h2></div><div class="header-status">@if (sales is not null) { <FreshnessBadge TargetDay="sales.TargetDay" Campaign="activeCampaign" /> }<span class="direction" aria-hidden="true">↙</span></div></header>
             <div class="panel-body">
                 @if (world is null) { <p>Select a world on the map to generate sale prices.</p> }
                 else
@@ -90,6 +92,9 @@
 </div>
 
 @code {
+    private Campaign? activeCampaign;
+    private void CampaignChanged(Campaign? campaign) { activeCampaign = campaign; _ = InvokeAsync(StateHasChanged); }
+    public void Dispose() => Campaigns.Changed -= CampaignChanged;
     private SelectedWorld? world;
     private string mode = "Broker";
     private int skillDm;
@@ -109,6 +114,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        Campaigns.Changed += CampaignChanged;
+        activeCampaign = (await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive);
         world = WorldState.World;
         if (world is not null) destinations = TradeDestinations.Within(SystemData.Catalogue, world.SectorId, world.Hex);
         await LoadMarket();
@@ -141,7 +148,6 @@
             sales = await TradeService.GetSalesAsync(sectorId, hex, sellMode);
             if (sales is not null)
             {
-                if (target is not null) sales = sales with { IsOutdated = true };
                 sellSkillDm = sales.SkillDm;
                 buyerDm = sales.BuyerDm ?? -2;
             }
@@ -167,7 +173,7 @@
     {
         if (world is null || busy) return;
         busy = true;
-        try { market = await TradeService.RollAsync(world.SectorId, world.Hex, mode, skillDm, world.Remarks, supplierDm); error = null; }
+        try { if (activeCampaign is null) { error = "Select a campaign to generate dated results."; return; } market = await TradeService.RollAsync(world.SectorId, world.Hex, mode, skillDm, world.Remarks, supplierDm, targetDay: CampaignDates.Today(activeCampaign)); error = null; }
         catch (Exception) { error = "Unable to save the generated market. Please try again."; }
         finally { busy = false; }
     }
@@ -178,10 +184,12 @@
         try
         {
             var target = destination;
+            if (activeCampaign is null) { salesError = "Select a campaign to generate dated results."; return; }
             if (isRemoteDestination && target is null) { salesError = "Destination is no longer available."; return; }
+            var today = CampaignDates.Today(activeCampaign);
+            var targetDay = target is null ? today : CampaignDates.RemoteTarget(today, target.Distance, () => System.Security.Cryptography.RandomNumberGenerator.GetInt32(1, 7));
             sales = await TradeService.RollSalesAsync(target?.System.SectorId ?? world.SectorId,
-                target?.System.Hex ?? world.Hex, sellMode, sellSkillDm, target?.System.MainWorld.Remarks ?? world.Remarks, buyerDm);
-            if (target is not null) sales = sales with { IsOutdated = true };
+                target?.System.Hex ?? world.Hex, sellMode, sellSkillDm, target?.System.MainWorld.Remarks ?? world.Remarks, buyerDm, targetDay: targetDay);
             salesError = null;
         }
         catch (Exception) { salesError = "Unable to save the generated sale prices. Please try again."; }

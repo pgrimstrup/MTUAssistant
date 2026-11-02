@@ -9,6 +9,7 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
     public static string DefaultDatabasePath { get; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MTU", FileName);
 
+    public DbSet<CampaignEntity> Campaigns => Set<CampaignEntity>();
     public DbSet<SectorEntity> Sectors => Set<SectorEntity>();
     public DbSet<SectorNameEntity> SectorNames => Set<SectorNameEntity>();
     public DbSet<SubsectorEntity> Subsectors => Set<SubsectorEntity>();
@@ -33,6 +34,7 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
             e.HasMany(s => s.Systems).WithOne(n => n.Sector).HasForeignKey(n => n.SectorId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<CampaignEntity>().HasIndex(c => c.IsActive).IsUnique().HasFilter("\"IsActive\" = 1");
         modelBuilder.Entity<TradeMarketEntity>().HasIndex(m => new { m.SectorId, m.Hex, m.Mode }).IsUnique();
         modelBuilder.Entity<TransportMarketEntity>().HasIndex(m => new { m.SectorId, m.Hex, m.Kind }).IsUnique();
         modelBuilder.Entity<SubsectorEntity>().HasIndex(s => new { s.SectorId, s.Letter }).IsUnique();

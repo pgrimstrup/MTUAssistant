@@ -1,0 +1,28 @@
+.campaign-control { display:flex; align-items:center; gap:.5rem; flex:0 1 auto; min-width:0; }
+.campaign-select { width:12rem; min-width:7rem; }
+.campaign-date { padding:.35rem .65rem; border:1px solid rgba(130,217,207,.4); border-radius:.4rem; color:#a8e8dc; background:rgba(130,217,207,.1); font:650 1.05rem monospace; white-space:nowrap; }
+.campaign-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:1100; display:flex; justify-content:center; align-items:center; padding:1rem; }
+.campaign-dialog { width:min(100%, 34rem); max-height:90vh; overflow:auto; border:1px solid var(--app-border); border-radius:.6rem; padding:1.25rem; background:var(--app-surface); box-shadow:0 1rem 3rem #0009; }
+.campaign-dialog h2 { font-size:1.2rem; margin:0 0 1rem; }
+.campaign-dialog label, .field-label { display:grid; gap:.3rem; color:var(--app-muted); font-size:.8rem; }
+.campaign-dialog > label, .date-fields, .location-field { margin-bottom:1rem; }
+.date-fields { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
+.location-current { color:var(--app-text); margin:.3rem 0 .5rem; }
+.location-actions { display:flex; flex-wrap:wrap; gap:.5rem; }
+.location-actions input { flex:1 1 12rem; }
+.location-results { list-style:none; padding:0; margin:.3rem 0 0; max-height:12rem; overflow:auto; border:1px solid var(--app-border); border-radius:.3rem; }
+.location-results button { width:100%; padding:.45rem .6rem; text-align:left; color:var(--app-text); background:var(--app-surface); border:0; }
+.location-results button:hover { background:var(--app-accent-soft); }
+.location-hint { color:var(--app-muted); font-size:.8rem; }
+.dialog-actions, .delete-confirm { display:flex; align-items:center; justify-content:flex-end; gap:.5rem; margin-top:1rem; }
+.delete-button { margin-right:auto; }
+.delete-confirm { flex-wrap:wrap; justify-content:flex-start; color:#ffaaaa; }
+.dialog-error, .campaign-error { color:#ffaaaa; }
+.campaign-error { position:absolute; top:3.5rem; background:var(--app-surface); padding:.4rem; z-index:5; }
+@media (max-width:900px) { .campaign-select { width:9rem; } }
+@media (max-width:640px) { .campaign-control { flex-wrap:wrap; } .campaign-select { width:8rem; } .campaign-date { font-size:.85rem; } }
+
+.date-controls { display:flex; align-items:center; gap:.2rem; }
+.date-step { min-width:1.7rem; height:2rem; padding:0 .2rem; border:1px solid var(--app-border); border-radius:.3rem; color:var(--app-muted); background:transparent; font-size:.8rem; line-height:1; }
+.date-step:hover:not(:disabled), .date-step:focus-visible { color:var(--app-text); background:var(--app-accent-soft); }
+.date-step:disabled { opacity:.5; }

@@ -2,7 +2,7 @@ namespace MTU.Core;
 
 public sealed record PassengerLine(string Passage, int Roll, int PassageDm, int ModifiedRoll, int Dice, int Passengers, int Taken = 0);
 public sealed record PassengerResult(int Effect, int Steward, int PopulationDm, int StarportDm, int ZoneDm,
-    string Population, string Starport, string Zone, IReadOnlyList<PassengerLine> Lines);
+    string Population, string Starport, string Zone, IReadOnlyList<PassengerLine> Lines, long? TargetDay = null);
 
 /// <summary>Passenger traffic using the 2016 Mongoose Traveller 2e rules.</summary>
 public static class PassengerTraffic

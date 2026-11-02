@@ -1,0 +1,4 @@
+.freshness { display:inline-block; padding:.2rem .5rem; border:1px solid; border-radius:999px; font-size:.7rem; font-weight:650; white-space:nowrap; }
+.current { color:#a3e8c2; border-color:rgba(100,210,145,.55); background:rgba(35,150,85,.2); }
+.outdated, .unknown { color:#f3c36c; border-color:rgba(243,195,108,.4); background:rgba(243,195,108,.1); }
+.expired { color:#ffaaaa; border-color:rgba(255,100,100,.55); background:rgba(190,45,45,.2); }

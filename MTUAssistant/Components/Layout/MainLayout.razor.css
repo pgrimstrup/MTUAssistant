@@ -15,7 +15,6 @@ main {
 
 .top-row {
     background-color: rgba(13, 17, 23, 0.8);
-    backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--app-border);
     justify-content: space-between;
     gap: 1rem;
@@ -115,3 +114,8 @@ main {
         right: 0.75rem;
         top: 0.5rem;
     }
+
+@media (max-width: 1000px) { .map-location { flex: 0 1 8rem; } .top-search { flex: 1 1 10rem; } }
+@media (max-width: 640px) { .top-row { height:auto; min-height:3.5rem; flex-wrap:wrap; padding-top:.5rem; padding-bottom:.5rem; } .map-location { display:none; } .top-search { flex:1 1 100%; } }
+
+@media (min-width: 641px) { .top-row { display:grid; grid-template-columns:minmax(0, 1fr) auto minmax(0, 1fr); } .top-search { justify-self:end; width:min(100%, 24rem); } }

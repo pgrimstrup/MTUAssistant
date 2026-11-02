@@ -121,3 +121,14 @@ public class TransportMarketEntity
     public string Kind { get; set; } = "";
     public string ResultJson { get; set; } = "";
 }
+
+public class CampaignEntity
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public int Day { get; set; } = 1;
+    public int Year { get; set; } = 1105;
+    public int? LocationSectorId { get; set; }
+    public string? LocationHex { get; set; }
+    public bool IsActive { get; set; }
+}

@@ -75,6 +75,15 @@ Check(sparseFreight.PopulationDm == -4 && sparseFreight.StarportDm == -3 && spar
 try { FreightTraffic.Roll("A788899-?", "", 0); throw new Exception("Unknown freight tech level accepted"); }
 catch (ArgumentException) { }
 
+var dateCampaign = new Campaign(1, "Date check", 2, 1105, null, null, true);
+var today = CampaignDates.Today(dateCampaign);
+Check(CampaignDates.Status(today, dateCampaign).Text == "Current" && CampaignDates.Status(today + 1, dateCampaign).Text == "Current", "Today and future are current");
+Check(CampaignDates.Status(today - 1, dateCampaign).Text == "Outdated 1 days" && CampaignDates.Status(today - 6, dateCampaign).Style == "outdated", "Recent results outdated");
+Check(CampaignDates.Status(today - 7, dateCampaign) == ("Expired 7 days", "expired"), "Seven days expires across year boundary");
+Check(CampaignDates.Status(null, dateCampaign).Text == "Date unknown" && CampaignDates.Status(today, null).Text == "Select campaign", "Undated legacy and missing campaign status");
+Check(CampaignDates.RemoteTarget(today, 3, () => 1) == today - 7 && CampaignDates.RemoteTarget(today, 4, () => 6) == today - 19, "Remote destination delay and distance boundary");
+Check(CampaignDates.Status(today - 7, dateCampaign with { Day = 1, Year = 1105 }).Text == "Outdated 6 days", "Date status updates when campaign date changes");
+
 Check(PoliticalColor.Resolve(null, "ImDd", false) == "red", "Imperial border fallback");
 Check(PoliticalColor.Resolve("", "Im", true) == "limegreen", "Imperial route fallback");
 Check(PoliticalColor.Resolve(null, "ZhIN", false) == "blue", "Zhodani border fallback");
@@ -356,12 +365,49 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     using var reloadContainer = reloadServices.BuildServiceProvider();
     var reloadProvider = reloadContainer.GetRequiredService<SystemDataProvider>();
     await reloadProvider.InitializeAsync();
+    var campaignService = new CampaignService(db);
+    await campaignService.SaveAsync(new Campaign(0, "First Campaign", 1, 1105, id, "1910", false));
+    var firstCampaign = (await campaignService.ListAsync()).Single();
+    Check(firstCampaign.IsActive && firstCampaign.LocationSectorId == id && firstCampaign.LocationHex == "1910", "New campaign is active with persistent location");
+    await campaignService.AdjustDateAsync(firstCampaign.Id, -1);
+    Check((await campaignService.ListAsync()).Single() is { Day: 365, Year: 1104 }, "Subtract one day crosses year");
+    await campaignService.AdjustDateAsync(firstCampaign.Id, 7);
+    Check((await campaignService.ListAsync()).Single() is { Day: 7, Year: 1105 }, "Add seven days crosses year");
+    await campaignService.AdjustDateAsync(firstCampaign.Id, -7);
+    await campaignService.AdjustDateAsync(firstCampaign.Id, 1);
+    await using (var dateReopened = new MtuDbContext(options))
+        Check((await new CampaignService(dateReopened).ListAsync()).Single() is { Day: 1, Year: 1105 }, "Date adjustment persists across contexts");
+    await campaignService.SaveAsync(firstCampaign with { Day = 1, Year = 1 });
+    try { await campaignService.AdjustDateAsync(firstCampaign.Id, -1); throw new Exception("Date before year one accepted"); }
+    catch (ArgumentException) { }
+    await campaignService.SaveAsync(firstCampaign);
+    await campaignService.SaveAsync(new Campaign(0, "Second Campaign", 365, 1106, null, null, false));
+    var campaignList = await campaignService.ListAsync();
+    Check(campaignList.Count == 2 && campaignList.Count(c => c.IsActive) == 1 && campaignList.Single(c => c.IsActive).Name == "Second Campaign", "Creating campaign switches active campaign");
+    await campaignService.ActivateAsync(firstCampaign.Id);
+    await using (var reopened = new MtuDbContext(options))
+    {
+        var persisted = (await new CampaignService(reopened).ListAsync()).Single(c => c.IsActive);
+        Check(persisted.Id == firstCampaign.Id && persisted.Day == 1 && persisted.Year == 1105 && persisted.LocationHex == "1910", "Active campaign survives reopening");
+    }
+    await campaignService.SaveAsync(firstCampaign with { Name = "Updated Campaign", Day = 100 });
+    Check((await campaignService.ListAsync()).Single(c => c.Id == firstCampaign.Id) is { Name: "Updated Campaign", Day: 100, IsActive: true }, "Campaign editing preserves active status");
+    try { await campaignService.SaveAsync(firstCampaign with { Day = 366 }); throw new Exception("Invalid day accepted"); }
+    catch (ArgumentException) { }
+    await campaignService.DeleteAsync(firstCampaign.Id);
+    Check((await campaignService.ListAsync()).Single() is { Name: "Second Campaign", IsActive: true }, "Deleting active campaign selects another");
+    await campaignService.DeleteAsync((await campaignService.ListAsync()).Single().Id);
+    Check((await campaignService.ListAsync()).Count == 0, "Deleting last campaign leaves no active campaign");
     var marketService = new TradingService(db);
     db.TradeMarkets.Add(new TradeMarketEntity { SectorId = id, Hex = "0101", Mode = "Broker", ResultJson = "{\"Mode\":\"Broker\",\"SkillDm\":2,\"RolledUtc\":\"2026-01-01T00:00:00Z\",\"RandomRolls\":1,\"Goods\":[{\"D66\":11,\"Name\":\"Common Electronics\",\"Lots\":2,\"Tons\":40,\"Illegal\":false,\"Stolen\":false}]}" });
     await db.SaveChangesAsync();
     var legacy = await marketService.GetAsync(id, "0101", "Broker", "In Ht");
     Check(legacy is { PricingVersion:1 } && legacy.Goods.Single() is { Lots:2, Tons:40, BasePrice:20000, PricePercent:not null, BuyPrice:not null }, "Legacy market priced without rerolling goods");
     Check((await marketService.GetAsync(id, "0101", "Broker", "In Ht"))!.Goods.SequenceEqual(legacy!.Goods), "Legacy prices are persisted and not rerolled");
+    var datedMarket = await marketService.RollAsync(id, "1913", "Broker", 0, "", targetDay: today);
+    Check((await marketService.GetAsync(id, "1913", "Broker"))!.TargetDay == today, "Buying target date persists");
+    var datedSales = await marketService.RollSalesAsync(id, "1914", "Broker", 0, "", targetDay: today - 14);
+    Check((await marketService.GetSalesAsync(id, "1914", "Broker"))!.TargetDay == today - 14, "Selling target date persists");
     var savedSales = await marketService.RollSalesAsync(id, "1910", "Broker", 3, "In");
     var legacySale = savedSales with { DemandVersion = 0, BuyerDm = null, Goods = savedSales.Goods.Select(g => g with { Tons = null }).ToArray() };
     db.TradeMarkets.Add(new TradeMarketEntity { SectorId = id, Hex = "1912", Mode = "Sale:Broker", ResultJson = System.Text.Json.JsonSerializer.Serialize(legacySale) });
@@ -391,6 +437,9 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
             && loadedPassengers.Lines.SequenceEqual(passengerRoll.Lines), "Passenger roll and inputs survive reopening");
         Check(await new PassengerMarketService(reopened).GetAsync(id, "1911") is null, "Passenger rolls are isolated by world");
     }
+    passengerRoll = passengerRoll with { TargetDay = today };
+    await passengerService.SaveAsync(id, "1910", passengerRoll);
+    Check((await passengerService.GetAsync(id, "1910"))!.TargetDay == today, "Passenger target date persists");
     var selectedPassengerRoll = PassengerTraffic.Select(passengerRoll, "High", 1);
     await passengerService.SaveAsync(id, "1910", selectedPassengerRoll);
     await using (var reopened = new MtuDbContext(options))
@@ -417,6 +466,9 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     var correctedFreight = await freightService.GetAsync(id, "1910");
     Check(correctedFreight!.Lines[1].LotSize == "1Dx5 (5 to 30)" && correctedFreight.Lines[1].Lots == oldFreight.Lines[1].Lots,
         "Legacy minor lot labels corrected without rerolling");
+    loadedCargo = loadedCargo with { TargetDay = today };
+    await freightService.SaveAsync(id, "1910", loadedCargo);
+    Check((await freightService.GetAsync(id, "1910"))!.TargetDay == today, "Freight target date persists");
     await freightService.SaveAsync(id, "1910", loadedCargo);
     await using (var reopened = new MtuDbContext(options))
     {

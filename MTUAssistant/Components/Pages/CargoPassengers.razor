@@ -1,4 +1,6 @@
 @page "/cargo-passengers"
+@implements IDisposable
+@inject CampaignService Campaigns
 @page "/passengers-cargo"
 @inject MTUAssistant.Services.SelectedWorldState WorldState
 @inject SystemDataProvider SystemData
@@ -39,7 +41,7 @@
     }
     <div class="sections">
         <section class="cargo-panel" aria-labelledby="passengers-heading">
-            <header class="passenger-header"><h2 id="passengers-heading">Passengers</h2>@if (passengersOutdated) { <span class="outdated-badge">Outdated</span> }</header>
+            <header class="passenger-header"><h2 id="passengers-heading">Passengers</h2>@if (passengerResult is not null) { <FreshnessBadge TargetDay="passengerResult.TargetDay" Campaign="activeCampaign" /> }</header>
             <div class="panel-body">
                 <div class="passenger-controls">
                     <label>Effect of Broker/Carouse/Streetwise <input class="form-control" type="number" min="-100" max="100" @bind="effect" disabled="@busy" /></label>
@@ -74,7 +76,7 @@
             </div>
         </section>
         <section class="cargo-panel" aria-labelledby="freight-heading">
-            <header class="passenger-header"><h2 id="freight-heading">Freight</h2><div class="freight-status">@if (freightResult?.Mail is { } mailStatus) { <span class="outdated-badge @(mailStatus.InsufficientSpace ? "mail-danger" : mailStatus.Containers > 0 ? "mail-available" : "")">@(mailStatus.InsufficientSpace ? "Insufficient cargo space for mail" : mailStatus.Containers == 0 ? "No Mail Traffic" : $"{mailStatus.Containers * 5} T Mail Traffic")</span> } @if (freightOutdated) { <span class="outdated-badge">Outdated</span> }</div></header>
+            <header class="passenger-header"><h2 id="freight-heading">Freight</h2><div class="freight-status">@if (freightResult?.Mail is { } mailStatus) { <span class="outdated-badge @(mailStatus.InsufficientSpace ? "mail-danger" : mailStatus.Containers > 0 ? "mail-available" : "")">@(mailStatus.InsufficientSpace ? "Insufficient cargo space for mail" : mailStatus.Containers == 0 ? "No Mail Traffic" : $"{mailStatus.Containers * 5} T Mail Traffic")</span> } @if (freightResult is not null) { <FreshnessBadge TargetDay="freightResult.TargetDay" Campaign="activeCampaign" /> }</div></header>
             <div class="panel-body">
                 <div class="passenger-controls">
                     <label>Effect of Broker/Streetwise <input class="form-control" type="number" min="-100" max="100" @bind="freightEffect" disabled="@busy" /></label>
@@ -126,11 +128,13 @@
 </div>
 
 @code {
+    private Campaign? activeCampaign;
+    private void CampaignChanged(Campaign? campaign) { activeCampaign = campaign; _ = InvokeAsync(StateHasChanged); }
+    public void Dispose() => Campaigns.Changed -= CampaignChanged;
     private int effect;
     private int steward;
     private PassengerResult? passengerResult;
     private string? passengerError;
-    private bool passengersOutdated;
     private int freightEffect;
     private int mailRank;
     private int mailSoc;
@@ -138,11 +142,12 @@
     private static readonly (int Distance, int Fee)[] freightFees = [(1, 1000), (2, 1600), (3, 3000), (4, 7000), (5, 7700), (6, 86000)];
     private FreightResult? freightResult;
     private string? freightError;
-    private bool freightOutdated;
     private bool busy;
 
     protected override async Task OnInitializedAsync()
     {
+        Campaigns.Changed += CampaignChanged;
+        activeCampaign = (await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive);
         var world = WorldState.World;
         if (world is null) return;
         busy = true;
@@ -153,7 +158,6 @@
             {
                 effect = result.Effect;
                 steward = result.Steward;
-                passengersOutdated = true;
             }
         }
         catch (Exception) { passengerError = "Unable to load saved passenger results."; }
@@ -166,7 +170,6 @@
                 mailRank = freight.Mail?.Rank ?? 0;
                 mailSoc = freight.Mail?.SocDm ?? 0;
                 cargoCapacity = freight.CargoCapacity ?? 0;
-                freightOutdated = true;
             }
         }
         catch (Exception) { freightError = "Unable to load saved freight results."; }
@@ -213,10 +216,10 @@
         busy = true;
         try
         {
-            var result = PassengerTraffic.Roll(system.MainWorld.Uwp, system.MainWorld.Zone, effect, steward);
+            if (activeCampaign is null) { passengerError = "Select a campaign to generate dated results."; return; }
+            var result = PassengerTraffic.Roll(system.MainWorld.Uwp, system.MainWorld.Zone, effect, steward) with { TargetDay = CampaignDates.Today(activeCampaign) };
             await PassengerMarkets.SaveAsync(world.SectorId, world.Hex, result);
             passengerResult = result;
-            passengersOutdated = false;
             passengerError = null;
         }
         catch (ArgumentException ex) { passengerError = ex.Message; }
@@ -237,11 +240,11 @@
         busy = true;
         try
         {
-            var result = FreightTraffic.Roll(system.MainWorld.Uwp, system.MainWorld.Zone, freightEffect);
+            if (activeCampaign is null) { freightError = "Select a campaign to generate dated results."; return; }
+            var result = FreightTraffic.Roll(system.MainWorld.Uwp, system.MainWorld.Zone, freightEffect) with { TargetDay = CampaignDates.Today(activeCampaign) };
             result = FreightTraffic.RollMail(result, mailRank, mailSoc);
             await FreightMarkets.SaveAsync(world.SectorId, world.Hex, result);
             freightResult = result;
-            freightOutdated = false;
             freightError = null;
         }
         catch (ArgumentException ex) { freightError = ex.Message; }

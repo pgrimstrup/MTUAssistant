@@ -81,6 +81,40 @@ namespace MTU.Core.Data.Migrations
                     b.ToTable("Borders");
                 });
 
+            modelBuilder.Entity("MTU.Core.Data.CampaignEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Day")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LocationHex")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("LocationSectorId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = 1");
+
+                    b.ToTable("Campaigns");
+                });
+
             modelBuilder.Entity("MTU.Core.Data.RouteEntity", b =>
                 {
                     b.Property<int>("Id")

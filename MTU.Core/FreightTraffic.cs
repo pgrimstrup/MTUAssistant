@@ -2,7 +2,7 @@ namespace MTU.Core;
 
 public sealed record FreightLine(string Type, int Roll, int TypeDm, int ModifiedRoll, int Dice, int Lots, string LotSize, int? CargoTaken = null);
 public sealed record FreightResult(int Effect, int PopulationDm, int StarportDm, int TechDm, int ZoneDm,
-    string Population, string Starport, string Tech, string Zone, IReadOnlyList<FreightLine> Lines, int? CargoCapacity = null, MailResult? Mail = null);
+    string Population, string Starport, string Tech, string Zone, IReadOnlyList<FreightLine> Lines, int? CargoCapacity = null, MailResult? Mail = null, long? TargetDay = null);
 
 public sealed record MailResult(int Rank, int SocDm, int FreightTrafficDm, int Effect, int TechDm,
     int Roll, int ModifiedRoll, int Containers, int? CargoTaken = null, bool InsufficientSpace = false);

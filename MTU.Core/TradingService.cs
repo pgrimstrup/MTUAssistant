@@ -8,7 +8,7 @@ public sealed record TradeGood(int D66, string Name, string Availability, int Di
 public sealed record MarketLine(int D66, string Name, int Lots, int? Tons, bool Illegal, bool Stolen,
     long? BasePrice = null, int? PricePercent = null, long? BuyPrice = null, int? PriceRoll = null, int? PurchaseDm = null, int? SaleDm = null, long? SalePrice = null);
 public sealed record MarketResult(string Mode, int SkillDm, DateTime RolledUtc, int RandomRolls, IReadOnlyList<MarketLine> Goods, int PricingVersion = 0, int? SupplierDm = null,
-    [property: System.Text.Json.Serialization.JsonIgnore] bool IsOutdated = false, int? BuyerDm = null, int DemandVersion = 0);
+    [property: System.Text.Json.Serialization.JsonIgnore] bool IsOutdated = false, int? BuyerDm = null, int DemandVersion = 0, long? TargetDay = null);
 
 /// <summary>Goods and lot sizes based on Tim Heiderich's Traveller 2e (2016) trade-goods aid,
 /// https://github.com/timtoon/trade-goods, CC BY-NC 4.0 as stated in the aid.</summary>
@@ -108,9 +108,9 @@ public sealed class TradingService(MtuDbContext db)
         // A stored market is always considered outdated when reopened.
         return market with { IsOutdated = true };
     }
-    public async Task<MarketResult> RollAsync(int sectorId, string hex, string mode, int skillDm, string? remarks, int supplierDm = -2, CancellationToken ct = default)
+    public async Task<MarketResult> RollAsync(int sectorId, string hex, string mode, int skillDm, string? remarks, int supplierDm = -2, CancellationToken ct = default, long? targetDay = null)
     {
-        var result = MarketGenerator.Generate(mode, skillDm, remarks, supplierDm: supplierDm);
+        var result = MarketGenerator.Generate(mode, skillDm, remarks, supplierDm: supplierDm) with { TargetDay = targetDay };
         var market = await db.TradeMarkets.SingleOrDefaultAsync(m => m.SectorId == sectorId && m.Hex == hex && m.Mode == mode, ct);
         if (market is null) { market = new TradeMarketEntity { SectorId = sectorId, Hex = hex, Mode = mode }; db.TradeMarkets.Add(market); }
         market.ResultJson = JsonSerializer.Serialize(result);
@@ -132,9 +132,9 @@ public sealed class TradingService(MtuDbContext db)
         return result;
     }
 
-    public async Task<MarketResult> RollSalesAsync(int sectorId, string hex, string mode, int skillDm, string? remarks, int buyerDm = -2, CancellationToken ct = default)
+    public async Task<MarketResult> RollSalesAsync(int sectorId, string hex, string mode, int skillDm, string? remarks, int buyerDm = -2, CancellationToken ct = default, long? targetDay = null)
     {
-        var result = MarketGenerator.GenerateSales(mode, skillDm, remarks, buyerDm: buyerDm);
+        var result = MarketGenerator.GenerateSales(mode, skillDm, remarks, buyerDm: buyerDm) with { TargetDay = targetDay };
         var key = "Sale:" + mode;
         var market = await db.TradeMarkets.SingleOrDefaultAsync(m => m.SectorId == sectorId && m.Hex == hex && m.Mode == key, ct);
         if (market is null) { market = new TradeMarketEntity { SectorId = sectorId, Hex = hex, Mode = key }; db.TradeMarkets.Add(market); }

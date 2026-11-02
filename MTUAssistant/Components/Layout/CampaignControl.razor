@@ -1,0 +1,143 @@
+@inject CampaignService Campaigns
+@inject SystemDataProvider Data
+@inject ISearchService Search
+@inject MTUAssistant.Services.SelectedWorldState WorldState
+
+<div class="campaign-control">
+    <label class="visually-hidden" for="campaign-select">Campaign</label>
+    <select @key="selectKey" id="campaign-select" class="form-select campaign-select" value="@(active?.Id.ToString() ?? "")" @onchange="ChangeCampaign" disabled="@busy">
+        @if (active is null) { <option value="">Select campaign</option> }
+        @foreach (var campaign in campaigns) { <option value="@campaign.Id">@campaign.Name</option> }
+        <option value="add">Add Campaign</option>
+    </select>
+    @if (active is not null)
+    {
+        <div class="date-controls" aria-label="Campaign date controls">
+            <button type="button" class="date-step" aria-label="Go back 7 days" title="Back 7 days" @onclick="() => AdjustDate(-7)" disabled="@busy">❮❮</button>
+            <button type="button" class="date-step" aria-label="Go back 1 day" title="Back 1 day" @onclick="() => AdjustDate(-1)" disabled="@busy">❮</button>
+            <span class="campaign-date" title="Campaign date, day-year">@active.Day-@active.Year</span>
+            <button type="button" class="date-step" aria-label="Advance 1 day" title="Forward 1 day" @onclick="() => AdjustDate(1)" disabled="@busy">❯</button>
+            <button type="button" class="date-step" aria-label="Advance 7 days" title="Forward 7 days" @onclick="() => AdjustDate(7)" disabled="@busy">❯❯</button>
+        </div>
+        <button type="button" class="btn btn-outline-secondary" @onclick="Edit" disabled="@busy">Edit</button>
+    }
+</div>
+@if (error is not null && !dialogOpen) { <div class="campaign-error" role="alert">@error</div> }
+@if (dialogOpen)
+{
+    <div class="campaign-backdrop">
+        <div class="campaign-dialog" role="dialog" aria-modal="true" aria-labelledby="campaign-dialog-title">
+            <h2 id="campaign-dialog-title">@(editingId == 0 ? "Add Campaign" : "Edit Campaign")</h2>
+            <label>Name <input class="form-control" maxlength="120" @bind="name" /></label>
+            <div class="date-fields">
+                <label>Day <input class="form-control" type="number" min="1" max="365" @bind="day" /></label>
+                <label>Year <input class="form-control" type="number" min="1" @bind="year" /></label>
+            </div>
+            <div class="location-field">
+                <span class="field-label">Current location</span>
+                <div class="location-current">@(LocationLabel(locationSectorId, locationHex) ?? "No world selected")</div>
+                <div class="location-actions">
+                    <input class="form-control" type="search" placeholder="Search worlds by name" aria-label="Search for current location" value="@locationSearch" @oninput="SearchLocations" />
+                    <button type="button" class="btn btn-outline-secondary" @onclick="UseSelectedWorld" disabled="@(WorldState.World is null)">Use selected world</button>
+                    @if (locationSectorId is not null) { <button type="button" class="btn btn-outline-secondary" @onclick="ClearLocation">Clear</button> }
+                </div>
+                @if (locationResults.Count > 0)
+                {
+                    <ul class="location-results">
+                        @foreach (var item in locationResults)
+                        {
+                            <li><button type="button" @onclick="() => SetLocation(item)">@item.SystemName · @item.SectorName @item.SectorHex</button></li>
+                        }
+                    </ul>
+                }
+                else if (locationSearch.Trim().Length >= ISearchService.MinimumTermLength) { <p class="location-hint">No matching worlds.</p> }
+            </div>
+            @if (error is not null) { <p class="dialog-error" role="alert">@error</p> }
+            @if (confirmDelete)
+            {
+                <div class="delete-confirm"><span>Delete this campaign?</span><button type="button" class="btn btn-danger" @onclick="Delete" disabled="@busy">Delete campaign</button><button type="button" class="btn btn-outline-secondary" @onclick="() => confirmDelete = false">Keep</button></div>
+            }
+            <div class="dialog-actions">
+                @if (editingId != 0 && !confirmDelete) { <button type="button" class="btn btn-outline-danger delete-button" @onclick="() => confirmDelete = true" disabled="@busy">Delete</button> }
+                <button type="button" class="btn btn-outline-secondary" @onclick="Close" disabled="@busy">Cancel</button>
+                <button type="button" class="btn btn-primary" @onclick="Save" disabled="@busy">Save</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<Campaign> campaigns = [];
+    private Campaign? active => campaigns.FirstOrDefault(c => c.IsActive);
+    private bool busy, dialogOpen, confirmDelete;
+    private string? error;
+    private int selectKey, editingId, day = 1, year = 1105;
+    private string name = "", locationSearch = "";
+    private int? locationSectorId;
+    private string? locationHex;
+    private IReadOnlyList<SearchResult> locationResults = [];
+
+    protected override async Task OnInitializedAsync() => await Reload();
+    private async Task Reload() { try { campaigns = await Campaigns.ListAsync(); error = null; } catch (Exception) { error = "Unable to load campaigns."; } }
+    private async Task ChangeCampaign(ChangeEventArgs args)
+    {
+        selectKey++;
+        var value = args.Value?.ToString();
+        if (value == "add") { Open(null); return; }
+        if (!int.TryParse(value, out var id)) return;
+        busy = true;
+        try { await Campaigns.ActivateAsync(id); await Reload(); }
+        catch (Exception) { error = "Unable to switch campaigns."; }
+        finally { busy = false; }
+    }
+    private void Edit() { if (active is { } current) Open(current); }
+    private async Task AdjustDate(int days)
+    {
+        if (busy || active is not { } current) return;
+        busy = true;
+        try { await Campaigns.AdjustDateAsync(current.Id, days); await Reload(); }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to update the campaign date."; }
+        finally { busy = false; }
+    }
+    private void Open(Campaign? campaign)
+    {
+        editingId = campaign?.Id ?? 0; name = campaign?.Name ?? ""; day = campaign?.Day ?? 1; year = campaign?.Year ?? 1105;
+        locationSectorId = campaign?.LocationSectorId; locationHex = campaign?.LocationHex;
+        locationSearch = ""; locationResults = []; confirmDelete = false; error = null; dialogOpen = true;
+    }
+    private void Close() { dialogOpen = false; error = null; }
+    private string? LocationLabel(int? sectorId, string? hex)
+    {
+        if (sectorId is null || hex is null) return null;
+        var data = Data.Catalogue;
+        if (!data.SectorsById.TryGetValue(sectorId.Value, out var sector)) return $"Sector {sectorId} · {hex}";
+        return data.SystemsByHex.TryGetValue((sector.Milieu, sector.X, sector.Y, hex), out var system)
+            ? $"{system.MainWorld.Name} · {sector.Name} {hex}" : $"{sector.Name} {hex}";
+    }
+    private async Task SearchLocations(ChangeEventArgs args)
+    {
+        locationSearch = args.Value?.ToString() ?? "";
+        var query = locationSearch;
+        var results = await Search.SearchAsync(query);
+        if (query == locationSearch) locationResults = results.Where(r => r.SystemId != 0).ToArray();
+    }
+    private void SetLocation(SearchResult item) { locationSectorId = item.SectorId; locationHex = item.SectorHex; locationSearch = ""; locationResults = []; }
+    private void ClearLocation() { locationSectorId = null; locationHex = null; }
+    private void UseSelectedWorld() { if (WorldState.World is { } world) { locationSectorId = world.SectorId; locationHex = world.Hex; locationSearch = ""; locationResults = []; } }
+    private async Task Save()
+    {
+        busy = true;
+        try { await Campaigns.SaveAsync(new Campaign(editingId, name, day, year, locationSectorId, locationHex, false)); await Reload(); dialogOpen = false; }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to save campaign."; }
+        finally { busy = false; }
+    }
+    private async Task Delete()
+    {
+        busy = true;
+        try { await Campaigns.DeleteAsync(editingId); await Reload(); dialogOpen = false; }
+        catch (Exception) { error = "Unable to delete campaign."; }
+        finally { busy = false; }
+    }
+}

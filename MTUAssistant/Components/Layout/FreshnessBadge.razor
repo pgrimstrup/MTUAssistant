@@ -1,0 +1,7 @@
+@{ var status = CampaignDates.Status(TargetDay, Campaign); }
+<span class="freshness @status.Style" title="@(TargetDay is long day ? $"Target date: {CampaignDates.Format(day)}" : "No target date recorded")">@status.Text</span>
+
+@code {
+    [Parameter] public long? TargetDay { get; set; }
+    [Parameter] public Campaign? Campaign { get; set; }
+}
