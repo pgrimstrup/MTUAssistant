@@ -2,10 +2,21 @@ using MTU.Core;
 
 namespace MTUAssistant.Services;
 
-public enum TileRefreshStatus { Idle, Running, Completed, Cancelled, Faulted }
+public enum TileRefreshStatus
+{
+    Idle,
+    Running,
+    Completed,
+    Cancelled,
+    Faulted,
+}
 
 /// <summary>Per-circuit view model that runs the tile refresh and exposes progress to the UI.</summary>
-public class TileRefreshService(TileRefreshWorker worker, SystemDataProvider dataProvider)
+public class TileRefreshService(
+    TileRefreshWorker worker,
+    SystemDataProvider dataProvider,
+    SectorDataService sectorData
+)
 {
     private CancellationTokenSource? _cts;
 
@@ -36,11 +47,15 @@ public class TileRefreshService(TileRefreshWorker worker, SystemDataProvider dat
 
         try
         {
-            await worker.RunAsync(new SynchronousProgress<TileRefreshProgress>(p =>
-            {
-                Progress = p;
-                Changed?.Invoke();
-            }), cancellationToken: _cts.Token);
+            await worker.RunAsync(
+                new SynchronousProgress<TileRefreshProgress>(p =>
+                {
+                    Progress = p;
+                    Changed?.Invoke();
+                }),
+                cancellationToken: _cts.Token
+            );
+            await sectorData.RecordCompletedRefreshAsync(DateTime.UtcNow);
             Status = TileRefreshStatus.Completed;
         }
         catch (OperationCanceledException)
@@ -55,7 +70,10 @@ public class TileRefreshService(TileRefreshWorker worker, SystemDataProvider dat
         finally
         {
             // Even cancellation or a failed sector may follow successful commits.
-            try { await dataProvider.ReloadAsync(); }
+            try
+            {
+                await dataProvider.ReloadAsync();
+            }
             catch (Exception ex)
             {
                 Error = $"{Error} Unable to reload the in-memory catalogue: {ex.Message}".Trim();

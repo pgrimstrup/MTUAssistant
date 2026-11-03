@@ -1,0 +1,153 @@
+@page "/sector-data"
+@implements IAsyncDisposable
+@using MTUAssistant.Services
+@inject SectorDataService SectorStore
+@inject TileRefreshService Refresh
+@inject IJSRuntime JS
+
+<PageTitle>Sector Data</PageTitle>
+<div class="sector-data-page">
+    <header class="page-header">
+        <h1>Sector Data</h1>
+        @if (statistics is { } loaded)
+        {
+            <span class="refresh-badge" title="@(localRefreshTime ?? "Last completed sector data refresh")">
+                @if (loaded.LastRefreshUtc is { } utc) { <time datetime="@utc.ToString("O")">Last Refresh: @(localRefreshDate ?? "…")</time> }
+                else { <text>Last Refresh: Not recorded</text> }
+            </span>
+        }
+    </header>
+    <p class="intro">Sector data currently loaded in the database.</p>
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    @if (loading && statistics is null) { <p>Loading statistics…</p> }
+    @if (statistics is { } summary)
+    {
+        <dl class="statistics" aria-label="Loaded sector data statistics">
+            <div><dt>Sectors</dt><dd>@summary.Sectors.ToString("N0")</dd></div>
+            <div><dt>Sector names</dt><dd>@summary.SectorNames.ToString("N0")</dd></div>
+            <div><dt>Subsectors</dt><dd>@summary.Subsectors.ToString("N0")</dd></div>
+            <div><dt>Systems</dt><dd>@summary.Systems.ToString("N0")</dd></div>
+            <div><dt>Allegiances</dt><dd>@summary.Allegiances.ToString("N0")</dd></div>
+            <div><dt>Borders</dt><dd>@summary.Borders.ToString("N0")</dd></div>
+            <div><dt>Routes</dt><dd>@summary.Routes.ToString("N0")</dd></div>
+        </dl>
+        @if (summary.Sectors == 0) { <p class="intro">No sector data has been loaded yet.</p> }
+        else { <p class="intro">Loaded milieus: @string.Join(", ", summary.Milieus)</p> }
+    }
+    @if (statistics is { } populationData)
+    {
+        <section class="population-section" aria-labelledby="population-heading">
+            <header class="population-header">
+                <h2 id="population-heading">Population of Charted Space</h2>
+                @if (populationData.PopulationByMilieu.Count > 1)
+                {
+                    <label>Milieu <select class="form-select" @bind="populationMilieu">
+                        @foreach (var milieu in populationData.PopulationByMilieu) { <option value="@milieu.Milieu">@milieu.Milieu</option> }
+                    </select></label>
+                }
+                else if (Population is { } onlyMilieu) { <span class="intro">@onlyMilieu.Milieu</span> }
+            </header>
+            @if (Population is { } population)
+            {
+                <dl class="population-total"><dt>Total population of charted space</dt><dd>@population.TotalPopulation.ToString("N0")</dd></dl>
+                <p class="intro">Known main-world population in loaded @population.Milieu sectors. @population.KnownSystems.ToString("N0") systems counted; @population.UnknownSystems.ToString("N0") with unknown population excluded.</p>
+                <h3>Top 10 populations by major polity</h3>
+                @if (population.TopPolities.Count == 0) { <p class="intro">No known population data is loaded for this milieu.</p> }
+                else
+                {
+                    <div class="population-table-wrap"><table class="table population-table" aria-label="Top ten major polity populations and Others">
+                        <thead><tr><th scope="col">Polity</th><th scope="col">Population</th><th scope="col">Share</th></tr></thead>
+                        <tbody>
+                        @foreach (var polity in population.TopPolities.Append(population.Others))
+                        {
+                            <tr class="@(ReferenceEquals(polity, population.Others) ? "others-row" : null)">
+                                <th scope="row">@polity.Name @if (ReferenceEquals(polity, population.Others)) { <span class="polity-code">@population.OtherPolityCount.ToString("N0") other major @(population.OtherPolityCount == 1 ? "polity" : "polities")</span> } @if (!string.IsNullOrEmpty(polity.Code) && polity.Name != polity.Code) { <span class="polity-code">@polity.Code</span> }</th>
+                                <td>@polity.Population.ToString("N0")</td>
+                                <td class="population-share"><span>@polity.SharePercent.ToString("0.00")%</span><div class="share-track" aria-hidden="true"><div style="width:@(polity.SharePercent.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture))%"></div></div></td>
+                            </tr>
+                        }
+                        </tbody>
+                        <tfoot><tr><th scope="row">Total</th><td>@population.TotalPopulation.ToString("N0")</td><td>@(population.TotalPopulation > 0 ? "100.00%" : "0.00%")</td></tr></tfoot>
+                    </table></div>
+                }
+                <p class="population-note">Population uses the <a href="https://travellermap.com/doc/secondsurvey#population-exponent" target="_blank" rel="noopener noreferrer">Second Survey UWP and PBG formula</a>. Major polities are grouped by the first two letters of allegiance codes (for example, all Im* codes are Third Imperium); other system bodies are not included.</p>
+            }
+            else { <p class="intro">No sector population data has been loaded yet.</p> }
+        </section>
+    }
+    <footer class="refresh-actions">
+        <p class="intro">Refresh sector systems and metadata from Traveller Map. Statistics update when the refresh finishes.</p>
+        <button type="button" class="btn btn-primary" @onclick="Refresh.StartAsync" disabled="@loading">@(Refresh.Status == TileRefreshStatus.Running ? "Show Refresh Progress" : "Refresh Sector Data Now")</button>
+    </footer>
+</div>
+
+@code {
+    private SectorDataStatistics? statistics;
+    private string populationMilieu = "";
+    private MilieuPopulationStatistics? Population => statistics?.PopulationByMilieu.FirstOrDefault(p => p.Milieu == populationMilieu);
+    private bool loading = true, wasRunning, disposed;
+    private int loadVersion;
+    private string? error, localRefreshDate, localRefreshTime;
+    private DateTime? formattedRefresh;
+    private IJSObjectReference? module;
+    private readonly CancellationTokenSource cancellation = new();
+    protected override async Task OnInitializedAsync()
+    {
+        wasRunning = Refresh.Status == TileRefreshStatus.Running;
+        Refresh.Changed += RefreshChanged;
+        await LoadStatistics();
+    }
+    private async Task LoadStatistics()
+    {
+        var request = ++loadVersion;
+        loading = true;
+        try
+        {
+            var loaded = await SectorStore.GetStatisticsAsync(cancellation.Token);
+            if (disposed || request != loadVersion) return;
+            if (loaded.LastRefreshUtc != statistics?.LastRefreshUtc) { localRefreshDate = localRefreshTime = null; formattedRefresh = null; }
+            statistics = loaded;
+            if (!loaded.PopulationByMilieu.Any(p => p.Milieu == populationMilieu)) populationMilieu = loaded.PopulationByMilieu.FirstOrDefault(p => p.Milieu == TileRefreshWorker.Milieu)?.Milieu ?? loaded.PopulationByMilieu.FirstOrDefault()?.Milieu ?? "";
+            error = null;
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        catch (Exception) { if (!disposed && request == loadVersion) error = "Unable to load sector data statistics."; }
+        finally { if (!disposed && request == loadVersion) loading = false; }
+    }
+    private void RefreshChanged() => _ = InvokeAsync(async () =>
+    {
+        if (disposed) return;
+        var running = Refresh.Status == TileRefreshStatus.Running;
+        var finished = wasRunning && !running;
+        wasRunning = running;
+        if (finished) await LoadStatistics();
+        if (!disposed) StateHasChanged();
+    });
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (disposed || statistics?.LastRefreshUtc is not { } utc || formattedRefresh == utc) return;
+        formattedRefresh = utc;
+        try
+        {
+            module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/SectorData.js");
+            var labels = await module.InvokeAsync<Dictionary<string, string>>("formatRefresh", utc.ToString("O"));
+            if (disposed || statistics?.LastRefreshUtc != utc) return;
+            localRefreshDate = labels["date"];
+            localRefreshTime = labels["tooltip"];
+            StateHasChanged();
+        }
+        catch (JSDisconnectedException) { }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        Refresh.Changed -= RefreshChanged;
+        cancellation.Cancel();
+        cancellation.Dispose();
+        if (module is not null)
+        {
+            try { await module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+    }
+}

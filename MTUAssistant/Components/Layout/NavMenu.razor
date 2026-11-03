@@ -1,5 +1,5 @@
 @using MTUAssistant.Services
-@inject TileRefreshService Refresh
+
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
@@ -41,9 +41,9 @@
         </div>
 
         <div class="nav-item px-3">
-            <button type="button" class="nav-link" @onclick="Refresh.StartAsync">
+            <NavLink class="nav-link" href="sector-data">
                 <span class="bi bi-arrow-repeat-nav-menu" aria-hidden="true"></span> Refresh Sector Data
-            </button>
+            </NavLink>
         </div>
     </nav>
 </div>

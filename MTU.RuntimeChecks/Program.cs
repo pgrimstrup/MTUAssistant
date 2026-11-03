@@ -14,6 +14,181 @@ static void Check(bool condition, string message)
 }
 
 Check(
+    SectorPopulation.WorldPopulation("A788899-C", "703") == 700_000_000m,
+    "Population uses PBG multiplier and UWP exponent"
+);
+Check(
+    SectorPopulation.WorldPopulation("A000000-0", "000") == 0
+        && SectorPopulation.WorldPopulation("A000800-0", "000") == 100_000_000m,
+    "Zero population and legacy zero multiplier are handled correctly"
+);
+Check(
+    SectorPopulation.WorldPopulation("A000?00-0", "703") is null
+        && SectorPopulation.WorldPopulation("A000800-0", "?03") is null
+        && SectorPopulation.WorldPopulation("A000800-0", "") is null
+        && SectorPopulation.WorldPopulation("malformed", "703") is null,
+    "Unknown population fields are excluded instead of guessed"
+);
+var populationFixtureWorlds = new List<PopulationWorld>();
+var populationFixtureAllegiances = new List<PopulationAllegiance>();
+for (var i = 1; i <= 12; i++)
+{
+    populationFixtureWorlds.Add(
+        new("M1105", 1, "A000600-0", "0123456789ABC"[i] + "00", $"{(char)('A' + i - 1)}a01")
+    );
+    populationFixtureAllegiances.Add(
+        new("M1105", 1, $"{(char)('A' + i - 1)}a01", $"Polity {i:00}")
+    );
+}
+populationFixtureWorlds.Add(new("M1105", 2, "A000600-0", "200", "la99"));
+populationFixtureWorlds.Add(new("M1105", 1, "A000000-0", "000", "ZER0"));
+populationFixtureWorlds.Add(new("M1105", 1, "A000?00-0", "703", "Aa01"));
+populationFixtureWorlds.Add(new("M1120", 3, "A000900-0", "900", "La01"));
+var populationFixture = SectorPopulation.Calculate(
+    ["M1105", "M1120"],
+    populationFixtureWorlds,
+    populationFixtureAllegiances
+);
+var presentPopulation = populationFixture.Single(p => p.Milieu == "M1105");
+Check(
+    presentPopulation.TotalPopulation == 80_000_000m
+        && presentPopulation.KnownSystems == 14
+        && presentPopulation.UnknownSystems == 1,
+    "Population totals separate milieus and count unknown worlds"
+);
+Check(
+    presentPopulation.TopPolities.Count == 10
+        && presentPopulation.TopPolities[0]
+            is { Code: "La", Name: "Polity 12", Population: 14_000_000m }
+        && presentPopulation.Others.Population == 3_000_000m
+        && presentPopulation.OtherPolityCount == 3
+        && presentPopulation.TopPolities.Sum(p => p.Population)
+            + presentPopulation.Others.Population
+            == presentPopulation.TotalPopulation,
+    "Top ten and Others reconcile with total; repeated polity codes aggregate across sectors"
+);
+Check(
+    Math.Abs(
+        presentPopulation.TopPolities.Sum(p => p.SharePercent)
+            + presentPopulation.Others.SharePercent
+            - 100
+    ) < 0.00001m,
+    "Population shares reconcile with total"
+);
+Check(
+    populationFixture.Single(p => p.Milieu == "M1120").TotalPopulation == 9_000_000_000m,
+    "Other eras are not double-counted"
+);
+var legacyPolities = SectorPopulation
+    .Calculate(
+        ["M1105"],
+        [new("M1105", 1, "A000100-0", "100", "XX"), new("M1105", 2, "A000100-0", "100", "XX")],
+        [new("M1105", 1, "XX", "State A"), new("M1105", 2, "XX", "State B")]
+    )
+    .Single();
+Check(
+    legacyPolities.TopPolities.Count == 1
+        && legacyPolities.TopPolities[0] is { Code: "Xx", Population: 20 },
+    "Matching two-letter prefixes aggregate even when recorded allegiance names differ"
+);
+var imperialPopulation = SectorPopulation
+    .Calculate(
+        ["M1105"],
+        [
+            new("M1105", 1, "A000600-0", "300", "ImDd"),
+            new("M1105", 2, "A000600-0", "200", "imDa"),
+            new("M1105", 3, "A000600-0", "100", "Im"),
+        ],
+        [
+            new("M1105", 1, "ImDd", "Third Imperium, Domain of Deneb"),
+            new("M1105", 2, "ImDa", "Third Imperium, Domain of Antares"),
+        ]
+    )
+    .Single();
+Check(
+    imperialPopulation.TopPolities.Single()
+        is { Code: "Im", Name: "Third Imperium", Population: 6_000_000m, SharePercent: 100 }
+        && imperialPopulation.Others.Population == 0
+        && imperialPopulation.OtherPolityCount == 0,
+    "All Im allegiance variants and the legacy Im code sum into Third Imperium"
+);
+var namedMajorPolity = SectorPopulation
+    .Calculate(
+        ["M1105"],
+        [new("M1105", 1, "A000600-0", "100", "As01"), new("M1105", 2, "A000600-0", "100", "As02")],
+        [
+            new("M1105", 1, "As", "Aslan Hierate"),
+            new("M1105", 1, "As01", "Clan One"),
+            new("M1105", 2, "As02", "Clan Two"),
+        ]
+    )
+    .Single();
+Check(
+    namedMajorPolity.TopPolities.Single()
+        is { Code: "As", Name: "Aslan Hierate", Population: 2_000_000m },
+    "Major polity names prefer two-letter metadata rather than a constituent allegiance"
+);
+var fallbackPolities = SectorPopulation
+    .Calculate(
+        ["M1105"],
+        [
+            new("M1105", 1, "A000100-0", "100", "NaHu"),
+            new("M1105", 2, "A000100-0", "100", "naAs"),
+            new("M1105", 1, "A000100-0", "100", "JuPr"),
+        ],
+        [new("M1105", 1, "NaHu", "Independent Humans")]
+    )
+    .Single();
+Check(
+    fallbackPolities.TopPolities.Single(p => p.Code == "Na")
+        is { Name: "Non-aligned or Independent", Population: 20 }
+        && fallbackPolities.TopPolities.Single(p => p.Code == "Ju").Name == "Vassalry Judiciate",
+    "Na and Ju use the supplied major polity fallback names"
+);
+var explicitPolityName = SectorPopulation
+    .Calculate(
+        ["M1105"],
+        [new("M1105", 1, "A000100-0", "100", "NaHu")],
+        [new("M1105", 1, "Na", "Custom Independent Polity")]
+    )
+    .Single();
+Check(
+    explicitPolityName.TopPolities.Single().Name == "Custom Independent Polity",
+    "Explicit major polity metadata retains precedence over fallback names"
+);
+var oneOtherPolity = SectorPopulation
+    .Calculate(["M1105"], populationFixtureWorlds.Take(11), populationFixtureAllegiances)
+    .Single();
+Check(
+    oneOtherPolity.OtherPolityCount == 1 && oneOtherPolity.Others.Population == 1_000_000m,
+    "Others count reflects the number of groups outside the top ten"
+);
+Check(
+    SectorPopulation.Calculate(["M1105"], [], []).Single().OtherPolityCount == 0,
+    "Empty population statistics have zero other polities"
+);
+var unspecifiedPopulation = SectorPopulation
+    .Calculate(["M1105"], [new("M1105", 1, "A000100-0", "100", "????")], [])
+    .Single();
+Check(
+    unspecifiedPopulation.TotalPopulation == 10
+        && unspecifiedPopulation.TopPolities.Single().Name == "Unspecified polity",
+    "Missing allegiance does not discard known population"
+);
+var hugePopulation = SectorPopulation
+    .Calculate(
+        ["M1105"],
+        Enumerable
+            .Range(0, 2000)
+            .Select(_ => new PopulationWorld("M1105", 1, "A000F00-0", "900", "MEGA")),
+        []
+    )
+    .Single();
+Check(
+    hugePopulation.TotalPopulation == 18_000_000_000_000_000_000m,
+    "Population aggregation avoids 64-bit integer overflow"
+);
+Check(
     PassengerTraffic.DiceFor(1) == 0
         && PassengerTraffic.DiceFor(2) == 1
         && PassengerTraffic.DiceFor(6) == 2
@@ -921,8 +1096,27 @@ using (var emptyConnection = new SqliteConnection("Data Source=:memory:"))
     var emptyServices = new ServiceCollection();
     emptyServices.AddDbContext<MtuDbContext>(options => options.UseSqlite(emptyConnection));
     emptyServices.AddMtuCatalogue();
+    emptyServices.AddScoped<SectorDataService>();
     using var emptyProvider = emptyServices.BuildServiceProvider();
     await emptyProvider.GetRequiredService<SystemDataProvider>().InitializeAsync();
+    var emptySectorStats = await emptyProvider
+        .GetRequiredService<SectorDataService>()
+        .GetStatisticsAsync();
+    Check(
+        emptySectorStats
+            is {
+                Sectors: 0,
+                SectorNames: 0,
+                Subsectors: 0,
+                Systems: 0,
+                Allegiances: 0,
+                Borders: 0,
+                Routes: 0,
+                LastRefreshUtc: null
+            }
+            && emptySectorStats.Milieus.Count == 0,
+        "Sector data statistics handle an empty database without inventing a refresh date"
+    );
     var overview = await emptyProvider.GetRequiredService<MapDataService>().GetOverviewAsync();
     Check(
         overview.Sectors.Count == 0 && overview.Columns > 0 && overview.Rows > 0,
@@ -2004,9 +2198,93 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     var reloadServices = new ServiceCollection();
     reloadServices.AddDbContext<MtuDbContext>(o => o.UseSqlite(importConnection));
     reloadServices.AddMtuCatalogue();
+    reloadServices.AddScoped<SectorDataService>();
     using var reloadContainer = reloadServices.BuildServiceProvider();
     var reloadProvider = reloadContainer.GetRequiredService<SystemDataProvider>();
     await reloadProvider.InitializeAsync();
+    var sectorData = reloadContainer.GetRequiredService<SectorDataService>();
+    var importedStats = await sectorData.GetStatisticsAsync();
+    Check(
+        importedStats
+            is {
+                Sectors: 1,
+                SectorNames: 1,
+                Subsectors: 1,
+                Systems: 1,
+                Allegiances: 1,
+                Borders: 1,
+                Routes: 1,
+                LastRefreshUtc: null
+            }
+            && importedStats.Milieus.SequenceEqual(new[] { "M1105" }),
+        "Sector data statistics count all imported metadata and systems"
+    );
+    await db.Systems.ExecuteUpdateAsync(setters =>
+        setters
+            .SetProperty(s => s.Uwp, "A000800-0")
+            .SetProperty(s => s.Pbg, "500")
+            .SetProperty(s => s.A, "SwCf")
+    );
+    var persistedPopulation = (await sectorData.GetStatisticsAsync()).PopulationByMilieu.Single();
+    Check(
+        persistedPopulation.TotalPopulation == 500_000_000m
+            && persistedPopulation.TopPolities.Single().Name == "Sword Worlds"
+            && persistedPopulation.UnknownSystems == 0,
+        "Sector statistics calculate population from persisted UWP/PBG and sector allegiance metadata"
+    );
+    var recordedTime = new DateTime(2026, 11, 2, 11, 30, 0, DateTimeKind.Utc);
+    await sectorData.RecordCompletedRefreshAsync(recordedTime);
+    await using (var statisticsScope = reloadContainer.CreateAsyncScope())
+    {
+        var persistedStats = await statisticsScope
+            .ServiceProvider.GetRequiredService<SectorDataService>()
+            .GetStatisticsAsync();
+        Check(
+            persistedStats.LastRefreshUtc == recordedTime
+                && persistedStats.LastRefreshUtc.Value.Kind == DateTimeKind.Utc,
+            "Refresh timestamp persists across scopes with UTC restored"
+        );
+    }
+    await sectorData.RecordCompletedRefreshAsync(recordedTime.AddHours(1));
+    Check(
+        await db.SectorRefreshState.CountAsync() == 1
+            && (await sectorData.GetStatisticsAsync()).LastRefreshUtc == recordedTime.AddHours(1),
+        "New refresh overwrites singleton timestamp"
+    );
+    var refreshService = new MTUAssistant.Services.TileRefreshService(
+        worker,
+        reloadProvider,
+        sectorData
+    );
+    var refreshStarted = DateTime.UtcNow;
+    await refreshService.StartAsync();
+    var refreshedStats = await sectorData.GetStatisticsAsync();
+    Check(
+        refreshService.Status == MTUAssistant.Services.TileRefreshStatus.Completed
+            && refreshedStats.LastRefreshUtc >= refreshStarted
+            && refreshedStats.LastRefreshUtc <= DateTime.UtcNow
+            && refreshedStats.Systems == 1,
+        "Original refresh action records actual completion time and leaves updated statistics available"
+    );
+    mock.CancelAtStart = true;
+    await refreshService.StartAsync();
+    Check(
+        refreshService.Status == MTUAssistant.Services.TileRefreshStatus.Cancelled
+            && (await sectorData.GetStatisticsAsync()).LastRefreshUtc
+                == refreshedStats.LastRefreshUtc,
+        "Cancelled refresh retains last completed timestamp"
+    );
+    mock.CancelAtStart = false;
+    mock.FailSectorList = true;
+    await refreshService.StartAsync();
+    Check(
+        refreshService.Status == MTUAssistant.Services.TileRefreshStatus.Faulted
+            && (await sectorData.GetStatisticsAsync()).LastRefreshUtc
+                == refreshedStats.LastRefreshUtc,
+        "Failed refresh retains last completed timestamp"
+    );
+    mock.FailSectorList = false;
+    db.ChangeTracker.Clear();
     var campaignService = new CampaignService(db);
     await campaignService.SaveAsync(new Campaign(0, "First Campaign", 1, 1105, id, "1910", false));
     var firstCampaign = (await campaignService.ListAsync()).Single();
@@ -2952,9 +3230,17 @@ sealed class RefreshClient(SectorSummary sector) : ITravellerMapClient
 {
     public int Version = 1;
     public bool FailMetadata;
+    public bool CancelAtStart,
+        FailSectorList;
 
-    public Task<IReadOnlyList<SectorSummary>> GetSectorsAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<SectorSummary>>([sector]);
+    public Task<IReadOnlyList<SectorSummary>> GetSectorsAsync(CancellationToken ct = default)
+    {
+        if (CancelAtStart)
+            throw new OperationCanceledException();
+        if (FailSectorList)
+            throw new IOException("Sector list failed");
+        return Task.FromResult<IReadOnlyList<SectorSummary>>([sector]);
+    }
 
     public Task<SectorData> GetSectorDataAsync(string name, CancellationToken ct = default) =>
         Task.FromResult(

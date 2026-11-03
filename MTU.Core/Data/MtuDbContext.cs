@@ -18,6 +18,7 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
     public DbSet<EquipmentItem> Equipment => Set<EquipmentItem>();
     public DbSet<TravellerEquipmentEntity> TravellerEquipment => Set<TravellerEquipmentEntity>();
     public DbSet<TravellerSkillEntity> TravellerSkills => Set<TravellerSkillEntity>();
+    public DbSet<SectorRefreshState> SectorRefreshState => Set<SectorRefreshState>();
     public DbSet<SectorEntity> Sectors => Set<SectorEntity>();
     public DbSet<SectorNameEntity> SectorNames => Set<SectorNameEntity>();
     public DbSet<SubsectorEntity> Subsectors => Set<SubsectorEntity>();

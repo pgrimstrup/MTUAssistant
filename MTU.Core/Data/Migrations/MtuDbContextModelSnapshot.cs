@@ -454,6 +454,20 @@ namespace MTU.Core.Data.Migrations
             );
 
             modelBuilder.Entity(
+                "MTU.Core.SectorRefreshState",
+                b =>
+                {
+                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("LastRefreshUtc").HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SectorRefreshState");
+                }
+            );
+
+            modelBuilder.Entity(
                 "MTU.Core.Data.AllegianceEntity",
                 b =>
                 {
