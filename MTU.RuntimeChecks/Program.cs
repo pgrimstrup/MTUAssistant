@@ -1508,6 +1508,460 @@ using (var termsConnection = new SqliteConnection("Data Source=:memory:"))
     );
 }
 
+// Migrate numeric text ranges to REAL without losing item details or assignments.
+using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
+{
+    await rangeConnection.OpenAsync();
+    var rangeOptions = new DbContextOptionsBuilder<MtuDbContext>()
+        .UseSqlite(rangeConnection)
+        .Options;
+    await using var rangeDb = new MtuDbContext(rangeOptions);
+    var rangeMigrator = rangeDb.GetService<IMigrator>();
+    await rangeMigrator.MigrateAsync("20261102214045_Equipment");
+    await rangeDb.Database.ExecuteSqlRawAsync(
+        """
+        INSERT INTO Campaigns (Id, Name, Day, Year, IsActive) VALUES (1, 'Range migration', 1, 1105, 1);
+        INSERT INTO Travellers (Id, CampaignId, PlayerName, TravellerName, Race, Upp, TermsServed, HighestNavalRank, HighestScoutRank, NaturalDr, Inactive)
+            VALUES (1, 1, '', 'Test Traveller', '', '777777', '0', 0, 0, 0, 0);
+        INSERT INTO Equipment (Id, Kind, Name, Protection, Tl, Rad, Kg, Cost, RequiredSkill, Range, Damage, Magazine, MagCost, Traits, Notes)
+            VALUES (1, 1, 'Test rifle', 0, 7, 0, '4.5', '500', '', '150.5', '3D', '20', '10', 'Auto 2', 'Keep these notes'),
+                   (2, 0, 'Test armour', 8, 10, 5, '2.5', '100', 'Vacc Suit 0', '', '', '', '0', '', 'Keep armour notes');
+        INSERT INTO TravellerEquipment (TravellerId, EquipmentId) VALUES (1, 1), (1, 2);
+        """
+    );
+    await rangeMigrator.MigrateAsync();
+    var migratedEquipment = await new EquipmentService(rangeDb).ListForTravellerAsync(1, 1);
+    Check(
+        migratedEquipment.Count == 2
+            && migratedEquipment.Single(e => e.Id == 1)
+                is { Range: 150.5, Damage: "3D", Magazine: "20", Notes: "Keep these notes" }
+            && migratedEquipment.Single(e => e.Id == 2)
+                is { Range: 0, Protection: 8, Notes: "Keep armour notes" },
+        "Range migration preserves fractional numeric ranges, armour and Traveller assignments"
+    );
+    Check(
+        await rangeDb
+            .Database.SqlQueryRaw<string>(
+                "SELECT type AS Value FROM pragma_table_info('Equipment') WHERE name = 'Range'"
+            )
+            .SingleAsync() == "REAL",
+        "Range column has numeric SQLite affinity"
+    );
+    var variantStore = new EquipmentService(rangeDb);
+    var highTechArmour = await variantStore.SaveAsync(
+        new EquipmentItem
+        {
+            Name = "Test armour",
+            Kind = EquipmentKind.Armour,
+            Tl = 12,
+        }
+    );
+    var lowTechArmour = await variantStore.SaveAsync(
+        new EquipmentItem
+        {
+            Name = "Test armour",
+            Kind = EquipmentKind.Armour,
+            Tl = 9,
+        }
+    );
+    await variantStore.SaveAsync(
+        new EquipmentItem
+        {
+            Name = "A suit",
+            Kind = EquipmentKind.Armour,
+            Tl = 13,
+        }
+    );
+    await variantStore.SaveAsync(
+        new EquipmentItem
+        {
+            Name = "Test armour",
+            Kind = EquipmentKind.Weapon,
+            Tl = 10,
+        }
+    );
+    Check(
+        (await variantStore.ListAsync())
+            .Where(e => e.Kind == EquipmentKind.Armour)
+            .Select(e => (e.Name, e.Tl))
+            .SequenceEqual(
+                new[]
+                {
+                    ("A suit", 13),
+                    ("Test armour", 9),
+                    ("Test armour", 10),
+                    ("Test armour", 12),
+                }
+            ),
+        "Equipment catalogue sorts Name then TL and allows TL variants"
+    );
+    await variantStore.AddToTravellerAsync(1, 1, highTechArmour.Id);
+    await variantStore.AddToTravellerAsync(1, 1, lowTechArmour.Id);
+    Check(
+        (await variantStore.ListForTravellerAsync(1, 1))
+            .Where(e => e.Kind == EquipmentKind.Armour)
+            .Select(e => e.Tl)
+            .SequenceEqual(new[] { 9, 10, 12 }),
+        "Traveller equipment table sorts same-name TL variants"
+    );
+    Check(
+        (await new TravellerService(rangeDb).ListAsync(1))
+            .Single()
+            .Equipment!.Where(e => e.Kind == EquipmentKind.Armour)
+            .Select(e => e.Tl)
+            .SequenceEqual(new[] { 9, 10, 12 }),
+        "Traveller summaries use Name then TL order"
+    );
+    try
+    {
+        await variantStore.SaveAsync(
+            new EquipmentItem
+            {
+                Name = "Test armour",
+                Kind = EquipmentKind.Armour,
+                Tl = 10,
+            }
+        );
+        throw new Exception("Duplicate equipment variant accepted");
+    }
+    catch (ArgumentException) { }
+    var duplicateEdit = highTechArmour.Copy();
+    duplicateEdit.Tl = 10;
+    try
+    {
+        await variantStore.SaveAsync(duplicateEdit);
+        throw new Exception("Duplicate variant edit accepted");
+    }
+    catch (ArgumentException) { }
+    Check(
+        (await variantStore.ListAsync()).Single(e => e.Id == highTechArmour.Id).Tl == 12,
+        "Rejected duplicate edit preserves existing variant"
+    );
+    await variantStore.SaveAsync(highTechArmour);
+    try
+    {
+        await rangeDb.Database.ExecuteSqlRawAsync(
+            """
+            INSERT INTO Equipment (Kind, Name, Protection, Tl, Rad, Kg, Cost, RequiredSkill, Range, Damage, Magazine, MagCost, Traits, Notes)
+            SELECT Kind, Name, Protection, Tl, Rad, Kg, Cost, RequiredSkill, Range, Damage, Magazine, MagCost, Traits, Notes FROM Equipment WHERE Id = 2;
+            """
+        );
+        throw new Exception("Database accepted duplicate equipment variant");
+    }
+    catch (SqliteException ex) when (ex.SqliteErrorCode == 19) { }
+    Check(
+        migratedEquipment.All(e =>
+            e.ProtectionL is null
+            && e.ProtectionE is null
+            && e.ProtectionP is null
+            && e.ProtectionK is null
+        ),
+        "Existing equipment defaults optional protections to null during migration"
+    );
+    var damageArmour = highTechArmour.Copy();
+    damageArmour.Protection = 8;
+    damageArmour.ProtectionL = 2;
+    damageArmour.ProtectionE = 4;
+    damageArmour.ProtectionP = 0;
+    damageArmour.ProtectionK = 6;
+    await variantStore.SaveAsync(damageArmour);
+    await using (var reopenedProtectionDb = new MtuDbContext(rangeOptions))
+    {
+        var restored = (
+            await new EquipmentService(reopenedProtectionDb).ListForTravellerAsync(1, 1)
+        ).Single(e => e.Id == highTechArmour.Id);
+        Check(
+            restored
+                is {
+                    Protection: 8,
+                    ProtectionL: 2,
+                    ProtectionE: 4,
+                    ProtectionP: 0,
+                    ProtectionK: 6
+                },
+            "All optional armour protections persist including explicit zero"
+        );
+        Check(
+            restored.FormatProtection()
+                == "+8, +2 vs Lasers, +4 vs Energy, +0 vs Psionics, +6 vs Kinetic",
+            "Armour protection display includes base and supplied damage-specific values"
+        );
+    }
+    damageArmour.ProtectionL =
+        damageArmour.ProtectionE =
+        damageArmour.ProtectionP =
+        damageArmour.ProtectionK =
+            null;
+    await variantStore.SaveAsync(damageArmour);
+    await using (var reopenedProtectionDb = new MtuDbContext(rangeOptions))
+    {
+        var cleared = (await new EquipmentService(reopenedProtectionDb).ListAsync()).Single(e =>
+            e.Id == highTechArmour.Id
+        );
+        Check(
+            cleared.ProtectionL is null
+                && cleared.ProtectionE is null
+                && cleared.ProtectionP is null
+                && cleared.ProtectionK is null
+                && cleared.FormatProtection() == "+8",
+            "Optional protections can be cleared and omitted from display"
+        );
+    }
+    Check(new EquipmentItem().FormatProtection() == "+0", "Zero base protection keeps plus prefix");
+    foreach (
+        var field in new[]
+        {
+            nameof(EquipmentItem.ProtectionL),
+            nameof(EquipmentItem.ProtectionE),
+            nameof(EquipmentItem.ProtectionP),
+            nameof(EquipmentItem.ProtectionK),
+        }
+    )
+    {
+        var invalidProtection = damageArmour.Copy();
+        typeof(EquipmentItem).GetProperty(field)!.SetValue(invalidProtection, -1);
+        try
+        {
+            await variantStore.SaveAsync(invalidProtection);
+            throw new Exception("Negative optional protection accepted");
+        }
+        catch (ArgumentException) { }
+    }
+    var weaponWithProtection = new EquipmentItem
+    {
+        Kind = EquipmentKind.Weapon,
+        Name = "Weapon ignores armour fields",
+        ProtectionL = 2,
+        ProtectionE = 4,
+        ProtectionP = 0,
+        ProtectionK = 6,
+    };
+    var cleanWeapon = await variantStore.SaveAsync(weaponWithProtection);
+    Check(
+        cleanWeapon.ProtectionL is null
+            && cleanWeapon.ProtectionE is null
+            && cleanWeapon.ProtectionP is null
+            && cleanWeapon.ProtectionK is null,
+        "Weapon saves clear armour-only protection fields"
+    );
+    var defaultLoadout = await variantStore.ListDetailsForTravellerAsync(1, 1);
+    Check(
+        defaultLoadout.All(e =>
+            e.Quantity == 1
+            && !e.Scope
+            && !e.TargetingSystem
+            && !e.LaserSight
+            && !e.HolographicSight
+            && !e.Fof
+            && !e.Phud
+            && !e.SmartTracker
+        ),
+        "Migration gives existing equipped items quantity one and no attachments"
+    );
+    Check(
+        defaultLoadout.All(e => !e.Equipped),
+        "Existing equipment migrates to unchecked worn/equipped status"
+    );
+    var configuredRifle = defaultLoadout.Single(e => e.Equipment.Id == 1).Copy();
+    configuredRifle.Quantity = 3;
+    configuredRifle.Equipped = true;
+    configuredRifle.Scope =
+        configuredRifle.TargetingSystem =
+        configuredRifle.LaserSight =
+        configuredRifle.HolographicSight =
+        configuredRifle.Fof =
+        configuredRifle.Phud =
+        configuredRifle.SmartTracker =
+            true;
+    await variantStore.SaveTravellerDetailsAsync(1, 1, configuredRifle);
+    await using (var reopenedOptionsDb = new MtuDbContext(rangeOptions))
+    {
+        var restored = (
+            await new EquipmentService(reopenedOptionsDb).ListDetailsForTravellerAsync(1, 1)
+        ).Single(e => e.Equipment.Id == 1);
+        Check(
+            restored.Quantity == 3
+                && restored.Scope
+                && restored.TargetingSystem
+                && restored.LaserSight
+                && restored.HolographicSight
+                && restored.Fof
+                && restored.Phud
+                && restored.SmartTracker
+                && restored.IntelligentWeapon,
+            "All equipped item options and quantity persist; Smart Tracker implies Intelligent Weapon"
+        );
+        Check(
+            restored.AttachmentSummary
+                == "Scope, Targeting System, Laser Sight, Holographic Sight, FOF, PHUD, Smart Tracker (Intelligent Weapon)"
+                && restored.Equipment.Traits == "Auto 2",
+            "Attachment summary is brief and preserves catalogue traits"
+        );
+    }
+    await variantStore.SetEquippedAsync(1, 1, 1, false);
+    await using (var reopenedEquippedDb = new MtuDbContext(rangeOptions))
+    {
+        var unequipped = (
+            await new EquipmentService(reopenedEquippedDb).ListDetailsForTravellerAsync(1, 1)
+        ).Single(e => e.Equipment.Id == 1);
+        Check(
+            !unequipped.Equipped
+                && unequipped.Quantity == 3
+                && unequipped.Scope
+                && unequipped.SmartTracker,
+            "Unequipping persists without changing quantity or attachments"
+        );
+    }
+    await variantStore.SetEquippedAsync(1, 1, 1, true);
+    await variantStore.SetEquippedAsync(1, 1, 2, true);
+    var stillEquipped = (await variantStore.ListDetailsForTravellerAsync(1, 1))
+        .Single(e => e.Equipment.Id == 1)
+        .Copy();
+    await variantStore.SaveTravellerDetailsAsync(1, 1, stillEquipped);
+    await using (var reopenedEquippedDb = new MtuDbContext(rangeOptions))
+    {
+        var equipped = await new EquipmentService(reopenedEquippedDb).ListDetailsForTravellerAsync(
+            1,
+            1
+        );
+        Check(
+            equipped.Single(e => e.Equipment.Id == 1).Equipped
+                && equipped.Single(e => e.Equipment.Id == 2).Equipped,
+            "Worn armour and equipped weapon flags persist; options edits preserve status"
+        );
+    }
+    try
+    {
+        await variantStore.SetEquippedAsync(int.MaxValue, 1, 1, false);
+        throw new Exception("Cross-campaign equipped update accepted");
+    }
+    catch (ArgumentException) { }
+    try
+    {
+        await variantStore.SetEquippedAsync(1, 1, int.MaxValue, true);
+        throw new Exception("Missing equipment equipped update accepted");
+    }
+    catch (ArgumentException) { }
+    var optionsTravellers = new TravellerService(rangeDb);
+    await optionsTravellers.SaveAsync(
+        new Traveller(0, 1, "", "Options Other", "", "777777", "0", 0, 0, 0)
+    );
+    var optionsOther = (await optionsTravellers.ListAsync(1)).Single(t =>
+        t.TravellerName == "Options Other"
+    );
+    await variantStore.AddToTravellerAsync(
+        1,
+        optionsOther.Id,
+        new TravellerEquipmentDetails
+        {
+            Equipment = configuredRifle.Equipment,
+            Quantity = 2,
+            Scope = true,
+        }
+    );
+    var otherLoadout = (
+        await variantStore.ListDetailsForTravellerAsync(1, optionsOther.Id)
+    ).Single();
+    Check(
+        otherLoadout.Quantity == 2
+            && !otherLoadout.Equipped
+            && otherLoadout.AttachmentSummary == "Scope"
+            && !otherLoadout.IntelligentWeapon
+            && (await variantStore.ListDetailsForTravellerAsync(1, 1))
+                .Single(e => e.Equipment.Id == 1)
+                .Quantity == 3,
+        "Quantity and attachments are independent per Traveller"
+    );
+    var cancelledOptions = otherLoadout.Copy();
+    cancelledOptions.Quantity = 99;
+    cancelledOptions.SmartTracker = true;
+    Check(
+        (await variantStore.ListDetailsForTravellerAsync(1, optionsOther.Id)).Single().Quantity == 2
+            && !otherLoadout.SmartTracker,
+        "Editing a copy does not save changes before confirmation"
+    );
+    foreach (var quantity in new[] { 0, -1 })
+    {
+        var invalidQuantity = otherLoadout.Copy();
+        invalidQuantity.Quantity = quantity;
+        try
+        {
+            await variantStore.SaveTravellerDetailsAsync(1, optionsOther.Id, invalidQuantity);
+            throw new Exception("Invalid equipped quantity accepted");
+        }
+        catch (ArgumentException) { }
+    }
+    try
+    {
+        await variantStore.SaveTravellerDetailsAsync(int.MaxValue, 1, configuredRifle);
+        throw new Exception("Cross-campaign options edit accepted");
+    }
+    catch (ArgumentException) { }
+    var melee = await variantStore.SaveAsync(
+        new EquipmentItem
+        {
+            Name = "Melee test",
+            Kind = EquipmentKind.Weapon,
+            Range = 0,
+            Damage = "1D",
+        }
+    );
+    try
+    {
+        await variantStore.AddToTravellerAsync(
+            1,
+            1,
+            new TravellerEquipmentDetails { Equipment = melee, Scope = true }
+        );
+        throw new Exception("Melee attachments accepted");
+    }
+    catch (ArgumentException) { }
+    Check(
+        !(await variantStore.ListForTravellerAsync(1, 1)).Any(e => e.Id == melee.Id),
+        "Invalid equipped options do not add an assignment"
+    );
+    await variantStore.AddToTravellerAsync(
+        1,
+        1,
+        new TravellerEquipmentDetails { Equipment = melee, Quantity = 4 }
+    );
+    Check(
+        (await variantStore.ListDetailsForTravellerAsync(1, 1)).Single(e =>
+            e.Equipment.Id == melee.Id
+        )
+            is {
+                Quantity: 4,
+                SupportsAttachments: false,
+                AttachmentSummary: "",
+                IntelligentWeapon: false
+            },
+        "Melee weapons support quantity without attachment options"
+    );
+    var forgedArmour = new EquipmentItem
+    {
+        Id = 2,
+        Kind = EquipmentKind.Weapon,
+        Range = 100,
+    };
+    try
+    {
+        await variantStore.SaveTravellerDetailsAsync(
+            1,
+            1,
+            new TravellerEquipmentDetails { Equipment = forgedArmour, LaserSight = true }
+        );
+        throw new Exception("Armour attachments accepted via forged category");
+    }
+    catch (ArgumentException) { }
+    otherLoadout.Scope = false;
+    await variantStore.SaveTravellerDetailsAsync(1, optionsOther.Id, otherLoadout);
+    Check(
+        (await variantStore.ListDetailsForTravellerAsync(1, optionsOther.Id)).Single()
+            is { Quantity: 2, AttachmentSummary: "", Scope: false },
+        "Attachment options can be cleared"
+    );
+}
+
 // Upgrade an existing database, then prove repeated refresh replaces metadata atomically.
 using (var importConnection = new SqliteConnection("Data Source=:memory:"))
 {
@@ -1924,8 +2378,184 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
         new Traveller(0, secondCampaign.Id, "P", "Other", "", "", "0", 0, 0, 0)
     );
     var otherTraveller = (await travellerService.ListAsync(secondCampaign.Id)).Single();
+    var equipmentStore = new EquipmentService(db);
+    var armour = await equipmentStore.SaveAsync(
+        new EquipmentItem
+        {
+            Kind = EquipmentKind.Armour,
+            Name = " Cloth ",
+            Protection = 8,
+            Tl = 10,
+            Rad = 5,
+            Kg = 2.5m,
+            Cost = 500.5m,
+            RequiredSkill = "Vacc Suit 0",
+            Notes = "First line\nSecond line",
+        }
+    );
+    var weapon = await equipmentStore.SaveAsync(
+        new EquipmentItem
+        {
+            Kind = EquipmentKind.Weapon,
+            Name = "Rifle",
+            Tl = 7,
+            Range = 100,
+            Damage = "3D",
+            Kg = 4.25m,
+            Cost = 200,
+            Magazine = "20",
+            MagCost = 10.5m,
+            Traits = "Auto 2",
+            Notes = "Test weapon",
+        }
+    );
+    Check(
+        armour.Summary == "Cloth (8)" && weapon.Summary == "Rifle (100m, 3D)",
+        "Equipment summary formats"
+    );
+    var fractionalRangeWeapon = weapon.Copy();
+    fractionalRangeWeapon.Range = 1.5;
+    Check(
+        fractionalRangeWeapon.Summary == "Rifle (1.5m, 3D)",
+        "Numeric weapon range retains fractional metres in compact summaries"
+    );
+    foreach (var invalidRange in new[] { -1d, double.NaN, double.PositiveInfinity })
+    {
+        try
+        {
+            await equipmentStore.SaveAsync(
+                new EquipmentItem
+                {
+                    Name = "Invalid range",
+                    Kind = EquipmentKind.Weapon,
+                    Range = invalidRange,
+                }
+            );
+            throw new Exception("Invalid range accepted");
+        }
+        catch (ArgumentException) { }
+    }
+    await equipmentStore.AddToTravellerAsync(firstCampaign.Id, traveller.Id, armour.Id);
+    await equipmentStore.AddToTravellerAsync(firstCampaign.Id, traveller.Id, weapon.Id);
+    await equipmentStore.AddToTravellerAsync(secondCampaign.Id, otherTraveller.Id, armour.Id);
+    await using (var reopened = new MtuDbContext(options))
+    {
+        var restored = (await new EquipmentService(reopened).ListAsync());
+        Check(
+            restored.Single(e => e.Id == armour.Id)
+                is {
+                    Name: "Cloth",
+                    Protection: 8,
+                    Tl: 10,
+                    Rad: 5,
+                    Kg: 2.5m,
+                    Cost: 500.5m,
+                    RequiredSkill: "Vacc Suit 0",
+                    Notes: "First line\nSecond line"
+                },
+            "All armour attributes persist"
+        );
+        Check(
+            restored.Single(e => e.Id == weapon.Id)
+                is {
+                    Tl: 7,
+                    Range: 100,
+                    Damage: "3D",
+                    Kg: 4.25m,
+                    Cost: 200,
+                    Magazine: "20",
+                    MagCost: 10.5m,
+                    Traits: "Auto 2",
+                    Notes: "Test weapon"
+                },
+            "All weapon attributes persist"
+        );
+        Check(
+            (await new TravellerService(reopened).ListAsync(firstCampaign.Id))
+                .Single()
+                .Equipment!.Count == 2,
+            "Traveller list contains persisted equipment"
+        );
+        Check(
+            (
+                await new EquipmentService(reopened).ListForTravellerAsync(
+                    secondCampaign.Id,
+                    otherTraveller.Id
+                )
+            ).Count == 1,
+            "Equipment assignments isolated by Traveller"
+        );
+    }
+    try
+    {
+        await equipmentStore.AddToTravellerAsync(firstCampaign.Id, traveller.Id, armour.Id);
+        throw new Exception("Duplicate equipment accepted");
+    }
+    catch (ArgumentException) { }
+    try
+    {
+        await equipmentStore.AddToTravellerAsync(secondCampaign.Id, traveller.Id, weapon.Id);
+        throw new Exception("Cross-campaign equipment add accepted");
+    }
+    catch (ArgumentException) { }
+    try
+    {
+        await equipmentStore.RemoveFromTravellerAsync(secondCampaign.Id, traveller.Id, armour.Id);
+        throw new Exception("Cross-campaign equipment removal accepted");
+    }
+    catch (ArgumentException) { }
+    try
+    {
+        await equipmentStore.SaveAsync(new EquipmentItem { Name = "" });
+        throw new Exception("Blank equipment name accepted");
+    }
+    catch (ArgumentException) { }
+    try
+    {
+        await equipmentStore.SaveAsync(new EquipmentItem { Name = "Invalid", Kg = -1 });
+        throw new Exception("Negative weight accepted");
+    }
+    catch (ArgumentException) { }
+    try
+    {
+        await equipmentStore.AddToTravellerAsync(firstCampaign.Id, traveller.Id, int.MaxValue);
+        throw new Exception("Missing equipment accepted");
+    }
+    catch (ArgumentException) { }
+    var revisedArmour = armour.Copy();
+    revisedArmour.Protection = 10;
+    revisedArmour.Notes = "Updated notes";
+    await equipmentStore.SaveAsync(revisedArmour);
+    Check(
+        (await equipmentStore.ListForTravellerAsync(firstCampaign.Id, traveller.Id))
+            .Single(e => e.Id == armour.Id)
+            .Protection == 10
+            && (await equipmentStore.ListForTravellerAsync(secondCampaign.Id, otherTraveller.Id))
+                .Single()
+                .Notes == "Updated notes",
+        "Catalogue edits update all assigned Travellers"
+    );
+    await equipmentStore.RemoveFromTravellerAsync(firstCampaign.Id, traveller.Id, weapon.Id);
+    Check(
+        (await equipmentStore.ListAsync()).Any(e => e.Id == weapon.Id)
+            && (await equipmentStore.ListForTravellerAsync(firstCampaign.Id, traveller.Id)).Count
+                == 1,
+        "Traveller removal preserves catalogue item"
+    );
+    await equipmentStore.AddToTravellerAsync(firstCampaign.Id, traveller.Id, weapon.Id);
+    await equipmentStore.DeleteAsync(weapon.Id);
+    Check(
+        !await db.TravellerEquipment.AnyAsync(e => e.EquipmentId == weapon.Id),
+        "Deleting equipment cascades its assignments"
+    );
+
     await travellerService.DeleteAsync(secondCampaign.Id, otherTraveller.Id);
     Check((await travellerService.ListAsync(secondCampaign.Id)).Count == 0, "Traveller deletion");
+    Check(
+        !await db.TravellerEquipment.AnyAsync(e => e.TravellerId == otherTraveller.Id)
+            && (await equipmentStore.ListAsync()).Count == 1,
+        "Deleting Traveller preserves catalogue and removes assignment"
+    );
     await campaignService.DeleteAsync(firstCampaign.Id);
     Check(
         (await campaignService.ListAsync()).Single() is { Name: "Second Campaign", IsActive: true },
@@ -1938,6 +2568,10 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     Check(
         !await db.TravellerSkills.AnyAsync(s => s.TravellerId == traveller.Id),
         "Deleting a campaign cascades to Traveller skills"
+    );
+    Check(
+        !await db.TravellerEquipment.AnyAsync() && (await equipmentStore.ListAsync()).Count == 1,
+        "Deleting campaign cascades equipment assignments and preserves catalogue"
     );
     await campaignService.DeleteAsync((await campaignService.ListAsync()).Single().Id);
     Check(

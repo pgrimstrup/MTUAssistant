@@ -1,0 +1,84 @@
+@implements IAsyncDisposable
+@inject EquipmentService EquipmentStore
+@inject IJSRuntime JS
+
+<dialog @ref="dialog" class="options-dialog" aria-labelledby="equipment-options-heading">
+    <form @onsubmit="Save" @onsubmit:preventDefault>
+        <h2 id="equipment-options-heading">@(Adding ? "Equip" : "Equipment options") · @Item.Equipment.Name (TL @Item.Equipment.Tl)</h2>
+        <p class="hint">@Traveller.TravellerName</p>
+        @if (error is not null) { <p class="error" role="alert">@error</p> }
+        <label class="quantity-label">Quantity <input class="form-control" type="number" min="1" step="1" required @bind="model.Quantity" disabled="@busy" /></label>
+        @if (model.SupportsAttachments)
+        {
+            <fieldset disabled="@busy">
+                <legend>Attached options</legend>
+                <div class="options-grid">
+                    <label><input type="checkbox" @bind="model.Scope" /> Scope</label>
+                    <label><input type="checkbox" @bind="model.TargetingSystem" /> Targeting System</label>
+                    <label><input type="checkbox" @bind="model.LaserSight" /> Laser Sight</label>
+                    <label><input type="checkbox" @bind="model.HolographicSight" /> Holographic Sight</label>
+                    <label><input type="checkbox" @bind="model.Fof" /> Friend-or-Foe (FOF)</label>
+                    <label><input type="checkbox" @bind="model.Phud" /> Personal Heads-up Display (PHUD)</label>
+                    <label><input type="checkbox" @bind="model.SmartTracker" /> Smart Tracker</label>
+                </div>
+                <p class="hint">Smart Tracker includes Intelligent Weapon.</p>
+            </fieldset>
+        }
+        else { <p class="hint">Attachments are available for non-melee weapons only.</p> }
+        <div class="actions">
+            <button type="button" class="btn btn-outline-secondary" @onclick="Cancel" disabled="@busy">Cancel</button>
+            <button type="submit" class="btn btn-primary" disabled="@busy">@(Adding ? "Equip" : "Save")</button>
+        </div>
+    </form>
+</dialog>
+
+@code {
+    [Parameter, EditorRequired] public Traveller Traveller { get; set; } = default!;
+    [Parameter, EditorRequired] public TravellerEquipmentDetails Item { get; set; } = default!;
+    [Parameter] public bool Adding { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    private TravellerEquipmentDetails model = new();
+    private ElementReference dialog;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<TravellerEquipmentDialog>? reference;
+    private bool busy;
+    private string? error;
+    protected override void OnInitialized()
+    {
+        model = Item.Copy();
+        if (!model.SupportsAttachments)
+            model.Scope = model.TargetingSystem = model.LaserSight = model.HolographicSight = model.Fof = model.Phud = model.SmartTracker = false;
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/EquipmentDialog.js");
+        reference = DotNetObjectReference.Create(this);
+        await module.InvokeVoidAsync("open", dialog, reference);
+    }
+    [JSInvokable] public async Task Cancel() { if (!busy) await OnClose.InvokeAsync(); }
+    private async Task Save()
+    {
+        if (busy) return;
+        busy = true;
+        try
+        {
+            if (Adding) await EquipmentStore.AddToTravellerAsync(Traveller.CampaignId, Traveller.Id, model);
+            else await EquipmentStore.SaveTravellerDetailsAsync(Traveller.CampaignId, Traveller.Id, model);
+            await OnSaved.InvokeAsync();
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to save equipment options."; }
+        finally { busy = false; }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (module is not null)
+        {
+            try { await module.InvokeVoidAsync("close", dialog); await module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+        reference?.Dispose();
+    }
+}

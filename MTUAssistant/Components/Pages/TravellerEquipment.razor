@@ -1,0 +1,140 @@
+@inject EquipmentService EquipmentStore
+
+<section class="equipment-panel" aria-labelledby="traveller-equipment-heading">
+    <div class="equipment-heading"><div class="traveller-identity">
+        @if (TravellerToken.DataUri(Traveller.TokenImage) is { } token) { <img class="header-token" src="@token" alt="@($"{Traveller.TravellerName} token")" /> }
+        <h2 id="traveller-equipment-heading">@Traveller.TravellerName · Equipment</h2></div><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="OnClose">Close</button></div>
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    @if (loading) { <p>Loading equipment…</p> }
+    else
+    {
+        @foreach (var kind in new[] { EquipmentKind.Armour, EquipmentKind.Weapon })
+        {
+            <section class="equipment-section">
+                <h3>@(kind == EquipmentKind.Armour ? "Armour" : "Weapons")</h3>
+                @if (!equipment.Any(e => e.Equipment.Kind == kind))
+                {
+                    <p class="empty-message">No @(kind == EquipmentKind.Armour ? "armour" : "weapons") recorded.</p>
+                }
+                else
+                {
+                    <div class="equipment-list"><table class="table equipment-table" aria-label="@(kind == EquipmentKind.Armour ? "Traveller armour" : "Traveller weapons")">
+                        <thead><tr><th scope="col" class="equipped-cell"><span class="visually-hidden">Worn or equipped</span></th><th scope="col">Name</th><th scope="col">Quantity</th>
+                            @if (kind == EquipmentKind.Armour) { <th scope="col" class="wrap-cell">Protection</th><th scope="col">TL</th><th scope="col">Rad</th><th scope="col">Kg</th><th scope="col">Cost</th><th scope="col" class="wrap-cell">Required Skill</th> }
+                            else { <th scope="col">TL</th><th scope="col">Range</th><th scope="col">Damage</th><th scope="col">Kg</th><th scope="col">Cost</th><th scope="col">Magazine</th><th scope="col">Mag Cost</th><th scope="col" class="wrap-cell traits-cell">Traits</th> }
+                            <th scope="col"><span class="visually-hidden">Actions</span></th>
+                        </tr></thead>
+                        <tbody>@foreach (var entry in equipment.Where(e => e.Equipment.Kind == kind))
+                        {
+                            var item = entry.Equipment;
+                            <tr @key="item.Id"><td class="equipped-cell"><input class="equipped-checkbox" type="checkbox" @bind:get="entry.Equipped" @bind:set="value => SetEquipped(entry, value)" disabled="@busy" aria-label="@($"{(kind == EquipmentKind.Armour ? "Wear" : "Equip")} {item.Name}")" title="@(kind == EquipmentKind.Armour ? "Worn" : "Equipped")" /></td><th scope="row">@item.Name</th><td>@entry.Quantity</td>
+                                @if (kind == EquipmentKind.Armour) { <td class="wrap-cell">@item.FormatProtection()</td><td>@item.Tl</td><td>@item.Rad</td><td>@item.Kg.ToString("0.##")</td><td>Cr @item.Cost.ToString("N0")</td><td class="wrap-cell">@item.RequiredSkill</td> }
+                                else { <td>@item.Tl</td><td>@(item.Range == 0 ? "Melee" : $"{item.Range} m")</td><td>@item.Damage</td><td>@item.Kg.ToString("0.##")</td><td>Cr @item.Cost.ToString("N0")</td><td>@item.Magazine</td><td>Cr @item.MagCost.ToString("N0")</td><td class="wrap-cell traits-cell">@item.Traits@if (!string.IsNullOrEmpty(entry.AttachmentSummary)) { <span class="attachment-summary">@entry.AttachmentSummary</span> }</td> }
+                                <td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Options(entry)" disabled="@busy">Options</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(item)" disabled="@busy">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => Remove(item)" disabled="@busy">Remove</button></td>
+                            </tr>
+                        }</tbody>
+                    </table></div>
+                }
+            </section>
+        }
+    }
+    <div class="equipment-controls">
+        <label>Equipment <select class="form-select" @bind="selectedId" disabled="@(busy || loading)">
+            <option value="0">Select equipment</option>
+            @foreach (var kind in new[] { EquipmentKind.Armour, EquipmentKind.Weapon })
+            {
+                <optgroup label="@(kind == EquipmentKind.Armour ? "Armour" : "Weapons")">
+                    @foreach (var item in catalogue.Where(e => e.Kind == kind && !equipment.Any(owned => owned.Equipment.Id == e.Id)))
+                    {
+                        <option value="@item.Id">@item.Name · TL @item.Tl — @(item.Kind == EquipmentKind.Armour ? $"DR {item.Protection:+0;-0;+0}" : $"{(item.Range == 0 ? "Melee" : $"{item.Range}m")}, {item.Damage}")</option>
+                    }
+                </optgroup>
+            }
+        </select></label>
+        <button type="button" class="btn btn-primary" @onclick="Add" disabled="@(busy || loading || selectedId == 0)">Add Equipment</button>
+        <button type="button" class="btn btn-outline-secondary" @onclick="New" disabled="@(busy || loading)">New Equipment</button>
+    </div>
+    @if (detailsEditing is not null) { <TravellerEquipmentDialog @key="detailsEditing" Traveller="Traveller" Item="detailsEditing" Adding="addingDetails" OnSaved="DetailsSaved" OnClose="() => detailsEditing = null" /> }
+    @if (editing is not null) { <EquipmentDialog @key="editing" Item="editing" OnSaved="Saved" OnClose="() => editing = null" /> }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public Traveller Traveller { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    private IReadOnlyList<EquipmentItem> catalogue = [];
+    private IReadOnlyList<TravellerEquipmentDetails> equipment = [];
+    private TravellerEquipmentDetails? detailsEditing;
+    private bool addingDetails;
+    private EquipmentItem? editing;
+    private int selectedId;
+    private bool busy, loading = true;
+    private string? error;
+    protected override async Task OnInitializedAsync() => await Load();
+    private async Task Load()
+    {
+        loading = true;
+        try
+        {
+            catalogue = await EquipmentStore.ListAsync();
+            equipment = await EquipmentStore.ListDetailsForTravellerAsync(Traveller.CampaignId, Traveller.Id);
+            error = null;
+        }
+        catch (Exception) { error = "Unable to load equipment."; }
+        finally { loading = false; }
+    }
+    private async Task SetEquipped(TravellerEquipmentDetails item, bool value)
+    {
+        if (busy) return;
+        busy = true;
+        try
+        {
+            await EquipmentStore.SetEquippedAsync(Traveller.CampaignId, Traveller.Id, item.Equipment.Id, value);
+            item.Equipped = value;
+            error = null;
+            await OnChanged.InvokeAsync();
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to save worn/equipped status."; }
+        finally { busy = false; }
+    }
+    private void New() => editing = new();
+    private void Edit(EquipmentItem item) => editing = item;
+    private async Task Saved(EquipmentItem item)
+    {
+        var isNew = editing?.Id == 0;
+        editing = null;
+        await Load();
+        if (isNew) selectedId = item.Id;
+        await OnChanged.InvokeAsync();
+    }
+    private void Add()
+    {
+        if (busy) return;
+        var item = catalogue.FirstOrDefault(e => e.Id == selectedId);
+        if (item is null) return;
+        addingDetails = true;
+        detailsEditing = new() { Equipment = item };
+    }
+    private void Options(TravellerEquipmentDetails item) { addingDetails = false; detailsEditing = item; }
+    private async Task DetailsSaved()
+    {
+        detailsEditing = null;
+        selectedId = 0;
+        await Load();
+        await OnChanged.InvokeAsync();
+    }
+    private async Task Remove(EquipmentItem item)
+    {
+        if (busy) return;
+        busy = true;
+        try
+        {
+            await EquipmentStore.RemoveFromTravellerAsync(Traveller.CampaignId, Traveller.Id, item.Id);
+            await Load();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception) { error = "Unable to remove this equipment."; }
+        finally { busy = false; }
+    }
+}

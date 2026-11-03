@@ -1,0 +1,26 @@
+.equipment-panel { margin-top:1rem; padding:1.2rem; border:1px solid var(--app-border); border-radius:var(--app-radius); background:var(--app-surface); }
+.equipment-heading { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:1rem; }
+h2 { font-size:1.15rem; margin:0; }
+.equipment-list { overflow-x:auto; }
+.equipment-table { width:100%; font-size:.86rem; }
+.equipment-table th, .equipment-table td { vertical-align:middle; }
+.equipment-table th:not(.wrap-cell):not(.notes), .equipment-table td:not(.wrap-cell):not(.notes) { white-space:nowrap; overflow-wrap:normal; word-break:normal; }
+.row-actions { text-align:right; white-space:nowrap; }
+.equipment-controls { display:flex; flex-wrap:wrap; align-items:end; gap:.7rem; margin-top:1rem; }
+.equipment-controls label { display:grid; gap:.3rem; color:var(--app-muted); font-size:.8rem; }
+.equipment-controls select { min-width:16rem; max-width:100%; }
+.empty-message { color:var(--app-muted); }
+.error { color:#ffaaaa; }
+
+.equipment-section + .equipment-section { margin-top:1.25rem; }
+h3 { font-size:1rem; margin:0 0 .6rem; }
+.attachment-summary { display:block; color:var(--app-muted); font-size:.85em; font-weight:400; margin-top:.2rem; }
+
+.equipment-table .wrap-cell { white-space:normal; }
+
+.equipment-table .traits-cell { white-space:normal; overflow-wrap:anywhere; word-break:normal; width:18rem; max-width:24rem; }
+.equipment-table .equipped-cell { width:3rem; text-align:center; }
+.equipped-checkbox { width:1.5rem; height:1.5rem; margin:0; vertical-align:middle; cursor:pointer; accent-color:var(--app-accent,#8b6cff); }
+.equipped-checkbox:disabled { cursor:default; }
+.traveller-identity { display:flex; align-items:center; gap:1rem; min-width:0; }
+.header-token { width:5.5rem; height:5.5rem; flex:0 0 auto; object-fit:cover; border-radius:50%; border:1px solid var(--app-border); background:var(--app-surface); }

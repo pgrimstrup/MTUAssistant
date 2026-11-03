@@ -52,3 +52,17 @@ dotnet run --project MTU.RuntimeChecks/MTU.RuntimeChecks.csproj
 node MTUAssistant/Components/Map/MapGeometry.test.mjs
 node MTUAssistant/Components/Map/WorldSelection.test.mjs
 ```
+
+## Equipment
+
+Equipment contains a shared database-backed catalogue of Armour and Weapons. Add, Edit and Delete use the same native modal dialog available from Traveller equipment. Armour and weapon notes appear in a muted Notes column. Range is numeric, nonnegative metres and accepts fractional values; tables display it as `<Range> m`. Damage, magazine, required skill and traits are text fields to allow rulebook notation; weights and credit costs accept decimals.
+
+Open a Traveller's Equipment panel to select catalogue items and add or remove them. New Equipment opens the shared dialog and selects the newly saved item, ready for Add Equipment. Each catalogue item can be assigned once to each Traveller. The Traveller table shows comma-separated summaries: `Name (protection)` for armour and `Name (rangem, damage)` (compact metres in Traveller summaries) for weapons. Editing an assigned item updates the shared catalogue for all Travellers; removing it from a Traveller leaves the catalogue intact. Deleting a catalogue item confirms that it will also remove all assignments. Deleting a Traveller or campaign removes its assignments and preserves the catalogue.
+
+The Equipment migration runs at application startup and retains existing campaigns, Travellers, skills and equipment-independent data. Runtime checks cover field persistence, summary formatting, assignment isolation, duplicate and invalid input handling, shared edits, removal, and cascading deletion.
+
+### Traveller equipment options
+
+Traveller equipment assignments store Quantity (minimum 1) and optional Scope, Targeting System, Laser Sight, Holographic Sight, FOF, PHUD and Smart Tracker flags. Existing assignments migrate to quantity 1 with no attachments. These settings are independent for each Traveller and do not modify the shared catalogue. Add Equipment opens a second dialog before the assignment is saved; Options reopens it for an existing assignment. Cancel leaves the saved assignment unchanged.
+
+Attachments are available only for weapons whose numeric Range is greater than zero; range zero is treated as melee. Smart Tracker implies Intelligent Weapon. Quantity appears in both Traveller equipment tables. Weapon attachment summaries appear in secondary text beneath catalogue Traits, using labels such as `Scope, Laser Sight, PHUD`. Weight and credit columns retain their catalogue values per item.

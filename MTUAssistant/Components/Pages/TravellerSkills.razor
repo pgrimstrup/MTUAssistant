@@ -1,7 +1,9 @@
 @inject TravellerService TravellerStore
 
 <section class="skills-panel" aria-labelledby="skills-heading">
-    <div class="skills-heading"><h2 id="skills-heading">@Traveller.TravellerName · Skills</h2><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="OnClose">Close</button></div>
+    <div class="skills-heading"><div class="traveller-identity">
+        @if (TravellerToken.DataUri(Traveller.TokenImage) is { } token) { <img class="header-token" src="@token" alt="@($"{Traveller.TravellerName} token")" /> }
+        <h2 id="skills-heading">@Traveller.TravellerName · Skills</h2></div><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="OnClose">Close</button></div>
     @if (error is not null) { <p class="error" role="alert">@error</p> }
     @if (skills.Count == 0 && !loading) { <p class="empty-message">No skills recorded.</p> }
     else if (skills.Count > 0)

@@ -177,3 +177,20 @@ public class TravellerSkillEntity
     public string Name { get; set; } = "";
     public int Level { get; set; }
 }
+
+public class TravellerEquipmentEntity
+{
+    public bool Equipped { get; set; }
+    public int Quantity { get; set; } = 1;
+    public bool Scope { get; set; }
+    public bool TargetingSystem { get; set; }
+    public bool LaserSight { get; set; }
+    public bool HolographicSight { get; set; }
+    public bool Fof { get; set; }
+    public bool Phud { get; set; }
+    public bool SmartTracker { get; set; }
+    public int TravellerId { get; set; }
+    public TravellerEntity Traveller { get; set; } = null!;
+    public int EquipmentId { get; set; }
+    public EquipmentItem Equipment { get; set; } = null!;
+}

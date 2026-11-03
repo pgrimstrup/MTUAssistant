@@ -9,7 +9,10 @@ public static class ServiceCollectionExtensions
     public static string ConnectionString(string path) => $"Data Source={path}";
 
     /// <summary>Registers the scoped <see cref="MtuDbContext"/> backed by a SQLite file.</summary>
-    public static IServiceCollection AddMtuDatabase(this IServiceCollection services, string? databasePath = null)
+    public static IServiceCollection AddMtuDatabase(
+        this IServiceCollection services,
+        string? databasePath = null
+    )
     {
         databasePath ??= MtuDbContext.DefaultDatabasePath;
         Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
@@ -19,6 +22,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TradingService>();
         services.AddScoped<CampaignService>();
         services.AddScoped<TravellerService>();
+        services.AddScoped<EquipmentService>();
         services.AddScoped<PassengerMarketService>();
         services.AddScoped<FreightMarketService>();
         services.AddMtuCatalogue();
@@ -41,5 +45,4 @@ public static class ServiceCollectionExtensions
         using var scope = services.CreateScope();
         scope.ServiceProvider.GetRequiredService<MtuDbContext>().Database.Migrate();
     }
-
 }

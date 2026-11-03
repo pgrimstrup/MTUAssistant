@@ -7,10 +7,16 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
     public const string FileName = "mtu.dat";
 
     public static string DefaultDatabasePath { get; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MTU", FileName);
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MTU",
+            FileName
+        );
 
     public DbSet<CampaignEntity> Campaigns => Set<CampaignEntity>();
     public DbSet<TravellerEntity> Travellers => Set<TravellerEntity>();
+    public DbSet<EquipmentItem> Equipment => Set<EquipmentItem>();
+    public DbSet<TravellerEquipmentEntity> TravellerEquipment => Set<TravellerEquipmentEntity>();
     public DbSet<TravellerSkillEntity> TravellerSkills => Set<TravellerSkillEntity>();
     public DbSet<SectorEntity> Sectors => Set<SectorEntity>();
     public DbSet<SectorNameEntity> SectorNames => Set<SectorNameEntity>();
@@ -26,26 +32,118 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
     {
         modelBuilder.Entity<SectorEntity>(e =>
         {
-            e.HasIndex(s => new { s.Milieu, s.X, s.Y }).IsUnique();
+            e.HasIndex(s => new
+                {
+                    s.Milieu,
+                    s.X,
+                    s.Y,
+                })
+                .IsUnique();
             e.HasIndex(s => s.Name);
-            e.HasMany(s => s.Names).WithOne(n => n.Sector).HasForeignKey(n => n.SectorId).OnDelete(DeleteBehavior.Cascade);
-            e.HasMany(s => s.Subsectors).WithOne(n => n.Sector).HasForeignKey(n => n.SectorId).OnDelete(DeleteBehavior.Cascade);
-            e.HasMany(s => s.Allegiances).WithOne(n => n.Sector).HasForeignKey(n => n.SectorId).OnDelete(DeleteBehavior.Cascade);
-            e.HasMany(s => s.Borders).WithOne(n => n.Sector).HasForeignKey(n => n.SectorId).OnDelete(DeleteBehavior.Cascade);
-            e.HasMany(s => s.Routes).WithOne(n => n.Sector).HasForeignKey(n => n.SectorId).OnDelete(DeleteBehavior.Cascade);
-            e.HasMany(s => s.Systems).WithOne(n => n.Sector).HasForeignKey(n => n.SectorId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(s => s.Names)
+                .WithOne(n => n.Sector)
+                .HasForeignKey(n => n.SectorId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(s => s.Subsectors)
+                .WithOne(n => n.Sector)
+                .HasForeignKey(n => n.SectorId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(s => s.Allegiances)
+                .WithOne(n => n.Sector)
+                .HasForeignKey(n => n.SectorId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(s => s.Borders)
+                .WithOne(n => n.Sector)
+                .HasForeignKey(n => n.SectorId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(s => s.Routes)
+                .WithOne(n => n.Sector)
+                .HasForeignKey(n => n.SectorId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(s => s.Systems)
+                .WithOne(n => n.Sector)
+                .HasForeignKey(n => n.SectorId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<TravellerSkillEntity>().HasOne(s => s.Traveller).WithMany().HasForeignKey(s => s.TravellerId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder
+            .Entity<TravellerEquipmentEntity>()
+            .Property(e => e.Quantity)
+            .HasDefaultValue(1);
+        modelBuilder.Entity<EquipmentItem>().Ignore(e => e.Summary);
+        modelBuilder
+            .Entity<EquipmentItem>()
+            .HasIndex(e => new
+            {
+                e.Kind,
+                e.Name,
+                e.Tl,
+            })
+            .IsUnique();
+        modelBuilder
+            .Entity<TravellerEquipmentEntity>()
+            .HasKey(e => new { e.TravellerId, e.EquipmentId });
+        modelBuilder
+            .Entity<TravellerEquipmentEntity>()
+            .HasOne(e => e.Traveller)
+            .WithMany()
+            .HasForeignKey(e => e.TravellerId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder
+            .Entity<TravellerEquipmentEntity>()
+            .HasOne(e => e.Equipment)
+            .WithMany()
+            .HasForeignKey(e => e.EquipmentId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder
+            .Entity<TravellerSkillEntity>()
+            .HasOne(s => s.Traveller)
+            .WithMany()
+            .HasForeignKey(s => s.TravellerId)
+            .OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<TravellerSkillEntity>().Property(s => s.Name).UseCollation("NOCASE");
-        modelBuilder.Entity<TravellerSkillEntity>().HasIndex(s => new { s.TravellerId, s.Name }).IsUnique();
-        modelBuilder.Entity<TravellerEntity>().HasOne(t => t.Campaign).WithMany().HasForeignKey(t => t.CampaignId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder
+            .Entity<TravellerSkillEntity>()
+            .HasIndex(s => new { s.TravellerId, s.Name })
+            .IsUnique();
+        modelBuilder
+            .Entity<TravellerEntity>()
+            .HasOne(t => t.Campaign)
+            .WithMany()
+            .HasForeignKey(t => t.CampaignId)
+            .OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<TravellerEntity>().HasIndex(t => new { t.CampaignId, t.TravellerName });
-        modelBuilder.Entity<CampaignEntity>().HasIndex(c => c.IsActive).IsUnique().HasFilter("\"IsActive\" = 1");
-        modelBuilder.Entity<TradeMarketEntity>().HasIndex(m => new { m.SectorId, m.Hex, m.Mode }).IsUnique();
-        modelBuilder.Entity<TransportMarketEntity>().HasIndex(m => new { m.SectorId, m.Hex, m.Kind }).IsUnique();
-        modelBuilder.Entity<SubsectorEntity>().HasIndex(s => new { s.SectorId, s.Letter }).IsUnique();
-        modelBuilder.Entity<AllegianceEntity>().HasIndex(a => new { a.SectorId, a.Code }).IsUnique();
+        modelBuilder
+            .Entity<CampaignEntity>()
+            .HasIndex(c => c.IsActive)
+            .IsUnique()
+            .HasFilter("\"IsActive\" = 1");
+        modelBuilder
+            .Entity<TradeMarketEntity>()
+            .HasIndex(m => new
+            {
+                m.SectorId,
+                m.Hex,
+                m.Mode,
+            })
+            .IsUnique();
+        modelBuilder
+            .Entity<TransportMarketEntity>()
+            .HasIndex(m => new
+            {
+                m.SectorId,
+                m.Hex,
+                m.Kind,
+            })
+            .IsUnique();
+        modelBuilder
+            .Entity<SubsectorEntity>()
+            .HasIndex(s => new { s.SectorId, s.Letter })
+            .IsUnique();
+        modelBuilder
+            .Entity<AllegianceEntity>()
+            .HasIndex(a => new { a.SectorId, a.Code })
+            .IsUnique();
         modelBuilder.Entity<SystemEntity>(e =>
         {
             e.HasIndex(s => new { s.SectorId, s.Hex }).IsUnique();

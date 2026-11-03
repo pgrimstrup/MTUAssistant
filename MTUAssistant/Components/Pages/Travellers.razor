@@ -43,13 +43,14 @@
         else if (items.Count > 0)
         {
             <div class="table-wrap"><table class="table traveller-table">
-                <thead><tr><th>Token</th><th>Traveller Name</th><th>Race</th><th>UPP</th><th>Terms Served / Age</th><th>Ranks</th><th>Skills</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+                <thead><tr><th>Token</th><th class="nowrap-cell">Traveller Name</th><th class="nowrap-cell">Race</th><th class="nowrap-cell">UPP</th><th>Terms Served / Age</th><th>Ranks</th><th>Skills</th><th>Equipment</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
                 <tbody>@foreach (var item in items)
                 {
-                    <tr class="@(item.Inactive ? "inactive-traveller" : null)"><td>@if (TravellerToken.DataUri(item.TokenImage) is { } token) { <img class="token-thumbnail" src="@token" alt="@($"{item.TravellerName} token")" /> }</td><th scope="row">@item.TravellerName @if (item.Inactive) { <span class="player-name">Inactive</span> } @if (!string.IsNullOrWhiteSpace(item.PlayerName)) { <span class="player-name">@item.PlayerName</span> }</th><td>@item.Race</td><td class="upp">@item.Upp</td><td>@item.TermsServed<span class="player-name">Age: @(TravellerAge.Calculate(item.TermsServed, campaign.Year)?.ToString() ?? "Unknown")</span></td><td>@if (item.HighestNavalRank > 0) { <span>Naval Rank @item.HighestNavalRank</span> } @if (item.HighestNavalRank > 0 && item.HighestScoutRank > 0) { <span> / </span> } @if (item.HighestScoutRank > 0) { <span>Scout Rank @item.HighestScoutRank</span> }</td><td class="skills-summary">@string.Join(", ", (item.Skills ?? []).Select(skill => $"{skill.Name} {skill.Level}"))</td><td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => selectedSkills = item" disabled="@busy">Skills</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(item)" disabled="@busy">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(item)" disabled="@busy">Delete</button></td></tr>
+                    <tr class="@(item.Inactive ? "inactive-traveller" : null)"><td>@if (TravellerToken.DataUri(item.TokenImage) is { } token) { <img class="token-thumbnail" src="@token" alt="@($"{item.TravellerName} token")" /> }</td><th scope="row" class="nowrap-cell">@item.TravellerName @if (item.Inactive) { <span class="player-name">Inactive</span> } @if (!string.IsNullOrWhiteSpace(item.PlayerName)) { <span class="player-name">@item.PlayerName</span> }</th><td class="nowrap-cell">@item.Race</td><td class="upp nowrap-cell">@item.Upp</td><td>@item.TermsServed<span class="player-name">Age: @(TravellerAge.Calculate(item.TermsServed, campaign.Year)?.ToString() ?? "Unknown")</span></td><td>@if (item.HighestNavalRank > 0) { <span>Naval Rank @item.HighestNavalRank</span> } @if (item.HighestNavalRank > 0 && item.HighestScoutRank > 0) { <span> / </span> } @if (item.HighestScoutRank > 0) { <span>Scout Rank @item.HighestScoutRank</span> }</td><td class="skills-summary">@string.Join(", ", (item.Skills ?? []).Select(skill => $"{skill.Name} {skill.Level}"))</td><td class="equipment-summary">@string.Join(", ", (item.Equipment ?? []).Select(e => e.Summary))</td><td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenSkills(item)" disabled="@busy">Skills</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenEquipment(item)" disabled="@busy">Equip</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(item)" disabled="@busy">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(item)" disabled="@busy">Delete</button></td></tr>
                 }</tbody>
             </table></div>
         }
+        @if (selectedEquipment is { } equipped) { <TravellerEquipment @key="equipped.Id" Traveller="equipped" OnChanged="RefreshSkills" OnClose="() => selectedEquipment = null" /> }
         @if (selectedSkills is { } selected) { <TravellerSkills @key="selected.Id" Traveller="selected" OnChanged="RefreshSkills" OnClose="() => selectedSkills = null" /> }
     }
 </div>
@@ -57,7 +58,7 @@
 @code {
     private Campaign? campaign;
     private IReadOnlyList<Traveller> items = [];
-    private Traveller? editing, pendingDelete, selectedSkills;
+    private Traveller? editing, pendingDelete, selectedSkills, selectedEquipment;
     private string playerName = "", travellerName = "", race = "", upp = "";
     private string terms = "0";
     private int naval, scout, naturalDr, tokenInputKey;
@@ -76,7 +77,7 @@
     private async Task SetCampaign(Campaign? value)
     {
         if (campaign?.Id == value?.Id) { campaign = value; return; }
-        campaign = value; editing = null; pendingDelete = null; selectedSkills = null; items = []; error = null;
+        campaign = value; editing = null; pendingDelete = null; selectedSkills = null; selectedEquipment = null; items = []; error = null;
         var request = ++version;
         if (value is null) return;
         try
@@ -96,10 +97,12 @@
         }
         catch (Exception) { error = "Unable to refresh the Traveller list."; }
     }
+    private void OpenSkills(Traveller item) { selectedEquipment = null; selectedSkills = item; }
+    private void OpenEquipment(Traveller item) { selectedSkills = null; selectedEquipment = item; editing = null; pendingDelete = null; }
     private void Add() { if (campaign is { } current) Edit(new Traveller(0, current.Id, "", "", "", "", "0", 0, 0, 0)); }
     private void Edit(Traveller item)
     {
-        editing = item; pendingDelete = null; selectedSkills = null; error = null;
+        editing = item; pendingDelete = null; selectedSkills = null; selectedEquipment = null; error = null;
         playerName = item.PlayerName; travellerName = item.TravellerName; race = item.Race; upp = item.Upp;
         terms = item.TermsServed; naval = item.HighestNavalRank; scout = item.HighestScoutRank; naturalDr = item.NaturalDr;
         tokenImage = item.TokenImage; inactive = item.Inactive; tokenInputKey++;
@@ -126,7 +129,7 @@
         catch (Exception) { error = "Unable to read this image. Please choose it again."; }
         finally { busy = false; }
     }
-    private void ConfirmDelete(Traveller item) { pendingDelete = item; editing = null; selectedSkills = null; error = null; }
+    private void ConfirmDelete(Traveller item) { pendingDelete = item; editing = null; selectedSkills = null; selectedEquipment = null; error = null; }
     private async Task Save()
     {
         if (editing is not { } current || campaign?.Id != current.CampaignId || busy) return;

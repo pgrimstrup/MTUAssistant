@@ -1,0 +1,79 @@
+@page "/equipment"
+@inject EquipmentService EquipmentStore
+
+<PageTitle>Central Supply Catalog (Armour and Weapons)</PageTitle>
+<div class="equipment-page">
+    <header class="page-header"><h1>Central Supply Catalog (Armour and Weapons)</h1></header>
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    @foreach (var kind in new[] { EquipmentKind.Armour, EquipmentKind.Weapon })
+    {
+        var visibleItems = FilteredItems(kind).ToArray();
+        <section class="equipment-section">
+            <header class="section-header">
+                <h2>@(kind == EquipmentKind.Armour ? "Armour" : "Weapons")</h2>
+                <div class="filter-controls">
+                    <label for="equipment-filter-@kind">
+                        <span class="visually-hidden">Search @(kind == EquipmentKind.Armour ? "armour by name or required skill" : "weapons by name, traits or notes")</span>
+                        <input id="equipment-filter-@kind" class="form-control" type="search" placeholder="@(kind == EquipmentKind.Armour ? "Name or required skill" : "Name, traits or notes")" value="@Filter(kind)" @oninput="args => SetFilter(kind, args)" disabled="@loading" />
+                    </label>
+                    <button type="button" class="btn btn-outline-secondary" @onclick="() => ClearFilter(kind)" disabled="@(loading || string.IsNullOrEmpty(Filter(kind)))">Clear</button>
+                    <button type="button" class="btn btn-primary" @onclick="() => Add(kind)" disabled="@loading">Add @(kind == EquipmentKind.Armour ? "Armour" : "Weapon")</button>
+                </div>
+            </header>
+            @if (loading) { <p>Loading equipment…</p> }
+            else if (!items.Any(e => e.Kind == kind)) { <p class="empty-message">No @(kind == EquipmentKind.Armour ? "armour" : "weapons") recorded.</p> }
+            else if (visibleItems.Length == 0) { <p class="empty-message" role="status">No matching @(kind == EquipmentKind.Armour ? "armour" : "weapons").</p> }
+            else
+            {
+                <div class="table-wrap"><table class="table equipment-table">
+                    <thead><tr><th>Name</th>
+                        @if (kind == EquipmentKind.Armour) { <th>Protection</th><th>TL</th><th>Rad</th><th>Kg</th><th>Cost</th><th class="wrap-cell">Required Skill</th> }
+                        else { <th>TL</th><th>Range</th><th>Damage</th><th>Kg</th><th>Cost</th><th>Magazine</th><th>Mag Cost</th><th class="wrap-cell traits-cell">Traits</th> }
+                        <th class="wrap-cell">Notes</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+                    <tbody>@foreach (var item in visibleItems)
+                    {
+                        <tr @key="item.Id"><th scope="row">@item.Name</th>
+                            @if (kind == EquipmentKind.Armour) { <td>@item.FormatProtection()</td><td>@item.Tl</td><td>@item.Rad</td><td>@item.Kg.ToString("0.##")</td><td>Cr @item.Cost.ToString("N0")</td><td class="wrap-cell">@item.RequiredSkill</td> }
+                            else { <td>@item.Tl</td><td>@(item.Range == 0 ? "Melee" : $"{item.Range} m")</td><td>@item.Damage</td><td>@item.Kg.ToString("0.##")</td><td>Cr @item.Cost.ToString("N0")</td><td>@item.Magazine</td><td>Cr @item.MagCost.ToString("N0")</td><td class="wrap-cell traits-cell">@item.Traits</td> }
+                            <td class="notes">@item.Notes</td><td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(item)">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(item)">Delete</button></td>
+                        </tr>
+                    }</tbody>
+                </table></div>
+            }
+        </section>
+    }
+    @if (editing is not null) { <EquipmentDialog @key="editing" Item="editing" Delete="deleting" OnSaved="Saved" OnClose="Close" /> }
+</div>
+
+@code {
+    private IReadOnlyList<EquipmentItem> items = [];
+    private readonly Dictionary<EquipmentKind, string> filters = [];
+    private string Filter(EquipmentKind kind) => filters.GetValueOrDefault(kind, "");
+    private void SetFilter(EquipmentKind kind, ChangeEventArgs args) => filters[kind] = args.Value?.ToString() ?? "";
+    private void ClearFilter(EquipmentKind kind) => filters[kind] = "";
+    private IEnumerable<EquipmentItem> FilteredItems(EquipmentKind kind)
+    {
+        var text = Filter(kind).Trim();
+        return items.Where(e => e.Kind == kind && (text.Length == 0
+            || e.Name.Contains(text, StringComparison.OrdinalIgnoreCase)
+            || (kind == EquipmentKind.Armour
+                ? e.RequiredSkill.Contains(text, StringComparison.OrdinalIgnoreCase)
+                : e.Traits.Contains(text, StringComparison.OrdinalIgnoreCase) || e.Notes.Contains(text, StringComparison.OrdinalIgnoreCase))));
+    }
+    private EquipmentItem? editing;
+    private bool loading = true, deleting;
+    private string? error;
+    protected override async Task OnInitializedAsync() => await Load();
+    private async Task Load()
+    {
+        loading = true;
+        try { items = await EquipmentStore.ListAsync(); error = null; }
+        catch (Exception) { error = "Unable to load equipment."; }
+        finally { loading = false; }
+    }
+    private void Add(EquipmentKind kind) { deleting = false; editing = new() { Kind = kind }; }
+    private void Edit(EquipmentItem item) { deleting = false; editing = item; }
+    private void ConfirmDelete(EquipmentItem item) { deleting = true; editing = item; }
+    private void Close() => editing = null;
+    private async Task Saved(EquipmentItem item) { editing = null; await Load(); }
+}

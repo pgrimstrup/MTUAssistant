@@ -1,0 +1,10 @@
+.equipment-dialog { width:min(44rem,calc(100vw - 2rem)); max-height:90vh; overflow:auto; padding:1.4rem; border:1px solid var(--app-border); border-radius:var(--app-radius); color:var(--app-text); background:var(--app-surface); }
+.equipment-dialog::backdrop { background:rgba(0,0,0,.65); }
+h2 { font-size:1.2rem; margin:0 0 1rem; }
+.fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.8rem; }
+.fields label { display:grid; gap:.3rem; color:var(--app-muted); font-size:.85rem; }
+.wide { grid-column:1 / -1; }
+.actions { display:flex; justify-content:flex-end; gap:.6rem; margin-top:1.2rem; }
+.error { color:#ffaaaa; }
+.hint { color:var(--app-muted); font-size:.85rem; }
+@media(max-width:480px) { .fields { grid-template-columns:minmax(0,1fr); } }

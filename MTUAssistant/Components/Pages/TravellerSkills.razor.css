@@ -12,3 +12,5 @@ h2 { font-size:1.15rem; margin:0; }
 .error { color:#ffaaaa; }
 
 .skill-select { min-width: 12rem; }
+.traveller-identity { display:flex; align-items:center; gap:1rem; min-width:0; }
+.header-token { width:5.5rem; height:5.5rem; flex:0 0 auto; object-fit:cover; border-radius:50%; border:1px solid var(--app-border); background:var(--app-surface); }

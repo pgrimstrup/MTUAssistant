@@ -16,7 +16,8 @@ public sealed record Traveller(
     int NaturalDr,
     byte[]? TokenImage = null,
     IReadOnlyList<TravellerSkill>? Skills = null,
-    bool Inactive = false
+    bool Inactive = false,
+    IReadOnlyList<EquipmentItem>? Equipment = null
 );
 
 public sealed record TravellerSkill(int Id, int TravellerId, string Name, int Level);
@@ -56,7 +57,25 @@ public sealed class TravellerService(MtuDbContext db)
             .Select(s => new TravellerSkill(s.Id, s.TravellerId, s.Name, s.Level))
             .ToArrayAsync();
         var byTraveller = skills.ToLookup(s => s.TravellerId);
-        return travellers.Select(t => t with { Skills = byTraveller[t.Id].ToArray() }).ToArray();
+        var equipment = await db
+            .TravellerEquipment.AsNoTracking()
+            .Where(e => e.Traveller.CampaignId == campaignId)
+            .OrderBy(e => e.Equipment.Kind)
+            .ThenBy(e => e.Equipment.Name)
+            .ThenBy(e => e.Equipment.Tl)
+            .ThenBy(e => e.EquipmentId)
+            .Select(e => new { e.TravellerId, e.Equipment })
+            .ToArrayAsync();
+        var byEquipment = equipment.ToLookup(e => e.TravellerId, e => e.Equipment);
+        return travellers
+            .Select(t =>
+                t with
+                {
+                    Skills = byTraveller[t.Id].ToArray(),
+                    Equipment = byEquipment[t.Id].ToArray(),
+                }
+            )
+            .ToArray();
     }
 
     public async Task<(int Rank, int? SocDm)> MailModifiersAsync(int campaignId)
