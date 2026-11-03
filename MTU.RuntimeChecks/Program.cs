@@ -8,6 +8,7 @@ using MTU.Core.Data;
 using MTU.Core.Models;
 
 await NpcGenerationChecks.RunAsync();
+await SceneChecks.RunAsync();
 
 static void Check(bool condition, string message)
 {

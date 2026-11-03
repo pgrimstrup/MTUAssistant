@@ -22,6 +22,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SectorDataService>();
         services.AddScoped<TradingService>();
         services.AddScoped<CampaignService>();
+        services.AddScoped<SceneService>();
         services.AddScoped<CharacterService>();
         services.AddScoped<NpcService>();
         services.AddScoped<EquipmentService>();

@@ -1,0 +1,142 @@
+@page "/scenes"
+@implements IDisposable
+@inject SceneService ScenesStore
+@inject CampaignService Campaigns
+@inject MTUAssistant.Services.BattlemapState Battlemap
+@inject NavigationManager Navigation
+
+<PageTitle>Scenes</PageTitle>
+<div class="scenes-page">
+    <header><div><h1>Scenes</h1>@if (campaign is not null) { <p>@campaign.Name</p> }</div>
+        @if (campaign is not null) { <button class="btn btn-primary" @onclick="Add" disabled="@busy">Add Scene</button> }
+    </header>
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    @if (campaign is null) { <p>Select a campaign to manage its scenes.</p> }
+    else
+    {
+        @if (editing is not null)
+        {
+            <section class="scene-editor" aria-labelledby="scene-editor-title">
+                <h2 id="scene-editor-title">@(editing.Id == 0 ? "Add Scene" : "Edit Scene")</h2>
+                <div class="scene-fields">
+                    <label>Name <input class="form-control" maxlength="120" @bind="editing.Name" disabled="@busy" /></label>
+                    <label>Grid Size (pixels) <input class="form-control" type="number" min="1" @bind="editing.GridSize" disabled="@busy" /></label>
+                    <label>Grid Colour <input class="form-control form-control-color" type="color" @bind="editing.GridColour" disabled="@busy" /></label>
+                    <label>Grid Opacity (%) <input class="form-control" type="number" min="0" max="100" @bind="editing.GridOpacity" disabled="@busy" /></label>
+                    <label>Gridline Width (pixels) <input class="form-control" type="number" min="0.1" step="0.1" @bind="editing.GridlineWidth" disabled="@busy" /></label>
+                </div>
+                <label class="image-upload">Background image <InputFile @key="fileKey" OnChange="Upload" accept="image/png,image/jpeg,image/gif,image/webp" class="form-control" disabled="@busy" /></label>
+                <p class="muted">PNG, JPEG, GIF or WebP, maximum @SceneService.MaxImageDimension × @SceneService.MaxImageDimension pixels. Each square represents 1.5 m × 1.5 m.</p>
+                @if (uploadName is not null) { <p>@uploadName</p> }
+                else if (editing.Id != 0) { <p class="muted">The existing image will be kept unless you choose a replacement.</p> }
+                <div class="actions"><button class="btn btn-outline-secondary" @onclick="Cancel" disabled="@busy">Cancel</button><button class="btn btn-primary" @onclick="Save" disabled="@busy">Save</button></div>
+            </section>
+        }
+        @if (pendingDelete is { } deleting)
+        {
+            <div class="delete-confirm" role="alert"><span>Delete scene “@deleting.Name”? Its background image will also be deleted.</span>
+                <button class="btn btn-danger" @onclick="Delete" disabled="@busy">Delete Scene</button><button class="btn btn-outline-secondary" @onclick="() => pendingDelete = null" disabled="@busy">Cancel</button></div>
+        }
+        @if (loading) { <p>Loading scenes…</p> }
+        else if (scenes.Count == 0) { <p class="muted">No scenes in this campaign yet.</p> }
+        else
+        {
+            <div class="table-wrap"><table class="table scenes-table"><thead><tr><th>Name</th><th>Grid Size</th><th>Colour</th><th>Opacity</th><th>Line Width</th><th>Image</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+                <tbody>@foreach (var scene in scenes)
+                {
+                    <tr @key="scene.Id"><th scope="row">@scene.Name @if (Battlemap.Current?.Id == scene.Id && Battlemap.Current.CampaignId == scene.CampaignId) { <span class="badge text-bg-success">Open</span> }</th>
+                        <td>@scene.GridSize px</td><td><span class="colour-swatch" style="background:@scene.GridColour"></span> @scene.GridColour</td><td>@scene.GridOpacity%</td><td>@scene.GridlineWidth px</td><td>@((scene.ImageBytes / 1048576d).ToString("0.##")) MB</td>
+                        <td class="row-actions"><button class="btn btn-sm btn-primary" @onclick="() => Open(scene)" disabled="@busy">Open</button> <button class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(scene)" disabled="@busy">Edit</button> <button class="btn btn-sm btn-outline-danger" @onclick="() => pendingDelete = scene" disabled="@busy">Delete</button></td>
+                    </tr>
+                }</tbody>
+            </table></div>
+        }
+    }
+</div>
+
+@code {
+    private Campaign? campaign;
+    private IReadOnlyList<SceneSummary> scenes = [];
+    private SceneInput? editing;
+    private SceneSummary? pendingDelete;
+    private byte[]? image;
+    private string? error, uploadName;
+    private bool busy, loading, disposed;
+    private int fileKey, version;
+    protected override async Task OnInitializedAsync()
+    {
+        Campaigns.Changed += CampaignChanged;
+        try { await SetCampaign((await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive)); }
+        catch (Exception) { error = "Unable to load scenes."; }
+    }
+    private void CampaignChanged(Campaign? value) => _ = InvokeAsync(async () => { await SetCampaign(value); if (!disposed) StateHasChanged(); });
+    private async Task SetCampaign(Campaign? value)
+    {
+        if (campaign?.Id == value?.Id) return;
+        campaign = value; scenes = []; editing = null; pendingDelete = null; image = null; uploadName = null; error = null; version++;
+        await Reload();
+    }
+    private async Task Reload()
+    {
+        if (campaign is not { } current) return;
+        var request = ++version; loading = true;
+        try { var result = await ScenesStore.ListAsync(current.Id); if (!disposed && request == version) scenes = result; }
+        catch (Exception) { if (!disposed && request == version) error = "Unable to load scenes."; }
+        finally { if (request == version) loading = false; }
+    }
+    private void Add() { if (campaign is { } current) { Cancel(); editing = new SceneInput { CampaignId = current.Id }; } }
+    private void Edit(SceneSummary scene)
+    {
+        Cancel(); editing = new SceneInput { Id = scene.Id, CampaignId = scene.CampaignId, Name = scene.Name, GridSize = scene.GridSize,
+            GridColour = scene.GridColour, GridOpacity = scene.GridOpacity, GridlineWidth = scene.GridlineWidth };
+    }
+    private void Cancel() { editing = null; image = null; uploadName = null; pendingDelete = null; error = null; fileKey++; }
+    private async Task Upload(InputFileChangeEventArgs args)
+    {
+        if (editing is not { } current || busy) return;
+        busy = true; image = null; uploadName = null;
+        try
+        {
+            await using var stream = args.File.OpenReadStream(long.MaxValue);
+            using var buffer = new MemoryStream(); await stream.CopyToAsync(buffer);
+            var bytes = buffer.ToArray();
+            var dimensions = SceneImageInfo.Read(bytes);
+            if (!disposed && editing == current) { image = bytes; uploadName = $"{args.File.Name} ({dimensions.Width} × {dimensions.Height} pixels)"; error = null; }
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to read this image. Please choose it again."; }
+        finally { busy = false; }
+    }
+    private async Task Save()
+    {
+        if (busy || editing is not { } current || campaign?.Id != current.CampaignId) return;
+        busy = true;
+        try
+        {
+            var saved = await ScenesStore.SaveAsync(current, image);
+            if (!disposed && campaign?.Id == current.CampaignId) { Battlemap.Update(saved); Cancel(); await Reload(); }
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to save this scene."; }
+        finally { busy = false; }
+    }
+    private async Task Open(SceneSummary scene)
+    {
+        if (busy || campaign?.Id != scene.CampaignId) return;
+        busy = true;
+        try { var current = await ScenesStore.FindAsync(scene.CampaignId, scene.Id); if (current is null) throw new ArgumentException("This scene no longer exists."); if (!disposed && campaign?.Id == scene.CampaignId) { Battlemap.Open(current); Navigation.NavigateTo("battlemap"); } }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to open this scene."; }
+        finally { busy = false; }
+    }
+    private async Task Delete()
+    {
+        if (busy || pendingDelete is not { } current || campaign?.Id != current.CampaignId) return;
+        busy = true;
+        try { await ScenesStore.DeleteAsync(current.CampaignId, current.Id); if (Battlemap.Current?.Id == current.Id && Battlemap.Current.CampaignId == current.CampaignId) Battlemap.Close(); if (editing?.Id == current.Id) Cancel(); pendingDelete = null; await Reload(); }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to delete this scene."; }
+        finally { busy = false; }
+    }
+    public void Dispose() { disposed = true; version++; image = null; Campaigns.Changed -= CampaignChanged; }
+}

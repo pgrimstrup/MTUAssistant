@@ -1,0 +1,196 @@
+@page "/battlemap"
+@implements IAsyncDisposable
+@using MTUAssistant.Components.Map
+@inject MTUAssistant.Services.BattlemapState BattlemapState
+@inject SceneService ScenesStore
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageTitle>Battlemap</PageTitle>
+@if (BattlemapState.Current is { } scene)
+{
+    <section class="battlemap-page">
+        <header><div><h1>@scene.Name</h1><span class="muted">@scene.GridSize px per square · 1.5 m × 1.5 m</span></div>
+            <div class="controls">
+                <label>Grid Size (px)<input class="form-control grid-number" type="number" min="1" step="1" @bind="gridSize" @bind:after="SaveGrid" disabled="@(map is null || busy)" /></label>
+                <label>Grid colour<input class="form-control form-control-color" type="color" @bind="gridColour" @bind:after="SaveGrid" disabled="@(map is null || busy)" /></label>
+                <label>Width (px)<input class="form-control grid-number" type="number" min="0.25" max="@scene.GridSize" step="0.25" @bind="gridWidth" @bind:after="SaveGrid" disabled="@(map is null || busy)" /></label>
+                <label>Opacity (%)<input class="form-control grid-number" type="number" min="0" max="100" @bind="gridOpacity" @bind:after="SaveGrid" disabled="@(map is null || busy)" /></label>
+                <button class="btn btn-outline-secondary" aria-label="Zoom in" title="Zoom in" @onclick='() => Command("zoomIn")' disabled="@(map is null)">+</button>
+                <button class="btn btn-outline-secondary" aria-label="Zoom out" title="Zoom out" @onclick='() => Command("zoomOut")' disabled="@(map is null)">−</button>
+                <button class="btn btn-outline-secondary" @onclick='() => Command("fit")' disabled="@(map is null)">Fit</button>
+                <a @ref="presentationLink" class="btn btn-outline-secondary present-link" target="_blank" rel="noopener" aria-label="Present battlemap" title="Present battlemap">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h18a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7v-2h7V5H3v3H1V5a2 2 0 0 1 2-2ZM1 18a3 3 0 0 1 3 3H1v-3Zm0-4a7 7 0 0 1 7 7H6a5 5 0 0 0-5-5v-2Zm0-4a11 11 0 0 1 11 11h-2a9 9 0 0 0-9-9v-2Z" /></svg>
+                </a>
+                <button class="btn btn-outline-danger" @onclick="Close">Close</button>
+            </div>
+        </header>
+        @if (error is not null) { <p class="error" role="alert">@error</p> }
+        <div class="battlemap-workspace">
+            <CombatTracker CampaignId="scene.CampaignId" Entries="entries" Npcs="npcs" Disabled="@(map is null || busy)" PlacingId="placingId"
+                           AddNpc="AddNpc" Place="BeginPlacement" Unplace="Unplace" Remove="RemoveInstance" VisibilityChanged="SetVisibility" NameChanged="RenameInstance" />
+            <div class="map-column">
+                <div class="map-instructions" role="status">
+                    @if (placingId is not null) { <span>Click a square to place @entries.FirstOrDefault(e => e.Id == placingId)?.Name.</span><button class="btn btn-sm btn-outline-secondary" @onclick="CancelPlacement">Cancel</button> }
+                    else { <span>Drag tokens to move · Drag background to pan</span> }
+                </div>
+                <div class="battlemap-host" @ref="host" aria-label="Battlemap image with square grid"></div>
+            </div>
+        </div>
+    </section>
+}
+else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
+
+@code {
+    private ElementReference host, presentationLink;
+    private IJSObjectReference? module, map;
+    private string? loadedKey, error;
+    private bool ready, disposed, initializing, busy;
+    private IReadOnlyList<SceneNpcChoice> npcs = [];
+    private List<SceneCombatant> entries = [];
+    private SceneSummary? tokenScene;
+    private DotNetObjectReference<Battlemap>? callback;
+    private int? placingId;
+    private string gridColour = "#000000";
+    private double gridWidth = 2;
+    private int gridSize = 100;
+    private int gridOpacity = 50;
+
+    protected override async Task OnInitializedAsync()
+    {
+        BattlemapState.Changed += Changed;
+        if (BattlemapState.Current is not { } scene) { Navigation.NavigateTo("scenes"); return; }
+        try
+        {
+            var current = await ScenesStore.FindAsync(scene.CampaignId, scene.Id);
+            if (disposed) return;
+            if (current is null) { await Close(); return; }
+            await ScenesStore.SynchronizeTravellersAsync(current.CampaignId, current.Id);
+            entries = (await ScenesStore.CombatantsAsync(current.CampaignId, current.Id)).ToList();
+            npcs = await ScenesStore.NpcChoicesAsync(current.CampaignId);
+            if (disposed) return;
+            tokenScene = current; SetGridFields(current);
+            BattlemapState.Update(current); ready = true;
+        }
+        catch (Exception) { error = "Unable to load this scene. Return to Scenes and try again."; }
+    }
+    private void Changed() => _ = InvokeAsync(async () =>
+    {
+        if (disposed) return;
+        if (BattlemapState.Current is null) { if (map is not null) await map.InvokeVoidAsync("closePresentation"); Navigation.NavigateTo("scenes"); }
+        else StateHasChanged();
+    });
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!ready || disposed || initializing || BattlemapState.Current is not { } scene) return;
+        var key = $"{scene.CampaignId}.{scene.Id}.{scene.Revision}.{BattlemapState.OpenVersion}";
+        if (key == loadedKey) return;
+        initializing = true;
+        try
+        {
+            if (map is not null) { await map.InvokeVoidAsync("dispose"); await map.DisposeAsync(); map = null; }
+            module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/Battlemap.js");
+            callback ??= DotNetObjectReference.Create(this);
+            map = await module.InvokeAsync<IJSObjectReference>("createBattlemap", host,
+                $"api/scenes/{scene.CampaignId}/{scene.Id}/image?v={scene.Revision}", scene, key, entries.Where(e => e.OnMap), callback, new { readOnly = false }, presentationLink);
+            loadedKey = key;
+            if (disposed) { await map.InvokeVoidAsync("dispose"); await map.DisposeAsync(); map = null; }
+            else { error = null; StateHasChanged(); }
+        }
+        catch (JSDisconnectedException) { }
+        catch (Exception) { loadedKey = key; error = "Unable to display the Battlemap. Return to Scenes and reopen it."; if (!disposed) StateHasChanged(); }
+        finally { initializing = false; }
+    }
+    private async Task Command(string action) { if (map is not null) await map.InvokeVoidAsync(action); }
+    private async Task BeginPlacement(int id) { if (map is null) return; placingId = id; error = null; await map.InvokeVoidAsync("beginPlacement", id); }
+    private async Task CancelPlacement() { placingId = null; if (map is not null) await map.InvokeVoidAsync("cancelPlacement"); }
+    private async Task Run(Func<SceneSummary, Task> action)
+    {
+        if (busy || tokenScene is not { } scene) return;
+        busy = true;
+        try { await action(scene); error = null; }
+        catch (Exception ex) { error = ex is ArgumentException ? ex.Message : "Unable to save this change. Please try again."; }
+        finally { busy = false; }
+    }
+    private Task AddNpc(int characterId) => Run(async scene => { var entry = await ScenesStore.AddNpcInstanceAsync(scene.CampaignId, scene.Id, characterId); entries.Add(entry); });
+    private async Task UpdateEntry(SceneCombatant entry)
+    {
+        var index = entries.FindIndex(e => e.Id == entry.Id);
+        if (index >= 0) entries[index] = entry;
+        if (map is not null) await map.InvokeVoidAsync("updateCombatant", entry);
+    }
+    private Task SetVisibility((int Id, bool Visible) change) => Run(async scene =>
+    {
+        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        await UpdateEntry(await ScenesStore.SetCombatantVisibilityAsync(scene.CampaignId, scene.Id, change.Id, change.Visible));
+    });
+    private Task RenameInstance((int Id, string Name) change) => Run(async scene =>
+    {
+        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        await UpdateEntry(await ScenesStore.RenameNpcInstanceAsync(scene.CampaignId, scene.Id, change.Id, change.Name));
+    });
+    private Task Unplace(int id) => Run(async scene =>
+    {
+        if (placingId == id) await CancelPlacement();
+        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        await UpdateEntry(await ScenesStore.PositionCombatantAsync(scene.CampaignId, scene.Id, id, null, null));
+    });
+    private Task RemoveInstance(int id) => Run(async scene =>
+    {
+        if (placingId == id) await CancelPlacement();
+        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        await ScenesStore.RemoveNpcInstanceAsync(scene.CampaignId, scene.Id, id);
+        entries.RemoveAll(e => e.Id == id);
+        if (map is not null) await map.InvokeVoidAsync("removeToken", id);
+    });
+    [JSInvokable]
+    public async Task<SceneCombatant?> PlaceToken(int id, int column, int row)
+    {
+        if (disposed || tokenScene is not { } scene) return null;
+        placingId = null;
+        try
+        {
+            var token = await ScenesStore.PositionCombatantAsync(scene.CampaignId, scene.Id, id, column, row);
+            if (disposed) return token;
+            var index = entries.FindIndex(e => e.Id == id); if (index >= 0) entries[index] = token;
+            error = null; StateHasChanged(); return token;
+        }
+        catch (Exception) { error = "Unable to save the placement. Please try again."; if (!disposed) StateHasChanged(); return null; }
+    }
+    [JSInvokable]
+    public async Task<bool> MoveToken(int id, int column, int row)
+    {
+        if (disposed || tokenScene is not { } scene) return false;
+        try
+        {
+            var token = await ScenesStore.PositionCombatantAsync(scene.CampaignId, scene.Id, id, column, row);
+            if (!disposed) { var index = entries.FindIndex(e => e.Id == id); if (index >= 0) entries[index] = token; error = null; StateHasChanged(); }
+            return true;
+        }
+        catch (Exception) { error = "Unable to save the move. The token has returned to its previous square."; if (!disposed) StateHasChanged(); return false; }
+    }
+    private void SetGridFields(SceneSummary scene) { gridSize = scene.GridSize; gridColour = scene.GridColour.ToLowerInvariant(); gridWidth = scene.GridlineWidth; gridOpacity = scene.GridOpacity; }
+    private async Task SaveGrid()
+    {
+        await Run(async scene =>
+        {
+            try
+            {
+                if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+                if (placingId is not null && gridSize != scene.GridSize) await CancelPlacement();
+                tokenScene = await ScenesStore.SaveGridAsync(scene.CampaignId, scene.Id, gridColour, gridWidth, gridOpacity, gridSize);
+                BattlemapState.Update(tokenScene);
+                if (map is not null) await map.InvokeVoidAsync("setGrid", tokenScene);
+            }
+            catch { SetGridFields(scene); throw; }
+        });
+    }
+    private async Task Close() { if (map is not null) await map.InvokeVoidAsync("closePresentation"); BattlemapState.Close(); Navigation.NavigateTo("scenes"); }
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true; BattlemapState.Changed -= Changed;
+        try { if (map is not null) { await map.InvokeVoidAsync("dispose"); await map.DisposeAsync(); } if (module is not null) await module.DisposeAsync(); }
+        catch (JSDisconnectedException) { }
+        callback?.Dispose();
+    }
+}

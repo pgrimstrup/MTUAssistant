@@ -1,0 +1,35 @@
+@page "/battlemap-presentation"
+@layout MTUAssistant.Components.Layout.PresentationLayout
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<PageTitle>Battlemap Presentation</PageTitle>
+<div class="presented-battlemap" @ref="host" aria-label="Player Battlemap"></div>
+<div class="presentation-status" @ref="status" role="status">@(error ?? (ValidSession ? "Waiting for a Battlemap…" : "Open this window using the Battlemap’s Present battlemap link."))</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "session")] public string? Session { get; set; }
+    private ElementReference host, status;
+    private IJSObjectReference? module, presentation;
+    private bool disposed;
+    private string? error;
+    private bool ValidSession => Session is not null && System.Text.RegularExpressions.Regex.IsMatch(Session, "^[a-zA-Z0-9-]{16,80}$");
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !ValidSession) return;
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/BattlemapPresentation.js");
+            presentation = await module.InvokeAsync<IJSObjectReference>("createPresentation", host, status, Session);
+            if (disposed) { await presentation.InvokeVoidAsync("dispose"); await presentation.DisposeAsync(); presentation = null; }
+        }
+        catch (JSDisconnectedException) { }
+        catch (Exception) { error = "Unable to connect to the Battlemap. Reload to try again."; if (!disposed) StateHasChanged(); }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        try { if (presentation is not null) { await presentation.InvokeVoidAsync("dispose"); await presentation.DisposeAsync(); } if (module is not null) await module.DisposeAsync(); }
+        catch (JSDisconnectedException) { }
+    }
+}

@@ -1,0 +1,49 @@
+import { createBattlemap, restoreView } from './Battlemap.js';
+import { connectBattlemapPresentation } from './BattlemapPresentationSync.js';
+
+export function createPresentation(host,status,session) {
+    return new PresentedBattlemap(host,status,session);
+}
+class PresentedBattlemap {
+    constructor(host,status,session) {
+        Object.assign(this,{host,status,disposed:false,busy:false,pending:undefined,map:null,key:null});
+        this.connection = connectBattlemapPresentation({session,readOnly:true,onState:state => {
+            this.pending=state; void this.pump();
+        }});
+    }
+    async pump() {
+        if (this.busy || this.disposed) return;
+        this.busy=true;
+        try {
+            while (this.pending !== undefined && !this.disposed) {
+                const state=this.pending; this.pending=undefined;
+                if (state === null) {
+                    await this.map?.dispose(); this.map=null; this.key=null; this.host.replaceChildren();
+                    this.status.textContent='Waiting for a Battlemap…'; continue;
+                }
+                const key=`${state.scene.campaignId}.${state.scene.id}.${state.scene.revision}`;
+                if (key !== this.key) {
+                    await this.map?.dispose(); this.map=null;
+                    const scene=state.scene;
+                    const map=await createBattlemap(this.host,`api/scenes/${scene.campaignId}/${scene.id}/image?v=${scene.revision}`,
+                        scene,`presentation.${key}`,state.tokens,null,{readOnly:true});
+                    if (this.disposed) { await map.dispose(); return; }
+                    this.map=map; this.key=key;
+                } else {
+                    const wanted=new Set(state.tokens.map(t => t.id));
+                    for (const id of this.map.characterTokens.keys()) if (!wanted.has(id)) this.map.removeToken(id);
+                    await Promise.all(state.tokens.map(token => this.map.updateCombatant(token)));
+                    this.map.setGrid(state.scene);
+                }
+                this.map.view=restoreView(state.view,this.map.width,this.map.height,this.map.imageWidth,this.map.imageHeight) ?? this.map.view;
+                this.map.apply(); this.status.textContent=state.scene.name;
+            }
+        } catch {
+            if (!this.disposed) this.status.textContent='Unable to display the Battlemap. Reload to reconnect.';
+        } finally { this.busy=false; }
+    }
+    async dispose() {
+        this.disposed=true; this.connection.close();
+        await this.map?.dispose(); this.map=null;
+    }
+}

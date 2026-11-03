@@ -258,6 +258,84 @@ namespace MTU.Core.Data.Migrations
             );
 
             modelBuilder.Entity(
+                "MTU.Core.Data.SceneEntity",
+                b =>
+                {
+                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("INTEGER");
+
+                    b.Property<int>("CampaignId").HasColumnType("INTEGER");
+
+                    b.Property<string>("ContentType").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<string>("GridColour").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<int>("GridOpacity").HasColumnType("INTEGER");
+
+                    b.Property<int>("GridSize").HasColumnType("INTEGER");
+
+                    b.Property<double>("GridlineWidth").HasColumnType("REAL");
+
+                    b.Property<byte[]>("Image").IsRequired().HasColumnType("BLOB");
+
+                    b.Property<string>("Name").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<long>("Revision").HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CampaignId");
+
+                    b.ToTable("Scenes");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.SceneTokenEntity",
+                b =>
+                {
+                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("INTEGER");
+
+                    b.Property<int>("CharacterId").HasColumnType("INTEGER");
+
+                    b.Property<int?>("Column").HasColumnType("INTEGER");
+
+                    b.Property<int?>("InstanceNumber").HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsVisible")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<int?>("Row").HasColumnType("INTEGER");
+
+                    b.Property<int>("SceneId").HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CharacterId");
+
+                    b.HasIndex("SceneId", "CharacterId")
+                        .IsUnique()
+                        .HasFilter("\"InstanceNumber\" IS NULL");
+
+                    b.HasIndex("SceneId", "CharacterId", "InstanceNumber").IsUnique();
+
+                    b.ToTable(
+                        "SceneTokens",
+                        t =>
+                        {
+                            t.HasCheckConstraint(
+                                "CK_SceneTokens_Position",
+                                "(\"Column\" IS NULL AND \"Row\" IS NULL) OR (\"Column\" IS NOT NULL AND \"Row\" IS NOT NULL AND \"Column\" >= 0 AND \"Row\" >= 0)"
+                            );
+                        }
+                    );
+                }
+            );
+
+            modelBuilder.Entity(
                 "MTU.Core.Data.SectorEntity",
                 b =>
                 {
@@ -598,6 +676,42 @@ namespace MTU.Core.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Sector");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.SceneEntity",
+                b =>
+                {
+                    b.HasOne("MTU.Core.Data.CampaignEntity", "Campaign")
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Campaign");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.SceneTokenEntity",
+                b =>
+                {
+                    b.HasOne("MTU.Core.Data.CharacterEntity", "Character")
+                        .WithMany()
+                        .HasForeignKey("CharacterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MTU.Core.Data.SceneEntity", "Scene")
+                        .WithMany()
+                        .HasForeignKey("SceneId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Character");
+
+                    b.Navigation("Scene");
                 }
             );
 

@@ -14,6 +14,8 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
         );
 
     public DbSet<CampaignEntity> Campaigns => Set<CampaignEntity>();
+    public DbSet<SceneEntity> Scenes => Set<SceneEntity>();
+    public DbSet<SceneTokenEntity> SceneTokens => Set<SceneTokenEntity>();
     public DbSet<NpcEntity> NPCs => Set<NpcEntity>();
     public DbSet<CharacterEntity> Characters => Set<CharacterEntity>();
     public DbSet<EquipmentItem> Equipment => Set<EquipmentItem>();
@@ -32,6 +34,42 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<SceneTokenEntity>().HasKey(t => t.Id);
+        modelBuilder.Entity<SceneTokenEntity>().Property(t => t.IsVisible).HasDefaultValue(true);
+        modelBuilder
+            .Entity<SceneTokenEntity>()
+            .HasIndex(t => new
+            {
+                t.SceneId,
+                t.CharacterId,
+                t.InstanceNumber,
+            })
+            .IsUnique();
+        modelBuilder
+            .Entity<SceneTokenEntity>()
+            .HasIndex(t => new { t.SceneId, t.CharacterId })
+            .IsUnique()
+            .HasFilter("\"InstanceNumber\" IS NULL");
+        modelBuilder
+            .Entity<SceneTokenEntity>()
+            .ToTable(t =>
+                t.HasCheckConstraint(
+                    "CK_SceneTokens_Position",
+                    "(\"Column\" IS NULL AND \"Row\" IS NULL) OR (\"Column\" IS NOT NULL AND \"Row\" IS NOT NULL AND \"Column\" >= 0 AND \"Row\" >= 0)"
+                )
+            );
+        modelBuilder
+            .Entity<SceneTokenEntity>()
+            .HasOne(t => t.Scene)
+            .WithMany()
+            .HasForeignKey(t => t.SceneId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder
+            .Entity<SceneTokenEntity>()
+            .HasOne(t => t.Character)
+            .WithMany()
+            .HasForeignKey(t => t.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<NpcEntity>().HasKey(p => p.CharacterId);
         modelBuilder
             .Entity<NpcEntity>()

@@ -1,0 +1,80 @@
+@using MTU.Core
+
+<aside class="combat-tracker" aria-label="Combat Tracker">
+    <header><h2>Combat Tracker</h2><span class="count">@Entries.Count</span></header>
+    <div class="npc-picker">
+        <label for="combat-npc-search">Add NPC</label>
+        <input id="combat-npc-search" class="form-control" placeholder="Search name, occupation or race…" autocomplete="off"
+               role="combobox" aria-autocomplete="list" aria-controls="combat-npc-results" aria-expanded="@searchOpen.ToString().ToLowerInvariant()"
+               @bind="search" @bind:event="oninput" @onfocus="() => searchOpen = true" @onkeydown="SearchKey" />
+        @if (searchOpen)
+        {
+            <div class="npc-results" id="combat-npc-results" role="listbox" aria-label="Matching NPCs">
+                @foreach (var npc in Matches.Take(25))
+                {
+                    <button type="button" role="option" aria-selected="false" disabled="@Disabled" @onclick="() => AddNpc.InvokeAsync(npc.CharacterId)">
+                        <span>@npc.Name</span><small>@string.Join(" · ", new[] { npc.Occupation, npc.Race }.Where(s => !string.IsNullOrWhiteSpace(s)))</small><span class="add-mark" aria-hidden="true">+</span>
+                    </button>
+                }
+                @if (!Matches.Any()) { <p>No matching NPCs.</p> }
+                @if (Matches.Count() > 25) { <p>Refine your search for more matches.</p> }
+                <button type="button" class="done-search" @onclick="() => searchOpen = false">Done</button>
+            </div>
+        }
+    </div>
+    <div class="tracker-entries">
+        @foreach (var group in Entries.GroupBy(e => e.IsNpc).OrderBy(g => g.Key))
+        {
+            <h3>@(group.Key ? "NPCs" : "Travellers")</h3>
+            <ol>
+                @foreach (var entry in group)
+                {
+                    <li @key="entry.Id" class="@(!entry.IsVisible ? "hidden-combatant" : null) @(PlacingId == entry.Id ? "placing" : null)">
+                        <input @key="(entry.Id, editVersions.GetValueOrDefault(entry.Id))" class="visibility" type="checkbox" checked="@entry.IsVisible" aria-label="@($"Show {entry.Name} to players")" title="Visible to players" disabled="@Disabled"
+                               @onchange="e => ChangeVisibility(entry.Id, e)" />
+                        @if (entry.HasTokenImage) { <img class="portrait" src="@($"api/characters/{CampaignId}/{entry.CharacterId}/token")" alt="" /> }
+                        else { <span class="portrait initials" aria-hidden="true">@Initials(entry.Name)</span> }
+                        @if (entry.IsNpc)
+                        {
+                            <input @key="(entry.Id, editVersions.GetValueOrDefault(entry.Id), entry.Name)" class="instance-name" aria-label="@($"Name for {entry.Name}")" title="Edit instance name" maxlength="160" value="@entry.Name" disabled="@Disabled"
+                                   @onchange="e => ChangeName(entry.Id, e)" />
+                        }
+                        else { <span class="traveller-name" title="@entry.Name">@entry.Name</span> }
+                        <div class="entry-actions">
+                            <button type="button" class="@(entry.OnMap ? "on-map" : null)" aria-label="@($"Place {entry.Name} on map")" title="@(entry.OnMap ? "Reposition token" : "Place token")" disabled="@Disabled" @onclick="() => Place.InvokeAsync(entry.Id)">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 10a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z" /></svg>
+                            </button>
+                            @if (entry.OnMap) { <button type="button" aria-label="@($"Unplace {entry.Name}")" title="Remove token from map" disabled="@Disabled" @onclick="() => Unplace.InvokeAsync(entry.Id)">−</button> }
+                            @if (entry.IsNpc) { <button type="button" aria-label="@($"Remove {entry.Name} from tracker")" title="Remove instance from encounter" disabled="@Disabled" @onclick="() => Remove.InvokeAsync(entry.Id)">×</button> }
+                        </div>
+                    </li>
+                }
+            </ol>
+        }
+        @if (Entries.Count == 0) { <p class="empty">Add an NPC to prepare this encounter.</p> }
+    </div>
+</aside>
+
+@code {
+    [Parameter] public int CampaignId { get; set; }
+    [Parameter] public IReadOnlyList<SceneCombatant> Entries { get; set; } = [];
+    [Parameter] public IReadOnlyList<SceneNpcChoice> Npcs { get; set; } = [];
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public int? PlacingId { get; set; }
+    [Parameter] public EventCallback<int> AddNpc { get; set; }
+    [Parameter] public EventCallback<int> Place { get; set; }
+    [Parameter] public EventCallback<int> Unplace { get; set; }
+    [Parameter] public EventCallback<int> Remove { get; set; }
+    [Parameter] public EventCallback<(int Id, bool Visible)> VisibilityChanged { get; set; }
+    [Parameter] public EventCallback<(int Id, string Name)> NameChanged { get; set; }
+    private string search = "";
+    private bool searchOpen;
+    private readonly Dictionary<int, int> editVersions = [];
+    private async Task ChangeName(int id, ChangeEventArgs e) { await NameChanged.InvokeAsync((id, e.Value?.ToString() ?? string.Empty)); editVersions[id] = editVersions.GetValueOrDefault(id) + 1; }
+    private async Task ChangeVisibility(int id, ChangeEventArgs e) { await VisibilityChanged.InvokeAsync((id, e.Value is true)); editVersions[id] = editVersions.GetValueOrDefault(id) + 1; }
+    private IEnumerable<SceneNpcChoice> Matches => Npcs.Where(n => string.IsNullOrWhiteSpace(search) ||
+        $"{n.Name} {n.Occupation} {n.Race}".Contains(search.Trim(), StringComparison.OrdinalIgnoreCase));
+    private void SearchKey(KeyboardEventArgs e) { if (e.Key == "Escape") searchOpen = false; else if (e.Key == "ArrowDown") searchOpen = true; }
+    private static string Initials(string name) => string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(s => s[0])).ToUpperInvariant();
+}
+

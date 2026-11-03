@@ -23,6 +23,7 @@ namespace MTUAssistant
             builder.Services.AddScoped<MapPointerLocation>();
             builder.Services.AddScoped<SelectedWorldState>();
             builder.Services.AddScoped<TradingSelectionState>();
+            builder.Services.AddScoped<BattlemapState>();
 
             var app = builder.Build();
 
@@ -46,6 +47,7 @@ namespace MTUAssistant
 
             app.MapStaticAssets();
             app.MapMtuMap();
+            app.MapSceneImages();
             app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
             await app.RunAsync();
