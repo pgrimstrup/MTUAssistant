@@ -7,6 +7,8 @@ using MTU.Core;
 using MTU.Core.Data;
 using MTU.Core.Models;
 
+await NpcGenerationChecks.RunAsync();
+
 static void Check(bool condition, string message)
 {
     if (!condition)
@@ -1707,7 +1709,7 @@ using (var renameConnection = new SqliteConnection("Data Source=:memory:"))
                 && npc.Gender == "Female"
                 && npc.Quirks1 == "Alert"
                 && npc.Quirks2 == "Quiet"
-                && npc.SkillLevel == NpcSkillLevel.Dangerous
+                && npc.SkillLevel == NpcSkillLevel.Practitioner
                 && npc.Character.Skills!.Single().Level == 3,
             "Rename preserves NPC profile and skills"
         );
@@ -2285,7 +2287,7 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
                 Gender: "Female",
                 Quirks1: "Always smiling",
                 Quirks2: "Counts every credit",
-                SkillLevel: NpcSkillLevel.Average
+                SkillLevel: NpcSkillLevel.Novice
             }
             && npc.Character is { Name: "Zana", Race: "Human", Upp: "777777", IsNpc: true },
         "Patron/enemy fields trim and default UPP without creating a player Traveller"
@@ -2947,7 +2949,7 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
         }
     );
     Check(
-        armour.Summary == "Cloth (8)" && weapon.Summary == "Rifle (100m, 3D)",
+        armour.Summary == "Cloth (DR +8)" && weapon.Summary == "Rifle (100m, 3D)",
         "Equipment summary formats"
     );
     var fractionalRangeWeapon = weapon.Copy();

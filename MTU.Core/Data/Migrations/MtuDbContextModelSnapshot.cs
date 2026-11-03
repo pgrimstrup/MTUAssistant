@@ -197,6 +197,8 @@ namespace MTU.Core.Data.Migrations
                 {
                     b.Property<int>("CharacterId").HasColumnType("INTEGER");
 
+                    b.Property<int?>("Age").HasColumnType("INTEGER");
+
                     b.Property<string>("Gender").IsRequired().HasColumnType("TEXT");
 
                     b.Property<string>("Occupation").IsRequired().HasColumnType("TEXT");
@@ -206,6 +208,8 @@ namespace MTU.Core.Data.Migrations
                     b.Property<string>("Quirks2").IsRequired().HasColumnType("TEXT");
 
                     b.Property<int>("SkillLevel").HasColumnType("INTEGER");
+
+                    b.Property<int>("Type").HasColumnType("INTEGER");
 
                     b.HasKey("CharacterId");
 

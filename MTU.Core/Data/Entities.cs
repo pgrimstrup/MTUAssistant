@@ -199,11 +199,13 @@ public class CharacterEquipmentEntity
 
 public class NpcEntity
 {
+    public NpcType Type { get; set; }
+    public int? Age { get; set; }
     public int CharacterId { get; set; }
     public CharacterEntity Character { get; set; } = null!;
     public string Occupation { get; set; } = "";
     public string Gender { get; set; } = "";
     public string Quirks1 { get; set; } = "";
     public string Quirks2 { get; set; } = "";
-    public NpcSkillLevel SkillLevel { get; set; } = NpcSkillLevel.Average;
+    public NpcSkillLevel SkillLevel { get; set; } = NpcSkillLevel.Novice;
 }

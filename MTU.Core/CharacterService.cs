@@ -27,7 +27,11 @@ public sealed record StewardModifier(int? Value, bool HasSkill, IReadOnlyList<st
 
 public sealed class CharacterService(MtuDbContext db)
 {
-    public async Task<IReadOnlyList<Character>> ListAsync(int campaignId, bool npcs = false)
+    public async Task<IReadOnlyList<Character>> ListAsync(
+        int campaignId,
+        bool npcs = false,
+        bool equippedOnly = false
+    )
     {
         var characters = await db
             .Characters.AsNoTracking()
@@ -62,7 +66,11 @@ public sealed class CharacterService(MtuDbContext db)
         var byCharacter = skills.ToLookup(s => s.CharacterId);
         var equipment = await db
             .CharacterEquipment.AsNoTracking()
-            .Where(e => e.Character.CampaignId == campaignId && e.Character.IsNpc == npcs)
+            .Where(e =>
+                e.Character.CampaignId == campaignId
+                && e.Character.IsNpc == npcs
+                && (!equippedOnly || e.Equipped)
+            )
             .OrderBy(e => e.Equipment.Kind)
             .ThenBy(e => e.Equipment.Name)
             .ThenBy(e => e.Equipment.Tl)

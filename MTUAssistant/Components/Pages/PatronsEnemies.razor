@@ -2,11 +2,23 @@
 @implements IDisposable
 @inject CampaignService Campaigns
 @inject NpcService Characters
+@inject EquipmentService EquipmentStore
 
 <PageTitle>Patrons and Enemies</PageTitle>
 <div class="characters-page">
     <header class="page-header"><div><h1>Patrons and Enemies</h1>@if (campaign is not null) { <p>@campaign.Name</p> }</div>
-        @if (campaign is not null) { <button type="button" class="btn btn-primary" @onclick="Add" disabled="@busy">Add Character</button> }
+        @if (campaign is not null) {
+            <div class="header-actions">
+                <input class="form-control npc-filter" aria-label="Filter NPCs" placeholder="Filter NPCs…" @bind="filter" @bind:event="oninput" />
+                <button type="button" class="btn btn-outline-secondary" @onclick='() => filter = ""' disabled="@(string.IsNullOrEmpty(filter))">Clear</button>
+                <label class="generation-level">Skill Level <select class="form-select" aria-label="Random NPC skill level" @bind="generationLevel" disabled="@busy">
+                    @foreach (var level in Enum.GetValues<NpcSkillLevel>()) { <option value="@level">@((int)level + 1) — @level</option> }
+                </select></label>
+                <button type="button" class="btn btn-outline-primary" @onclick="() => RandomNpc(NpcType.AllyEnemy)" disabled="@busy">Ally/Enemy</button>
+                <button type="button" class="btn btn-outline-primary" @onclick="() => RandomNpc(NpcType.PatronCivilian)" disabled="@busy">Patron/Civilian</button>
+                <button type="button" class="btn btn-outline-primary" @onclick="() => RandomNpc(NpcType.Combatant)" disabled="@busy">Combatant</button>
+            </div>
+        }
     </header>
     @if (campaign is null) { <p class="empty-message">Select a campaign to view its patrons and enemies.</p> }
     else
@@ -17,17 +29,50 @@
             <section class="editor" aria-labelledby="character-editor-heading">
                 <h2 id="character-editor-heading">@(editing.Character.Id == 0 ? "Add Character" : "Edit Character")</h2>
                 <div class="fields">
-                    <label>Name <input class="form-control" @bind="name" maxlength="120" disabled="@busy" /></label>
-                    <label>Occupation <input class="form-control" @bind="occupation" maxlength="120" disabled="@busy" /></label>
-                    <label>Race <input class="form-control" @bind="race" maxlength="120" disabled="@busy" /></label>
-                    <label>Gender <input class="form-control" @bind="gender" maxlength="120" disabled="@busy" /></label>
-                    <label>Quirks 1 <input class="form-control" @bind="quirks1" maxlength="500" disabled="@busy" /></label>
-                    <label>Quirks 2 <input class="form-control" @bind="quirks2" maxlength="500" disabled="@busy" /></label>
-                    <label>UPP <input class="form-control upp" @bind="Upp" @bind:event="oninput" maxlength="40" disabled="@busy" /></label>
-                    <label>Skill level <select class="form-select" @bind="skillLevel" disabled="@busy">
-                        @foreach (var level in Enum.GetValues<NpcSkillLevel>()) { <option value="@level">@level</option> }
-                    </select></label>
+                    <div class="field-row identity-row">
+                        <label>Name <input class="form-control" @bind="name" maxlength="120" disabled="@busy" /></label>
+                        <label>NPC Type <select class="form-select" @bind="npcType" @bind:after="ChangeNpcType" disabled="@(busy || editing.Character.Id != 0)">
+                            @foreach (var type in Enum.GetValues<NpcType>()) { <option value="@type">@NpcTypes.Label(type)</option> }
+                        </select></label>
+                        <label>Skill Level <select class="form-select" @bind="skillLevel" @bind:after="UpdateGeneratedSkills" disabled="@(busy || editing.Character.Id != 0)">
+                            @foreach (var level in Enum.GetValues<NpcSkillLevel>()) { <option value="@level">@((int)level + 1) — @level</option> }
+                        </select></label>
+                        <label>Occupation <select class="form-select" @bind="occupation" @bind:after="ChangeOccupation" disabled="@(busy || editing.Character.Id != 0)">
+                            @if (!NpcGenerator.Occupations(npcType).Contains(occupation)) { <option value="@occupation">@(string.IsNullOrEmpty(occupation) ? "Unspecified" : occupation)</option> }
+                            @foreach (var profession in NpcGenerator.Occupations(npcType)) { <option value="@profession">@(string.IsNullOrEmpty(profession) ? "Unspecified" : profession)</option> }
+                        </select></label>
+                        <label>Race <select class="form-select" @bind="race" @bind:after="ChangeRace" disabled="@(busy || editing.Character.Id != 0)">
+                            @if (!NpcRaces.All.Contains(race)) { <option value="@race">@race</option> }
+                            @foreach (var choice in NpcRaces.All) { <option value="@choice">@choice</option> }
+                        </select></label>
+                    </div>
+                    <div class="field-row profile-row">
+                        <label>Gender <input class="form-control" @bind="gender" @bind:after="RefreshGeneratedName" maxlength="120" disabled="@busy" /></label>
+                        <label>UPP <input class="form-control upp" @bind="Upp" @bind:event="oninput" maxlength="40" disabled="@busy" /></label>
+                        <label>Age <input class="form-control" type="number" min="0" @bind="age" disabled="@busy" /></label>
+                    </div>
+                    <div class="field-row quirks-row">
+                        <label>Quirks 1 <input class="form-control" @bind="quirks1" maxlength="500" disabled="@busy" /></label>
+                        <label>Quirks 2 <input class="form-control" @bind="quirks2" maxlength="500" disabled="@busy" /></label>
+                    </div>
                 </div>
+
+                @if (generatedArchetype is not null)
+                {
+                    <section class="generated-skills" aria-label="Generated skills">
+                        <h3>Generated skills</h3>
+                        <p class="secondary">@(string.IsNullOrEmpty(generatedArchetype.D66) ? "Combatant" : $"D66 {generatedArchetype.D66}") · @NpcGenerator.SkillRollCount(skillLevel) skill rolls using 2D6. Changing occupation rerolls skills. @(NpcRaces.SupportsGeneration(race) ? "Changing skill level rerolls skills, age and UPP." : "Changing skill level rerolls skills.")</p>
+                        <p>@string.Join(", ", NpcGenerator.RecordedSkills(editing.Character.Skills ?? []).OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).Select(s => $"{s.Name} {s.Level}"))</p>
+                    </section>
+                }
+                @if (editing.Character.Id == 0 && npcType == NpcType.Combatant)
+                {
+                    <section class="generated-skills" aria-label="Generated equipment">
+                        <h3>Equipment</h3>
+                        @if (editing.Character.Equipment is { Count: > 0 } loadout) { <p>@string.Join(", ", loadout.Select(e => e.Summary))</p><p class="secondary">Marked Worn or Equipped on Save.</p> }
+                        else { <p class="secondary">No compatible equipment is available in the Supply Catalog.</p> }
+                    </section>
+                }
                 <div class="token-editor">
                     @if (CharacterToken.DataUri(tokenImage) is { } preview) { <img class="token-preview" src="@preview" alt="Token preview" /> }
                     <label>Token image <InputFile @key="tokenInputKey" class="form-control" accept="image/png,image/jpeg,image/gif,image/webp" OnChange="SelectToken" disabled="@busy" /><span class="token-hint">PNG, JPEG, GIF or WebP, up to 2 MB</span></label>
@@ -40,18 +85,20 @@
         {
             <div class="confirm" role="alert"><span>Delete @deleting.Character.Name?</span><button type="button" class="btn btn-danger" @onclick="Delete" disabled="@busy">Delete Character</button><button type="button" class="btn btn-outline-secondary" @onclick="() => pendingDelete = null" disabled="@busy">Cancel</button></div>
         }
-        @if (!busy && items.Count == 0) { <p class="empty-message">No patrons or enemies in this campaign yet.</p> }
-        else if (items.Count > 0)
+        @if (!busy && !FilteredItems.Any()) { <p class="empty-message">@(items.Count == 0 ? "No patrons or enemies in this campaign yet." : "No NPCs match the filter.")</p> }
+        else if (FilteredItems.Any())
         {
             <div class="table-wrap"><table class="table characters-table">
-                <thead><tr><th>Token</th><th>Name / Occupation</th><th>Race / Gender</th><th>Quirks</th><th>UPP</th><th>Skill level</th><th>Skills</th><th>Equipment</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
-                <tbody>@foreach (var item in items)
+                <thead><tr><th>Token</th><th>Name / Occupation</th><th>NPC type</th><th>Race / Gender</th><th>Age</th><th>Quirks</th><th>UPP</th><th>Skill level</th><th>Skills</th><th>Equipment</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+                <tbody>@foreach (var item in FilteredItems)
                 {
                     var actor = item.Character;
                     <tr @key="actor.Id">
                         <td>@if (CharacterToken.DataUri(actor.TokenImage) is { } token) { <img class="token-thumbnail" src="@token" alt="@($"{actor.Name} token")" /> }</td>
                         <th scope="row" class="nowrap">@actor.Name<span class="secondary">@item.Occupation</span></th>
+                        <td class="nowrap">@NpcTypes.Label(item.Type)</td>
                         <td class="nowrap">@actor.Race<span class="secondary">@item.Gender</span></td>
+                        <td class="nowrap">@(item.Age?.ToString() ?? "—")</td>
                         <td class="quirks">@item.Quirks1<span class="secondary">@item.Quirks2</span></td>
                         <td class="upp nowrap">@actor.Upp</td><td class="nowrap">@item.SkillLevel</td>
                         <td class="summary">@string.Join(", ", (actor.Skills ?? []).Select(s => $"{s.Name} {s.Level}"))</td>
@@ -69,11 +116,20 @@
 @code {
     private Campaign? campaign;
     private IReadOnlyList<Npc> items = [];
+    private IReadOnlyList<EquipmentItem> catalogue = [];
+    private string filter = "";
+    private IEnumerable<Npc> FilteredItems => items.Where(n => NpcFilter.Matches(n, filter));
+    private NpcType npcType;
     private Npc? editing, pendingDelete;
+    private NpcArchetype? generatedArchetype;
+    private bool skillsRerolled;
+    private string? automaticName;
     private Character? selectedSkills, selectedEquipment;
     private string name = "", occupation = "", race = "", gender = "", quirks1 = "", quirks2 = "", upp = "777777";
     private string Upp { get => upp; set => upp = value.ToUpperInvariant(); }
-    private NpcSkillLevel skillLevel = NpcSkillLevel.Average;
+    private NpcSkillLevel skillLevel = NpcSkillLevel.Novice;
+    private NpcSkillLevel generationLevel = NpcSkillLevel.Novice;
+    private int? age;
     private byte[]? tokenImage;
     private int tokenInputKey, version;
     private bool busy, disposed;
@@ -81,7 +137,7 @@
     protected override async Task OnInitializedAsync()
     {
         Campaigns.Changed += CampaignChanged;
-        try { await SetCampaign((await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive)); }
+        try { catalogue = await EquipmentStore.ListAsync(); await SetCampaign((await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive)); }
         catch (Exception) { error = "Unable to load the active campaign."; }
     }
     private void CampaignChanged(Campaign? value) => _ = InvokeAsync(async () => { await SetCampaign(value); if (!disposed) StateHasChanged(); });
@@ -97,17 +153,79 @@
         var request = ++version;
         try
         {
-            var loaded = await Characters.ListAsync(current.Id);
+            var loaded = await Characters.ListAsync(current.Id, equippedOnly: true);
             if (!disposed && version == request && campaign?.Id == current.Id) { items = loaded; error = null; }
         }
         catch (Exception) { if (!disposed && version == request) error = "Unable to load patrons and enemies."; }
     }
-    private void Add() { if (campaign is { } current) Edit(new Npc(new Character(0, current.Id, "", "", "", "777777", "0", 0, 0, 0, IsNpc: true))); }
+    private void RandomNpc(NpcType type)
+    {
+        if (busy || campaign is not { } current) return;
+        var npc = NpcGenerator.Generate(current.Id, generationLevel, type: type);
+        npc = npc with { Character = npc.Character with { Equipment = CombatantLoadouts.Select(npc, catalogue) } };
+        Edit(npc);
+        generatedArchetype = NpcGenerator.ArchetypeFor(npc);
+    }
+    private void UpdateGeneratedSkills()
+    {
+        if (editing is null || editing.Character.Id != 0) return;
+        ChangeOccupation();
+        if (NpcRaces.SupportsGeneration(race)) age = NpcGenerator.GenerateAge(skillLevel);
+        RerollUpp();
+    }
+    private void RerollUpp()
+    {
+        if (editing is not null && editing.Character.Id == 0 && NpcRaces.SupportsGeneration(race)) Upp = NpcGenerator.GenerateUpp(npcType, race, skillLevel);
+    }
+    private void ChangeRace()
+    {
+        if (editing is null || editing.Character.Id != 0) return;
+        if (!NpcRaces.SupportsGeneration(race))
+        {
+            name = gender = upp = "";
+            age = null; automaticName = null;
+            return;
+        }
+        var choices = NpcGenerator.Occupations(npcType);
+        if (!choices.Contains(occupation)) occupation = choices[0];
+        gender = Random.Shared.Next(1, 7) <= 3 ? "Male" : "Female";
+        name = NpcGenerator.GenerateName(race, gender); automaticName = name;
+        UpdateGeneratedSkills();
+    }
+    private void RefreshGeneratedName()
+    {
+        if (editing is null || editing.Character.Id != 0 || !NpcRaces.SupportsGeneration(race) || name != automaticName) return;
+        name = NpcGenerator.GenerateName(race, gender);
+        automaticName = name;
+    }
+    private void ChangeNpcType()
+    {
+        if (editing is null || editing.Character.Id != 0) return;
+        var choices = NpcGenerator.Occupations(npcType);
+        if (!choices.Contains(occupation)) occupation = choices[0];
+        ChangeOccupation();
+        RerollUpp();
+    }
+    private void ChangeOccupation()
+    {
+        if (editing is null || editing.Character.Id != 0) return;
+        if (!NpcGenerator.Occupations(npcType).Contains(occupation)) return;
+        generatedArchetype = NpcGenerator.ArchetypeFor(npcType, occupation);
+        editing = editing with { Character = editing.Character with { Skills = NpcGenerator.GenerateSkills(generatedArchetype, skillLevel) } };
+        var draft = editing with { Type = npcType, Occupation = occupation };
+        editing = editing with { Character = editing.Character with { Equipment = CombatantLoadouts.Select(draft, catalogue) } };
+        skillsRerolled = true;
+    }
     private void Edit(Npc item)
     {
+        generatedArchetype = null;
+        skillsRerolled = false;
         editing = item; pendingDelete = null; selectedSkills = selectedEquipment = null; error = null;
         name = item.Character.Name; occupation = item.Occupation; race = item.Character.Race; gender = item.Gender;
+        automaticName = item.Character.Id == 0 ? name : null;
         quirks1 = item.Quirks1; quirks2 = item.Quirks2; Upp = item.Character.Upp; skillLevel = item.SkillLevel;
+        age = item.Age;
+        npcType = item.Type;
         tokenImage = item.Character.TokenImage; tokenInputKey++;
     }
     private void Cancel() { editing = null; tokenImage = null; error = null; }
@@ -139,7 +257,7 @@
         busy = true;
         try
         {
-            await Characters.SaveAsync(current with { Character = current.Character with { Name = name, Race = race, Upp = upp, TokenImage = tokenImage }, Occupation = occupation, Gender = gender, Quirks1 = quirks1, Quirks2 = quirks2, SkillLevel = skillLevel });
+            await Characters.SaveAsync(current with { Character = current.Character with { Name = name, Race = race, Upp = upp, TokenImage = tokenImage }, Occupation = occupation, Gender = gender, Quirks1 = quirks1, Quirks2 = quirks2, SkillLevel = skillLevel, Age = age, Type = npcType }, replaceSkills: skillsRerolled);
             if (campaign?.Id == current.Character.CampaignId) { await Reload(); editing = null; }
         }
         catch (ArgumentException ex) { error = ex.Message; }

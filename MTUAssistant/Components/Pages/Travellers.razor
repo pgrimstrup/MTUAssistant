@@ -82,7 +82,7 @@
         if (value is null) return;
         try
         {
-            var loaded = await CharacterStore.ListAsync(value.Id);
+            var loaded = await CharacterStore.ListAsync(value.Id, equippedOnly: true);
             if (!disposed && request == version) items = loaded;
         }
         catch (Exception) { if (!disposed && request == version) error = "Unable to load Travellers."; }
@@ -92,7 +92,7 @@
         if (campaign is not { } current) return;
         try
         {
-            var loaded = await CharacterStore.ListAsync(current.Id);
+            var loaded = await CharacterStore.ListAsync(current.Id, equippedOnly: true);
             if (campaign?.Id == current.Id) items = loaded;
         }
         catch (Exception) { error = "Unable to refresh the Traveller list."; }
@@ -138,7 +138,7 @@
         {
             await CharacterStore.SaveAsync(current with { PlayerName = playerName, Name = travellerName, Race = race, Upp = upp,
                 TermsServed = terms, HighestNavalRank = naval, HighestScoutRank = scout, NaturalDr = naturalDr, TokenImage = tokenImage, Inactive = inactive });
-            if (campaign?.Id == current.CampaignId) { items = await CharacterStore.ListAsync(current.CampaignId); editing = null; error = null; }
+            if (campaign?.Id == current.CampaignId) { items = await CharacterStore.ListAsync(current.CampaignId, equippedOnly: true); editing = null; error = null; }
         }
         catch (ArgumentException ex) { error = ex.Message; }
         catch (Exception) { error = "Unable to save this Traveller."; }
@@ -148,7 +148,7 @@
     {
         if (pendingDelete is not { } current || campaign?.Id != current.CampaignId || busy) return;
         busy = true;
-        try { await CharacterStore.DeleteAsync(current.CampaignId, current.Id); if (campaign?.Id == current.CampaignId) { items = await CharacterStore.ListAsync(current.CampaignId); pendingDelete = null; error = null; } }
+        try { await CharacterStore.DeleteAsync(current.CampaignId, current.Id); if (campaign?.Id == current.CampaignId) { items = await CharacterStore.ListAsync(current.CampaignId, equippedOnly: true); pendingDelete = null; error = null; } }
         catch (Exception) { error = "Unable to delete this Traveller."; }
         finally { busy = false; }
     }

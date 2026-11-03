@@ -54,13 +54,14 @@ public sealed class EquipmentItem
         return string.Join(", ", parts);
     }
 
-    private string SummaryRange() => $"{Range.ToString(CultureInfo.InvariantCulture)}m";
+    private string SummaryRange() =>
+        Range == 0 ? "Melee" : $"{Range.ToString(CultureInfo.InvariantCulture)}m";
 
     public EquipmentItem Copy() => (EquipmentItem)MemberwiseClone();
 
     public string Summary =>
         Kind == EquipmentKind.Armour
-            ? $"{Name} ({Protection.ToString(CultureInfo.InvariantCulture)})"
+            ? $"{Name} (DR {Protection.ToString("+0;-0;+0", CultureInfo.InvariantCulture)})"
             : $"{Name} ({string.Join(", ", new[] { SummaryRange(), Damage }.Where(s => !string.IsNullOrWhiteSpace(s)))})";
 }
 
