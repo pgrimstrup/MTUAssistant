@@ -59,3 +59,8 @@
     .world-layout { grid-template-columns: minmax(0, 1fr); }
     .world-panel { max-height: none; }
 }
+.world-zone { margin-top:.65rem; }
+.zone-badge { display:inline-block; padding:.2rem .5rem; border:1px solid transparent; border-radius:.3rem; font-size:.75rem; font-weight:650; white-space:nowrap; }
+.zone-badge[data-zone="Amber"] { color:#241900; border-color:#ffc107; background:#ffc107; }
+.zone-badge[data-zone="Red"] { color:#fff; border-color:#dc3545; background:#dc3545; }
+.zone-badge[data-zone="Green"] { color:#75d79a; border-color:#75d79a; background:transparent; }

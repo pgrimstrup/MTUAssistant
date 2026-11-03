@@ -1,6 +1,7 @@
-﻿@page "/"
+@page "/"
 @using MTUAssistant.Components.Map
 @inject MTUAssistant.Services.SelectedWorldState WorldState
+@inject SystemDataProvider SystemData
 
 <PageTitle>Charted Space</PageTitle>
 
@@ -28,6 +29,14 @@
                         <code>@(string.IsNullOrWhiteSpace(world.Hex) ? "Unknown" : world.Hex)</code>
                     </div>
                 </div>
+                @if (TravelZone(world) is { } zone)
+                {
+                    <div class="world-zone"><span class="zone-badge" data-zone="@zone">@zone Zone</span></div>
+                }
+                else
+                {
+                    <div class="world-zone"><span class="zone-badge" data-zone="Green">No Active Advisories</span></div>
+                }
             </header>
             <section class="system-card uwp-card" aria-labelledby="uwp-heading">
                 <div class="system-card-heading">
@@ -119,6 +128,18 @@
     [SupplyParameterFromQuery(Name = "sector")] public int? SectorId { get; set; }
     [SupplyParameterFromQuery(Name = "subsector")] public int? SubsectorId { get; set; }
     [SupplyParameterFromQuery(Name = "focus")] public string? FocusToken { get; set; }
+    private string? TravelZone(SelectedWorld world)
+    {
+        var data = SystemData.Catalogue;
+        if (!data.SectorsById.TryGetValue(world.SectorId, out var sector)
+            || !data.SystemsByHex.TryGetValue((sector.Milieu, sector.X, sector.Y, world.Hex), out var system)) return null;
+        return system.MainWorld.Zone?.Trim().ToUpperInvariant() switch
+        {
+            "A" or "AMBER" or "AMBERZONE" => "Amber",
+            "R" or "RED" or "REDZONE" => "Red",
+            _ => null
+        };
+    }
     private SelectedWorld? selectedWorld;
     protected override void OnInitialized() => selectedWorld = WorldState.World;
     private void SelectWorld(SelectedWorld? world) { selectedWorld = world; WorldState.World = world; }
