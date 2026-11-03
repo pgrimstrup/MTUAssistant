@@ -1,7 +1,7 @@
 @page "/cargo-passengers"
 @implements IDisposable
 @inject CampaignService Campaigns
-@inject TravellerService TravellerStore
+@inject CharacterService CharacterStore
 @page "/passengers-cargo"
 @inject MTUAssistant.Services.SelectedWorldState WorldState
 @inject SystemDataProvider SystemData
@@ -191,7 +191,7 @@
         if (campaign is null) return;
         try
         {
-            var modifiers = await TravellerStore.MailModifiersAsync(campaign.Id);
+            var modifiers = await CharacterStore.MailModifiersAsync(campaign.Id);
             if (activeCampaign?.Id == campaign.Id) { mailRank = modifiers.Rank; mailSoc = modifiers.SocDm; }
         }
         catch (Exception) { freightError = "Unable to load campaign Traveller modifiers."; }
@@ -203,7 +203,7 @@
         if (campaign is null) return;
         try
         {
-            var modifier = await TravellerStore.StewardModifierAsync(campaign.Id);
+            var modifier = await CharacterStore.StewardModifierAsync(campaign.Id);
             if (activeCampaign?.Id == campaign.Id) { steward = modifier.Value; hasSteward = modifier.HasSkill; stewardMissingInt = modifier.MissingInt; }
         }
         catch (Exception) { passengerError = "Unable to load campaign Steward skill."; }
@@ -348,7 +348,7 @@
         {
             if (activeCampaign is null) { passengerError = "Select a campaign to generate dated results."; return; }
             var campaign = activeCampaign;
-            var modifier = await TravellerStore.StewardModifierAsync(campaign.Id);
+            var modifier = await CharacterStore.StewardModifierAsync(campaign.Id);
             if (activeCampaign?.Id != campaign.Id) { passengerError = "Campaign changed. Please roll again."; return; }
             steward = modifier.Value; hasSteward = modifier.HasSkill; stewardMissingInt = modifier.MissingInt;
             if (stewardMissingInt.Count > 0)
@@ -385,7 +385,7 @@
         {
             if (activeCampaign is null) { freightError = "Select a campaign to generate dated results."; return; }
             var campaign = activeCampaign;
-            var modifiers = await TravellerStore.MailModifiersAsync(campaign.Id);
+            var modifiers = await CharacterStore.MailModifiersAsync(campaign.Id);
             if (activeCampaign?.Id != campaign.Id) { freightError = "Campaign changed. Please roll again."; return; }
             mailRank = modifiers.Rank; mailSoc = modifiers.SocDm;
             var result = FreightTraffic.RollRoute(system.MainWorld.Uwp, system.MainWorld.Zone,

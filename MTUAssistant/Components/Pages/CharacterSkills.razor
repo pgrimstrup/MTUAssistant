@@ -1,9 +1,9 @@
-@inject TravellerService TravellerStore
+@inject CharacterService CharacterStore
 
 <section class="skills-panel" aria-labelledby="skills-heading">
     <div class="skills-heading"><div class="traveller-identity">
-        @if (TravellerToken.DataUri(Traveller.TokenImage) is { } token) { <img class="header-token" src="@token" alt="@($"{Traveller.TravellerName} token")" /> }
-        <h2 id="skills-heading">@Traveller.TravellerName · Skills</h2></div><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="OnClose">Close</button></div>
+        @if (CharacterToken.DataUri(Character.TokenImage) is { } token) { <img class="header-token" src="@token" alt="@($"{Character.Name} token")" /> }
+        <h2 id="skills-heading">@Character.Name · Skills</h2></div><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="OnClose">Close</button></div>
     @if (error is not null) { <p class="error" role="alert">@error</p> }
     @if (skills.Count == 0 && !loading) { <p class="empty-message">No skills recorded.</p> }
     else if (skills.Count > 0)
@@ -17,7 +17,7 @@
     <div class="skill-editor">
         <label>Skill <select class="form-select skill-select" value="@selectedSkill" @onchange="ChangeSkill" disabled="@busy">
             <option value="">Select a skill</option>
-            @foreach (var definition in TravellerSkillCatalogue.All) { <option value="@definition.Name">@definition.Name</option> }
+            @foreach (var definition in CharacterSkillCatalogue.All) { <option value="@definition.Name">@definition.Name</option> }
             <option value="@Custom">Custom skill</option>
         </select></label>
         @if (selectedSkill == Custom) { <label>Custom Skill Name <input class="form-control" maxlength="120" @bind="customSkill" disabled="@busy" /></label> }
@@ -25,7 +25,7 @@
         {
             <label>Specialty <select class="form-select skill-select" @bind="speciality" disabled="@busy">
                 <option value="">None</option>
-                @foreach (var option in (TravellerSkillCatalogue.Find(selectedSkill)?.Specialities ?? [])) { <option value="@option">@option</option> }
+                @foreach (var option in (CharacterSkillCatalogue.Find(selectedSkill)?.Specialities ?? [])) { <option value="@option">@option</option> }
                 <option value="@Custom">Custom specialty</option>
             </select></label>
             @if (speciality == Custom) { <label>Custom Specialty <input class="form-control" maxlength="120" @bind="customSpeciality" disabled="@busy" /></label> }
@@ -37,10 +37,10 @@
 </section>
 
 @code {
-    [Parameter, EditorRequired] public Traveller Traveller { get; set; } = default!;
+    [Parameter, EditorRequired] public Character Character { get; set; } = default!;
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
-    private IReadOnlyList<TravellerSkill> skills = [];
+    private IReadOnlyList<CharacterSkill> skills = [];
     private const string Custom = "__custom__";
     private string selectedSkill = "", speciality = "", customSkill = "", customSpeciality = "";
     private int level, editingId;
@@ -49,15 +49,15 @@
     protected override async Task OnInitializedAsync()
     {
         loading = true;
-        try { skills = await TravellerStore.ListSkillsAsync(Traveller.CampaignId, Traveller.Id); }
+        try { skills = await CharacterStore.ListSkillsAsync(Character.CampaignId, Character.Id); }
         catch (Exception) { error = "Unable to load skills."; }
         finally { loading = false; }
     }
     private void ChangeSkill(ChangeEventArgs args) { selectedSkill = args.Value?.ToString() ?? ""; speciality = ""; customSpeciality = ""; }
-    private void Edit(TravellerSkill skill)
+    private void Edit(CharacterSkill skill)
     {
         editingId = skill.Id; level = skill.Level; error = null;
-        var (definition, savedSpeciality) = TravellerSkillCatalogue.Parse(skill.Name);
+        var (definition, savedSpeciality) = CharacterSkillCatalogue.Parse(skill.Name);
         if (definition is null) { selectedSkill = Custom; customSkill = skill.Name; speciality = ""; customSpeciality = ""; return; }
         selectedSkill = definition.Name; customSkill = "";
         var match = definition.Specialities.FirstOrDefault(s => s.Equals(savedSpeciality, StringComparison.OrdinalIgnoreCase));
@@ -68,7 +68,7 @@
     private string SkillName()
     {
         if (selectedSkill == Custom) return customSkill.Trim();
-        if (TravellerSkillCatalogue.Find(selectedSkill) is null) throw new ArgumentException("Select a skill.");
+        if (CharacterSkillCatalogue.Find(selectedSkill) is null) throw new ArgumentException("Select a skill.");
         var chosen = speciality == Custom ? customSpeciality.Trim() : speciality;
         if (speciality == Custom && chosen.Length == 0) throw new ArgumentException("Enter a custom specialty.");
         return chosen.Length == 0 ? selectedSkill : $"{selectedSkill} ({chosen})";
@@ -79,8 +79,8 @@
         busy = true;
         try
         {
-            await TravellerStore.SaveSkillAsync(Traveller.CampaignId, new TravellerSkill(editingId, Traveller.Id, SkillName(), level));
-            skills = await TravellerStore.ListSkillsAsync(Traveller.CampaignId, Traveller.Id);
+            await CharacterStore.SaveSkillAsync(Character.CampaignId, new CharacterSkill(editingId, Character.Id, SkillName(), level));
+            skills = await CharacterStore.ListSkillsAsync(Character.CampaignId, Character.Id);
             CancelEdit();
             await OnChanged.InvokeAsync();
         }
@@ -88,14 +88,14 @@
         catch (Exception) { error = "Unable to save this skill."; }
         finally { busy = false; }
     }
-    private async Task Remove(TravellerSkill skill)
+    private async Task Remove(CharacterSkill skill)
     {
         if (busy) return;
         busy = true;
         try
         {
-            await TravellerStore.DeleteSkillAsync(Traveller.CampaignId, Traveller.Id, skill.Id);
-            skills = await TravellerStore.ListSkillsAsync(Traveller.CampaignId, Traveller.Id);
+            await CharacterStore.DeleteSkillAsync(Character.CampaignId, Character.Id, skill.Id);
+            skills = await CharacterStore.ListSkillsAsync(Character.CampaignId, Character.Id);
             if (editingId == skill.Id) CancelEdit();
             error = null;
             await OnChanged.InvokeAsync();

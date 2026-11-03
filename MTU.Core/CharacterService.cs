@@ -3,11 +3,11 @@ using MTU.Core.Data;
 
 namespace MTU.Core;
 
-public sealed record Traveller(
+public sealed record Character(
     int Id,
     int CampaignId,
     string PlayerName,
-    string TravellerName,
+    string Name,
     string Race,
     string Upp,
     string TermsServed,
@@ -15,29 +15,30 @@ public sealed record Traveller(
     int HighestScoutRank,
     int NaturalDr,
     byte[]? TokenImage = null,
-    IReadOnlyList<TravellerSkill>? Skills = null,
+    IReadOnlyList<CharacterSkill>? Skills = null,
     bool Inactive = false,
-    IReadOnlyList<EquipmentItem>? Equipment = null
+    IReadOnlyList<EquipmentItem>? Equipment = null,
+    bool IsNpc = false
 );
 
-public sealed record TravellerSkill(int Id, int TravellerId, string Name, int Level);
+public sealed record CharacterSkill(int Id, int CharacterId, string Name, int Level);
 
 public sealed record StewardModifier(int? Value, bool HasSkill, IReadOnlyList<string> MissingInt);
 
-public sealed class TravellerService(MtuDbContext db)
+public sealed class CharacterService(MtuDbContext db)
 {
-    public async Task<IReadOnlyList<Traveller>> ListAsync(int campaignId)
+    public async Task<IReadOnlyList<Character>> ListAsync(int campaignId, bool npcs = false)
     {
-        var travellers = await db
-            .Travellers.AsNoTracking()
-            .Where(t => t.CampaignId == campaignId)
-            .OrderBy(t => t.TravellerName)
+        var characters = await db
+            .Characters.AsNoTracking()
+            .Where(t => t.CampaignId == campaignId && t.IsNpc == npcs)
+            .OrderBy(t => t.Name)
             .ThenBy(t => t.Id)
-            .Select(t => new Traveller(
+            .Select(t => new Character(
                 t.Id,
                 t.CampaignId,
                 t.PlayerName,
-                t.TravellerName,
+                t.Name,
                 t.Race,
                 t.Upp,
                 t.TermsServed,
@@ -46,32 +47,34 @@ public sealed class TravellerService(MtuDbContext db)
                 t.NaturalDr,
                 t.TokenImage,
                 null,
-                t.Inactive
+                t.Inactive,
+                null,
+                t.IsNpc
             ))
             .ToArrayAsync();
         var skills = await db
-            .TravellerSkills.AsNoTracking()
-            .Where(s => s.Traveller.CampaignId == campaignId)
+            .CharacterSkills.AsNoTracking()
+            .Where(s => s.Character.CampaignId == campaignId && s.Character.IsNpc == npcs)
             .OrderBy(s => s.Name)
             .ThenBy(s => s.Id)
-            .Select(s => new TravellerSkill(s.Id, s.TravellerId, s.Name, s.Level))
+            .Select(s => new CharacterSkill(s.Id, s.CharacterId, s.Name, s.Level))
             .ToArrayAsync();
-        var byTraveller = skills.ToLookup(s => s.TravellerId);
+        var byCharacter = skills.ToLookup(s => s.CharacterId);
         var equipment = await db
-            .TravellerEquipment.AsNoTracking()
-            .Where(e => e.Traveller.CampaignId == campaignId)
+            .CharacterEquipment.AsNoTracking()
+            .Where(e => e.Character.CampaignId == campaignId && e.Character.IsNpc == npcs)
             .OrderBy(e => e.Equipment.Kind)
             .ThenBy(e => e.Equipment.Name)
             .ThenBy(e => e.Equipment.Tl)
             .ThenBy(e => e.EquipmentId)
-            .Select(e => new { e.TravellerId, e.Equipment })
+            .Select(e => new { e.CharacterId, e.Equipment })
             .ToArrayAsync();
-        var byEquipment = equipment.ToLookup(e => e.TravellerId, e => e.Equipment);
-        return travellers
+        var byEquipment = equipment.ToLookup(e => e.CharacterId, e => e.Equipment);
+        return characters
             .Select(t =>
                 t with
                 {
-                    Skills = byTraveller[t.Id].ToArray(),
+                    Skills = byCharacter[t.Id].ToArray(),
                     Equipment = byEquipment[t.Id].ToArray(),
                 }
             )
@@ -80,9 +83,9 @@ public sealed class TravellerService(MtuDbContext db)
 
     public async Task<(int Rank, int? SocDm)> MailModifiersAsync(int campaignId)
     {
-        var travellers = await db
-            .Travellers.AsNoTracking()
-            .Where(t => t.CampaignId == campaignId && !t.Inactive)
+        var characters = await db
+            .Characters.AsNoTracking()
+            .Where(t => t.CampaignId == campaignId && !t.Inactive && !t.IsNpc)
             .Select(t => new
             {
                 t.HighestNavalRank,
@@ -90,11 +93,11 @@ public sealed class TravellerService(MtuDbContext db)
                 t.Upp,
             })
             .ToArrayAsync();
-        var rank = travellers
+        var rank = characters
             .Select(t => Math.Max(t.HighestNavalRank, t.HighestScoutRank))
             .DefaultIfEmpty(0)
             .Max();
-        var soc = travellers.Select(t => SocialDm(t.Upp)).Where(dm => dm.HasValue).Max();
+        var soc = characters.Select(t => SocialDm(t.Upp)).Where(dm => dm.HasValue).Max();
         return (rank, soc);
     }
 
@@ -102,9 +105,9 @@ public sealed class TravellerService(MtuDbContext db)
 
     public static int? IntelligenceDm(string? upp) => CharacteristicDm(upp, 3);
 
-    public static int SkillDm(Traveller traveller, string requiredSkill)
+    public static int SkillDm(Character character, string requiredSkill)
     {
-        var skills = traveller.Skills ?? [];
+        var skills = character.Skills ?? [];
         var trained = skills
             .Where(s => s.Name.Equals(requiredSkill, StringComparison.OrdinalIgnoreCase))
             .Select(s => (int?)s.Level)
@@ -121,12 +124,12 @@ public sealed class TravellerService(MtuDbContext db)
 
     public static int? EducationDm(string? upp) => CharacteristicDm(upp, 4);
 
-    public static int? TradingModifier(IEnumerable<Traveller> travellers, string mode)
+    public static int? TradingModifier(IEnumerable<Character> characters, string mode)
     {
         if (mode is not ("Broker" or "Streetwise"))
             throw new ArgumentException("Unknown trading mode", nameof(mode));
-        return travellers
-            .Where(t => !t.Inactive)
+        return characters
+            .Where(t => !t.Inactive && !t.IsNpc)
             .Select(t =>
             {
                 var intelligence = IntelligenceDm(t.Upp) ?? 0;
@@ -158,7 +161,7 @@ public sealed class TravellerService(MtuDbContext db)
 
     public async Task<StewardModifier> StewardModifierAsync(int campaignId)
     {
-        var active = (await ListAsync(campaignId)).Where(t => !t.Inactive).ToArray();
+        var active = (await ListAsync(campaignId)).Where(t => !t.Inactive && !t.IsNpc).ToArray();
         var trained = active
             .Where(t =>
                 (t.Skills ?? []).Any(s =>
@@ -170,7 +173,7 @@ public sealed class TravellerService(MtuDbContext db)
         var candidates = hasSkill ? trained : active;
         var missing = candidates
             .Where(t => IntelligenceDm(t.Upp) is null)
-            .Select(t => t.TravellerName)
+            .Select(t => t.Name)
             .ToArray();
         var best = candidates
             .Select(t =>
@@ -180,66 +183,66 @@ public sealed class TravellerService(MtuDbContext db)
         return new(best, hasSkill, missing);
     }
 
-    public async Task SaveAsync(Traveller traveller)
+    public async Task SaveAsync(Character character)
     {
-        var name = traveller.TravellerName?.Trim() ?? "";
-        var player = traveller.PlayerName?.Trim() ?? "";
-        var race = traveller.Race?.Trim() ?? "";
-        var upp = traveller.Upp?.Trim().ToUpperInvariant() ?? "";
+        var name = character.Name?.Trim() ?? "";
+        var player = character.PlayerName?.Trim() ?? "";
+        var race = character.Race?.Trim() ?? "";
+        var upp = character.Upp?.Trim().ToUpperInvariant() ?? "";
         if (name.Length is 0 or > 120)
             throw new ArgumentException("Enter a Traveller name of up to 120 characters.");
         if (player.Length > 120 || race.Length > 120 || upp.Length > 40)
             throw new ArgumentException("One of the text fields is too long.");
-        var terms = traveller.TermsServed?.Trim() ?? "";
+        var terms = character.TermsServed?.Trim() ?? "";
         if (terms.Length > 240)
             throw new ArgumentException("Terms served must be at most 240 characters.");
         if (
-            traveller.HighestNavalRank < 0
-            || traveller.HighestScoutRank < 0
-            || traveller.NaturalDr < 0
+            character.HighestNavalRank < 0
+            || character.HighestScoutRank < 0
+            || character.NaturalDr < 0
         )
             throw new ArgumentException("Ranks and Natural DR must be zero or greater.");
         if (
-            traveller.TokenImage is { } image
-            && (image.Length > TravellerToken.MaxBytes || TravellerToken.ContentType(image) is null)
+            character.TokenImage is { } image
+            && (image.Length > CharacterToken.MaxBytes || CharacterToken.ContentType(image) is null)
         )
             throw new ArgumentException("Choose a PNG, JPEG, GIF or WebP image up to 2 MB.");
-        if (!await db.Campaigns.AnyAsync(c => c.Id == traveller.CampaignId))
+        if (!await db.Campaigns.AnyAsync(c => c.Id == character.CampaignId))
             throw new ArgumentException("The selected campaign no longer exists.");
         var entity =
-            traveller.Id == 0
-                ? new TravellerEntity { CampaignId = traveller.CampaignId }
-                : await db.Travellers.SingleAsync(t =>
-                    t.Id == traveller.Id && t.CampaignId == traveller.CampaignId
+            character.Id == 0
+                ? new CharacterEntity { CampaignId = character.CampaignId }
+                : await db.Characters.SingleAsync(t =>
+                    t.Id == character.Id && t.CampaignId == character.CampaignId && !t.IsNpc
                 );
-        if (traveller.Id == 0)
-            db.Travellers.Add(entity);
+        if (character.Id == 0)
+            db.Characters.Add(entity);
         entity.PlayerName = player;
-        entity.TravellerName = name;
+        entity.Name = name;
         entity.Race = race;
         entity.Upp = upp;
         entity.TermsServed = terms;
-        entity.HighestNavalRank = traveller.HighestNavalRank;
-        entity.HighestScoutRank = traveller.HighestScoutRank;
-        entity.NaturalDr = traveller.NaturalDr;
-        entity.TokenImage = traveller.TokenImage;
-        entity.Inactive = traveller.Inactive;
+        entity.HighestNavalRank = character.HighestNavalRank;
+        entity.HighestScoutRank = character.HighestScoutRank;
+        entity.NaturalDr = character.NaturalDr;
+        entity.TokenImage = character.TokenImage;
+        entity.Inactive = character.Inactive;
         await db.SaveChangesAsync();
     }
 
-    public async Task<IReadOnlyList<TravellerSkill>> ListSkillsAsync(
+    public async Task<IReadOnlyList<CharacterSkill>> ListSkillsAsync(
         int campaignId,
-        int travellerId
+        int characterId
     ) =>
         await db
-            .TravellerSkills.AsNoTracking()
-            .Where(s => s.TravellerId == travellerId && s.Traveller.CampaignId == campaignId)
+            .CharacterSkills.AsNoTracking()
+            .Where(s => s.CharacterId == characterId && s.Character.CampaignId == campaignId)
             .OrderBy(s => s.Name)
             .ThenBy(s => s.Id)
-            .Select(s => new TravellerSkill(s.Id, s.TravellerId, s.Name, s.Level))
+            .Select(s => new CharacterSkill(s.Id, s.CharacterId, s.Name, s.Level))
             .ToArrayAsync();
 
-    public async Task SaveSkillAsync(int campaignId, TravellerSkill skill)
+    public async Task SaveSkillAsync(int campaignId, CharacterSkill skill)
     {
         var name = skill.Name?.Trim() ?? "";
         if (name.Length is 0 or > 120)
@@ -247,45 +250,47 @@ public sealed class TravellerService(MtuDbContext db)
         if (skill.Level < 0)
             throw new ArgumentException("Skill level must be zero or greater.");
         if (
-            !await db.Travellers.AnyAsync(t =>
-                t.Id == skill.TravellerId && t.CampaignId == campaignId
+            !await db.Characters.AnyAsync(t =>
+                t.Id == skill.CharacterId && t.CampaignId == campaignId
             )
         )
             throw new ArgumentException("This Traveller is not in the current campaign.");
         if (
-            await db.TravellerSkills.AnyAsync(s =>
-                s.TravellerId == skill.TravellerId && s.Id != skill.Id && s.Name == name
+            await db.CharacterSkills.AnyAsync(s =>
+                s.CharacterId == skill.CharacterId && s.Id != skill.Id && s.Name == name
             )
         )
             throw new ArgumentException("This Traveller already has a skill with that name.");
         var entity =
             skill.Id == 0
-                ? new TravellerSkillEntity { TravellerId = skill.TravellerId }
-                : await db.TravellerSkills.SingleAsync(s =>
+                ? new CharacterSkillEntity { CharacterId = skill.CharacterId }
+                : await db.CharacterSkills.SingleAsync(s =>
                     s.Id == skill.Id
-                    && s.TravellerId == skill.TravellerId
-                    && s.Traveller.CampaignId == campaignId
+                    && s.CharacterId == skill.CharacterId
+                    && s.Character.CampaignId == campaignId
                 );
         if (skill.Id == 0)
-            db.TravellerSkills.Add(entity);
+            db.CharacterSkills.Add(entity);
         entity.Name = name;
         entity.Level = skill.Level;
         await db.SaveChangesAsync();
     }
 
-    public async Task DeleteSkillAsync(int campaignId, int travellerId, int skillId)
+    public async Task DeleteSkillAsync(int campaignId, int characterId, int skillId)
     {
-        var entity = await db.TravellerSkills.SingleAsync(s =>
-            s.Id == skillId && s.TravellerId == travellerId && s.Traveller.CampaignId == campaignId
+        var entity = await db.CharacterSkills.SingleAsync(s =>
+            s.Id == skillId && s.CharacterId == characterId && s.Character.CampaignId == campaignId
         );
-        db.TravellerSkills.Remove(entity);
+        db.CharacterSkills.Remove(entity);
         await db.SaveChangesAsync();
     }
 
     public async Task DeleteAsync(int campaignId, int id)
     {
-        var entity = await db.Travellers.SingleAsync(t => t.Id == id && t.CampaignId == campaignId);
-        db.Travellers.Remove(entity);
+        var entity = await db.Characters.SingleAsync(t =>
+            t.Id == id && t.CampaignId == campaignId && !t.IsNpc
+        );
+        db.Characters.Remove(entity);
         await db.SaveChangesAsync();
     }
 }

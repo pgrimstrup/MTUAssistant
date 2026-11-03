@@ -2,7 +2,7 @@
 @implements IDisposable
 @inject CampaignService Campaigns
 @inject TradingService TradeService
-@inject TravellerService TravellerStore
+@inject CharacterService CharacterStore
 @inject MTUAssistant.Services.TradingSelectionState TradingState
 @inject SystemDataProvider SystemData
 @inject MTUAssistant.Services.SelectedWorldState WorldState
@@ -48,7 +48,7 @@
                             <option value="0">Select a Traveller</option>
                             @foreach (var traveller in travellers.Where(t => !t.Inactive))
                             {
-                                <option value="@traveller.Id">@traveller.TravellerName</option>
+                                <option value="@traveller.Id">@traveller.Name</option>
                             }
                         </select></label>
                         <label>Mode <select class="form-select" value="@mode" @onchange="ChangeMode" disabled="@busy"><option>Broker</option><option>Streetwise</option></select></label>
@@ -109,7 +109,7 @@
                             <option value="0">Select a Traveller</option>
                             @foreach (var traveller in travellers.Where(t => !t.Inactive))
                             {
-                                <option value="@traveller.Id">@traveller.TravellerName</option>
+                                <option value="@traveller.Id">@traveller.Name</option>
                             }
                         </select></label>
                         <label>Mode <select class="form-select" value="@sellMode" @onchange="ChangeSellMode" disabled="@busy"><option>Broker</option><option>Streetwise</option></select></label><label>Skill DM <output class="form-control dm-input" title="Selected Traveller: skill + higher INT or EDU DM; untrained skill −3, reduced by Jack-of-All-Trades (maximum +3)">@FormatSkillDm(sellSkillDm)</output></label><label>Buyer DM <input class="form-control dm-input" type="number" @bind="buyerDm" disabled="@busy" /></label><button type="button" class="btn btn-primary" @onclick="RollSales" disabled="@(busy || sellSkillDm is null)">Roll</button></div>
@@ -143,7 +143,7 @@
         await LoadSales();
         StateHasChanged();
     });
-    private IReadOnlyList<Traveller> travellers = [];
+    private IReadOnlyList<Character> travellers = [];
     private static string FormatSkillDm(int? dm) => dm?.ToString("+0;-0;0") ?? "";
     private async Task LoadTravellers()
     {
@@ -152,7 +152,7 @@
         if (campaignId is null) return;
         try
         {
-            var loaded = await TravellerStore.ListAsync(campaignId.Value);
+            var loaded = await CharacterStore.ListAsync(campaignId.Value);
             if (activeCampaign?.Id == campaignId)
             {
                 travellers = loaded;
@@ -168,9 +168,9 @@
     private string mode { get => selections.BuyingMode; set => selections.BuyingMode = value; }
     private int buyTravellerId { get => selections.BuyingTravellerId; set => selections.BuyingTravellerId = value; }
     private int sellTravellerId { get => selections.SellingTravellerId; set => selections.SellingTravellerId = value; }
-    private int? skillDm => TravellerService.TradingModifier(travellers.Where(t => t.Id == buyTravellerId), mode);
+    private int? skillDm => CharacterService.TradingModifier(travellers.Where(t => t.Id == buyTravellerId), mode);
     private string sellMode { get => selections.SellingMode; set => selections.SellingMode = value; }
-    private int? sellSkillDm => TravellerService.TradingModifier(travellers.Where(t => t.Id == sellTravellerId), sellMode);
+    private int? sellSkillDm => CharacterService.TradingModifier(travellers.Where(t => t.Id == sellTravellerId), sellMode);
     private int supplierDm = -2;
     private int buyerDm = -2;
     private int destinationId;

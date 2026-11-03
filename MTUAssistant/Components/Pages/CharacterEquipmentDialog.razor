@@ -5,7 +5,7 @@
 <dialog @ref="dialog" class="options-dialog" aria-labelledby="equipment-options-heading">
     <form @onsubmit="Save" @onsubmit:preventDefault>
         <h2 id="equipment-options-heading">@(Adding ? "Equip" : "Equipment options") · @Item.Equipment.Name (TL @Item.Equipment.Tl)</h2>
-        <p class="hint">@Traveller.TravellerName</p>
+        <p class="hint">@Character.Name</p>
         @if (error is not null) { <p class="error" role="alert">@error</p> }
         <label class="quantity-label">Quantity <input class="form-control" type="number" min="1" step="1" required @bind="model.Quantity" disabled="@busy" /></label>
         @if (model.SupportsAttachments)
@@ -33,15 +33,15 @@
 </dialog>
 
 @code {
-    [Parameter, EditorRequired] public Traveller Traveller { get; set; } = default!;
-    [Parameter, EditorRequired] public TravellerEquipmentDetails Item { get; set; } = default!;
+    [Parameter, EditorRequired] public Character Character { get; set; } = default!;
+    [Parameter, EditorRequired] public CharacterEquipmentDetails Item { get; set; } = default!;
     [Parameter] public bool Adding { get; set; }
     [Parameter] public EventCallback OnSaved { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
-    private TravellerEquipmentDetails model = new();
+    private CharacterEquipmentDetails model = new();
     private ElementReference dialog;
     private IJSObjectReference? module;
-    private DotNetObjectReference<TravellerEquipmentDialog>? reference;
+    private DotNetObjectReference<CharacterEquipmentDialog>? reference;
     private bool busy;
     private string? error;
     protected override void OnInitialized()
@@ -64,8 +64,8 @@
         busy = true;
         try
         {
-            if (Adding) await EquipmentStore.AddToTravellerAsync(Traveller.CampaignId, Traveller.Id, model);
-            else await EquipmentStore.SaveTravellerDetailsAsync(Traveller.CampaignId, Traveller.Id, model);
+            if (Adding) await EquipmentStore.AddToCharacterAsync(Character.CampaignId, Character.Id, model);
+            else await EquipmentStore.SaveCharacterDetailsAsync(Character.CampaignId, Character.Id, model);
             await OnSaved.InvokeAsync();
         }
         catch (ArgumentException ex) { error = ex.Message; }

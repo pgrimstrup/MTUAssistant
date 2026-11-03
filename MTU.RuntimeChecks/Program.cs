@@ -601,44 +601,44 @@ Check(
 );
 
 Check(
-    TravellerSkillCatalogue.All.Count == 39
-        && TravellerSkillCatalogue
+    CharacterSkillCatalogue.All.Count == 39
+        && CharacterSkillCatalogue
             .All.Select(s => s.Name)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Count() == 39,
     "Core skill catalogue coverage"
 );
 Check(
-    TravellerSkillCatalogue.Find("pilot")!.Specialities.Contains("Spacecraft")
-        && TravellerSkillCatalogue.Find("Electronics")!.Specialities.Contains("Computers"),
+    CharacterSkillCatalogue.Find("pilot")!.Specialities.Contains("Spacecraft")
+        && CharacterSkillCatalogue.Find("Electronics")!.Specialities.Contains("Computers"),
     "Core skill specialities"
 );
 Check(
-    TravellerSkillCatalogue.Parse("pilot (Spacecraft)")
+    CharacterSkillCatalogue.Parse("pilot (Spacecraft)")
         is { Skill.Name: "Pilot", Speciality: "Spacecraft" },
     "Saved specialised skill parses"
 );
 Check(
-    TravellerSkillCatalogue.Parse("Science (Custom/Field)")
+    CharacterSkillCatalogue.Parse("Science (Custom/Field)")
         is { Skill.Name: "Science", Speciality: "Custom/Field" },
     "Custom specialty parses"
 );
 Check(
-    TravellerSkillCatalogue.Parse("Custom skill") is { Skill: null }
-        && TravellerSkillCatalogue.Parse("Broker") is { Skill.Name: "Broker", Speciality: null },
+    CharacterSkillCatalogue.Parse("Custom skill") is { Skill: null }
+        && CharacterSkillCatalogue.Parse("Broker") is { Skill.Name: "Broker", Speciality: null },
     "Custom and unspecialised skills remain editable"
 );
 
 Check(
-    TravellerAge.Calculate("Navy 3, Diplomat 1", 1105) == 32
-        && TravellerAge.Calculate("3", 1106) == 29,
+    CharacterAge.Calculate("Navy 3, Diplomat 1", 1105) == 32
+        && CharacterAge.Calculate("3", 1106) == 29,
     "Age combines terms and campaign year"
 );
 Check(
-    TravellerAge.Calculate("Navy", 1105) is null
-        && TravellerAge.Calculate("", 1105) is null
-        && TravellerAge.Calculate("Navy -3", 1105) is null
-        && TravellerAge.Calculate("Navy 3,", 1105) is null,
+    CharacterAge.Calculate("Navy", 1105) is null
+        && CharacterAge.Calculate("", 1105) is null
+        && CharacterAge.Calculate("Navy -3", 1105) is null
+        && CharacterAge.Calculate("Navy 3,", 1105) is null,
     "Unparseable terms do not invent an age"
 );
 
@@ -1541,7 +1541,7 @@ Check(
     new MTUAssistant.Services.TradingSelectionState().ForCampaign(1).BuyingTravellerId == 0,
     "Trade selections are isolated by user session"
 );
-var brokerExample = new Traveller(
+var brokerExample = new Character(
     0,
     1,
     "",
@@ -1552,35 +1552,35 @@ var brokerExample = new Traveller(
     0,
     0,
     0,
-    Skills: [new TravellerSkill(0, 0, "Broker", 1), new TravellerSkill(0, 0, "Streetwise", 0)]
+    Skills: [new CharacterSkill(0, 0, "Broker", 1), new CharacterSkill(0, 0, "Streetwise", 0)]
 );
 Check(
-    TravellerService.TradingModifier([brokerExample with { Upp = "" }], "Broker") == 1
-        && TravellerService.TradingModifier([brokerExample with { Upp = "??????" }], "Broker") == 1
-        && TravellerService.TradingModifier([brokerExample with { Upp = "777?A7" }], "Broker") == 2,
+    CharacterService.TradingModifier([brokerExample with { Upp = "" }], "Broker") == 1
+        && CharacterService.TradingModifier([brokerExample with { Upp = "??????" }], "Broker") == 1
+        && CharacterService.TradingModifier([brokerExample with { Upp = "777?A7" }], "Broker") == 2,
     "Unknown trading characteristics default to seven while known values are retained"
 );
 Check(
-    TravellerService.TradingModifier([brokerExample with { Upp = "", Skills = [] }], "Streetwise")
+    CharacterService.TradingModifier([brokerExample with { Upp = "", Skills = [] }], "Streetwise")
         == -3,
     "Unknown UPP still applies untrained skill penalty"
 );
 var jackTrader = brokerExample with
 {
-    Skills = [new TravellerSkill(0, 0, "Jack-of-All-Trades", 2)],
+    Skills = [new CharacterSkill(0, 0, "Jack-of-All-Trades", 2)],
 };
 Check(
-    TravellerService.SkillDm(jackTrader, "Broker") == -1
-        && TravellerService.TradingModifier([jackTrader], "Broker") == 0
-        && TravellerService.TradingModifier([jackTrader], "Streetwise") == 0,
+    CharacterService.SkillDm(jackTrader, "Broker") == -1
+        && CharacterService.TradingModifier([jackTrader], "Broker") == 0
+        && CharacterService.TradingModifier([jackTrader], "Streetwise") == 0,
     "JoaT 2 reduces both untrained trade penalties on the same Traveller"
 );
 foreach (var level in new[] { 0, 1, 2, 3, 5 })
     Check(
-        TravellerService.SkillDm(
+        CharacterService.SkillDm(
             jackTrader with
             {
-                Skills = [new TravellerSkill(0, 0, "jack-of-all-trades", level)],
+                Skills = [new CharacterSkill(0, 0, "jack-of-all-trades", level)],
             },
             "Broker"
         )
@@ -1588,24 +1588,24 @@ foreach (var level in new[] { 0, 1, 2, 3, 5 })
         "JoaT penalty reduction is capped and case insensitive"
     );
 Check(
-    TravellerService.SkillDm(
+    CharacterService.SkillDm(
         jackTrader with
         {
             Skills =
             [
-                new TravellerSkill(0, 0, "Broker", 0),
-                new TravellerSkill(0, 0, "Jack-of-All-Trades", 3),
+                new CharacterSkill(0, 0, "Broker", 0),
+                new CharacterSkill(0, 0, "Jack-of-All-Trades", 3),
             ],
         },
         "Broker"
     ) == 0
-        && TravellerService.SkillDm(
+        && CharacterService.SkillDm(
             jackTrader with
             {
                 Skills =
                 [
-                    new TravellerSkill(0, 0, "Broker", 2),
-                    new TravellerSkill(0, 0, "Jack-of-All-Trades", 3),
+                    new CharacterSkill(0, 0, "Broker", 2),
+                    new CharacterSkill(0, 0, "Jack-of-All-Trades", 3),
                 ],
             },
             "Broker"
@@ -1613,7 +1613,7 @@ Check(
     "JoaT never boosts trained skills including level zero"
 );
 Check(
-    TravellerService.TradingModifier(
+    CharacterService.TradingModifier(
         [brokerExample, jackTrader with { Inactive = true, Upp = "777FF7" }],
         "Streetwise"
     ) == 1,
@@ -1622,44 +1622,146 @@ Check(
 var smartTrader = brokerExample with
 {
     Upp = "777C77",
-    Skills = [new TravellerSkill(0, 0, "broker", 0), new TravellerSkill(0, 0, "Streetwise", 3)],
+    Skills = [new CharacterSkill(0, 0, "broker", 0), new CharacterSkill(0, 0, "Streetwise", 3)],
 };
 Check(
-    TravellerService.TradingModifier([brokerExample], "Broker") == 2,
+    CharacterService.TradingModifier([brokerExample], "Broker") == 2,
     "Broker 1 plus EDU 10 gives +2"
 );
 Check(
-    TravellerService.TradingModifier([smartTrader], "Broker") == 2,
+    CharacterService.TradingModifier([smartTrader], "Broker") == 2,
     "Higher INT used with skill zero and case insensitive skill name"
 );
 Check(
-    TravellerService.TradingModifier([brokerExample, smartTrader], "Streetwise") == 5,
+    CharacterService.TradingModifier([brokerExample, smartTrader], "Streetwise") == 5,
     "Streetwise uses its own best total"
 );
 Check(
-    TravellerService.TradingModifier(
+    CharacterService.TradingModifier(
         [brokerExample, smartTrader with { Inactive = true }],
         "Streetwise"
     ) == 1,
     "Inactive high skill excluded"
 );
 Check(
-    TravellerService.TradingModifier([brokerExample with { Skills = [] }], "Broker") == -2,
+    CharacterService.TradingModifier([brokerExample with { Skills = [] }], "Broker") == -2,
     "Untrained trading penalty added to best characteristic"
 );
 Check(
-    TravellerService.TradingModifier(
-        [brokerExample with { Upp = "777227", Skills = [new TravellerSkill(0, 0, "Broker", 0)] }],
+    CharacterService.TradingModifier(
+        [brokerExample with { Upp = "777227", Skills = [new CharacterSkill(0, 0, "Broker", 0)] }],
         "Broker"
     ) == -2,
     "Negative totals are retained"
 );
 Check(
-    TravellerService.TradingModifier([], "Broker") is null
-        && TravellerService.TradingModifier([brokerExample with { Inactive = true }], "Broker")
+    CharacterService.TradingModifier([], "Broker") is null
+        && CharacterService.TradingModifier([brokerExample with { Inactive = true }], "Broker")
             is null,
     "No active Traveller cannot supply a trading DM"
 );
+
+// Character naming must preserve existing player and NPC data in both directions.
+using (var renameConnection = new SqliteConnection("Data Source=:memory:"))
+{
+    await renameConnection.OpenAsync();
+    var options = new DbContextOptionsBuilder<MtuDbContext>().UseSqlite(renameConnection).Options;
+    await using var renameDb = new MtuDbContext(options);
+    var migrator = renameDb.GetService<IMigrator>();
+    const string previous = "20261103023637_PatronsAndEnemies";
+    await migrator.MigrateAsync(previous);
+    await renameDb.Database.ExecuteSqlRawAsync(
+        """
+        INSERT INTO Campaigns (Id, Name, Day, Year, IsActive) VALUES (1, 'Rename fixture', 1, 1105, 1);
+        INSERT INTO Travellers (Id, CampaignId, PlayerName, TravellerName, Race, Upp, TermsServed, HighestNavalRank, HighestScoutRank, NaturalDr, Inactive, IsNpc, TokenImage)
+          VALUES (1, 1, 'Player', 'Player character', 'Human', '777777', 'Navy 2', 2, 0, 1, 1, 0, X'89504E470D0A1A0A'),
+                 (2, 1, '', 'NPC character', 'Vargr', '888888', 'Scout 1', 0, 1, 2, 0, 1, X'89504E470D0A1A0A');
+        INSERT INTO PatronsAndEnemies (TravellerId, Occupation, Gender, Quirks1, Quirks2, SkillLevel) VALUES (2, 'Fixer', 'Female', 'Alert', 'Quiet', 3);
+        INSERT INTO TravellerSkills (Id, TravellerId, Name, Level) VALUES (1, 1, 'Broker', 2), (2, 2, 'Streetwise', 3);
+        INSERT INTO Equipment (Id, Kind, Name, Protection, Tl, Rad, Kg, Cost, RequiredSkill, Range, Damage, Magazine, MagCost, Traits, Notes)
+          VALUES (1, 1, 'Fixture rifle', 0, 8, 0, '4', '500', '', 100, '3D', '20', '10', 'Auto 2', 'Preserve');
+        INSERT INTO TravellerEquipment (TravellerId, EquipmentId, Quantity, Equipped, Scope, TargetingSystem, LaserSight, HolographicSight, Fof, Phud, SmartTracker)
+          VALUES (1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1), (2, 1, 3, 1, 1, 1, 1, 1, 1, 1, 1);
+        """
+    );
+    for (var pass = 0; pass < 2; pass++)
+    {
+        await migrator.MigrateAsync();
+        var characters = new CharacterService(renameDb);
+        var player = (await characters.ListAsync(1)).Single();
+        var npc = (await new NpcService(renameDb, characters).ListAsync(1)).Single();
+        Check(
+            player.Id == 1
+                && player.Name == "Player character"
+                && player.Inactive
+                && player.TermsServed == "Navy 2"
+                && player.TokenImage is { Length: 8 }
+                && player.Skills!.Single() is { Id: 1, Name: "Broker", Level: 2 },
+            "Rename preserves player details and skills"
+        );
+        Check(
+            npc.Character.Id == 2
+                && npc.Character.IsNpc
+                && npc.Character.Name == "NPC character"
+                && npc.Occupation == "Fixer"
+                && npc.Gender == "Female"
+                && npc.Quirks1 == "Alert"
+                && npc.Quirks2 == "Quiet"
+                && npc.SkillLevel == NpcSkillLevel.Dangerous
+                && npc.Character.Skills!.Single().Level == 3,
+            "Rename preserves NPC profile and skills"
+        );
+        foreach (var id in new[] { 1, 2 })
+        {
+            var equipment = (
+                await new EquipmentService(renameDb).ListDetailsForCharacterAsync(1, id)
+            ).Single();
+            Check(
+                equipment.Quantity == id + 1
+                    && equipment.Equipped
+                    && equipment.Scope
+                    && equipment.TargetingSystem
+                    && equipment.LaserSight
+                    && equipment.HolographicSight
+                    && equipment.Fof
+                    && equipment.Phud
+                    && equipment.SmartTracker,
+                "Rename preserves quantities, equipped state, and every attachment"
+            );
+        }
+        Check(
+            await renameDb
+                .Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM pragma_foreign_key_check")
+                .SingleAsync() == 0,
+            "Renamed foreign keys remain valid"
+        );
+        Check(
+            await renameDb
+                .Database.SqlQueryRaw<int>(
+                    "SELECT COUNT(*) AS Value FROM sqlite_master WHERE type='table' AND name IN ('Travellers','TravellerSkills','TravellerEquipment','PatronsAndEnemies')"
+                )
+                .SingleAsync() == 0,
+            "Only new character table names remain"
+        );
+        if (pass == 0)
+        {
+            await migrator.MigrateAsync(previous);
+            Check(
+                await renameDb
+                    .Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM Travellers")
+                    .SingleAsync() == 2,
+                "Rollback preserves both characters under original names"
+            );
+        }
+    }
+    await renameDb.Database.ExecuteSqlRawAsync("DELETE FROM Characters WHERE Id=2");
+    Check(
+        !await renameDb.NPCs.AnyAsync()
+            && await renameDb.CharacterSkills.CountAsync() == 1
+            && await renameDb.CharacterEquipment.CountAsync() == 1,
+        "Renamed character deletion cascades through NPC profile, skills and equipment"
+    );
+}
 
 // Upgrade an existing numeric Terms Served value without losing Traveller skills or token.
 using (var termsConnection = new SqliteConnection("Data Source=:memory:"))
@@ -1681,7 +1783,7 @@ using (var termsConnection = new SqliteConnection("Data Source=:memory:"))
         "INSERT INTO TravellerSkills (Id, TravellerId, Name, Level) VALUES (1, 1, 'Pilot', 2)"
     );
     await termsMigrator.MigrateAsync();
-    var upgraded = (await new TravellerService(termsDb).ListAsync(1)).Single();
+    var upgraded = (await new CharacterService(termsDb).ListAsync(1)).Single();
     Check(!upgraded.Inactive, "Existing Travellers default to active after migration");
     Check(
         upgraded.TermsServed == "3"
@@ -1689,14 +1791,14 @@ using (var termsConnection = new SqliteConnection("Data Source=:memory:"))
             && upgraded.Skills!.Single() is { Name: "Pilot", Level: 2 },
         "Terms migration preserves numeric value, token and skills"
     );
-    await new TravellerService(termsDb).SaveAsync(
+    await new CharacterService(termsDb).SaveAsync(
         upgraded with
         {
             TermsServed = "Navy 3, Diplomat 1",
         }
     );
     Check(
-        (await new TravellerService(termsDb).ListAsync(1)).Single().TermsServed
+        (await new CharacterService(termsDb).ListAsync(1)).Single().TermsServed
             == "Navy 3, Diplomat 1",
         "Text terms persist"
     );
@@ -1724,7 +1826,7 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
         """
     );
     await rangeMigrator.MigrateAsync();
-    var migratedEquipment = await new EquipmentService(rangeDb).ListForTravellerAsync(1, 1);
+    var migratedEquipment = await new EquipmentService(rangeDb).ListForCharacterAsync(1, 1);
     Check(
         migratedEquipment.Count == 2
             && migratedEquipment.Single(e => e.Id == 1)
@@ -1789,17 +1891,17 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
             ),
         "Equipment catalogue sorts Name then TL and allows TL variants"
     );
-    await variantStore.AddToTravellerAsync(1, 1, highTechArmour.Id);
-    await variantStore.AddToTravellerAsync(1, 1, lowTechArmour.Id);
+    await variantStore.AddToCharacterAsync(1, 1, highTechArmour.Id);
+    await variantStore.AddToCharacterAsync(1, 1, lowTechArmour.Id);
     Check(
-        (await variantStore.ListForTravellerAsync(1, 1))
+        (await variantStore.ListForCharacterAsync(1, 1))
             .Where(e => e.Kind == EquipmentKind.Armour)
             .Select(e => e.Tl)
             .SequenceEqual(new[] { 9, 10, 12 }),
         "Traveller equipment table sorts same-name TL variants"
     );
     Check(
-        (await new TravellerService(rangeDb).ListAsync(1))
+        (await new CharacterService(rangeDb).ListAsync(1))
             .Single()
             .Equipment!.Where(e => e.Kind == EquipmentKind.Armour)
             .Select(e => e.Tl)
@@ -1862,7 +1964,7 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
     await using (var reopenedProtectionDb = new MtuDbContext(rangeOptions))
     {
         var restored = (
-            await new EquipmentService(reopenedProtectionDb).ListForTravellerAsync(1, 1)
+            await new EquipmentService(reopenedProtectionDb).ListForCharacterAsync(1, 1)
         ).Single(e => e.Id == highTechArmour.Id);
         Check(
             restored
@@ -1938,7 +2040,7 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
             && cleanWeapon.ProtectionK is null,
         "Weapon saves clear armour-only protection fields"
     );
-    var defaultLoadout = await variantStore.ListDetailsForTravellerAsync(1, 1);
+    var defaultLoadout = await variantStore.ListDetailsForCharacterAsync(1, 1);
     Check(
         defaultLoadout.All(e =>
             e.Quantity == 1
@@ -1967,11 +2069,11 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
         configuredRifle.Phud =
         configuredRifle.SmartTracker =
             true;
-    await variantStore.SaveTravellerDetailsAsync(1, 1, configuredRifle);
+    await variantStore.SaveCharacterDetailsAsync(1, 1, configuredRifle);
     await using (var reopenedOptionsDb = new MtuDbContext(rangeOptions))
     {
         var restored = (
-            await new EquipmentService(reopenedOptionsDb).ListDetailsForTravellerAsync(1, 1)
+            await new EquipmentService(reopenedOptionsDb).ListDetailsForCharacterAsync(1, 1)
         ).Single(e => e.Equipment.Id == 1);
         Check(
             restored.Quantity == 3
@@ -1996,7 +2098,7 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
     await using (var reopenedEquippedDb = new MtuDbContext(rangeOptions))
     {
         var unequipped = (
-            await new EquipmentService(reopenedEquippedDb).ListDetailsForTravellerAsync(1, 1)
+            await new EquipmentService(reopenedEquippedDb).ListDetailsForCharacterAsync(1, 1)
         ).Single(e => e.Equipment.Id == 1);
         Check(
             !unequipped.Equipped
@@ -2008,13 +2110,13 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
     }
     await variantStore.SetEquippedAsync(1, 1, 1, true);
     await variantStore.SetEquippedAsync(1, 1, 2, true);
-    var stillEquipped = (await variantStore.ListDetailsForTravellerAsync(1, 1))
+    var stillEquipped = (await variantStore.ListDetailsForCharacterAsync(1, 1))
         .Single(e => e.Equipment.Id == 1)
         .Copy();
-    await variantStore.SaveTravellerDetailsAsync(1, 1, stillEquipped);
+    await variantStore.SaveCharacterDetailsAsync(1, 1, stillEquipped);
     await using (var reopenedEquippedDb = new MtuDbContext(rangeOptions))
     {
-        var equipped = await new EquipmentService(reopenedEquippedDb).ListDetailsForTravellerAsync(
+        var equipped = await new EquipmentService(reopenedEquippedDb).ListDetailsForCharacterAsync(
             1,
             1
         );
@@ -2036,17 +2138,17 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
         throw new Exception("Missing equipment equipped update accepted");
     }
     catch (ArgumentException) { }
-    var optionsTravellers = new TravellerService(rangeDb);
+    var optionsTravellers = new CharacterService(rangeDb);
     await optionsTravellers.SaveAsync(
-        new Traveller(0, 1, "", "Options Other", "", "777777", "0", 0, 0, 0)
+        new Character(0, 1, "", "Options Other", "", "777777", "0", 0, 0, 0)
     );
     var optionsOther = (await optionsTravellers.ListAsync(1)).Single(t =>
-        t.TravellerName == "Options Other"
+        t.Name == "Options Other"
     );
-    await variantStore.AddToTravellerAsync(
+    await variantStore.AddToCharacterAsync(
         1,
         optionsOther.Id,
-        new TravellerEquipmentDetails
+        new CharacterEquipmentDetails
         {
             Equipment = configuredRifle.Equipment,
             Quantity = 2,
@@ -2054,14 +2156,14 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
         }
     );
     var otherLoadout = (
-        await variantStore.ListDetailsForTravellerAsync(1, optionsOther.Id)
+        await variantStore.ListDetailsForCharacterAsync(1, optionsOther.Id)
     ).Single();
     Check(
         otherLoadout.Quantity == 2
             && !otherLoadout.Equipped
             && otherLoadout.AttachmentSummary == "Scope"
             && !otherLoadout.IntelligentWeapon
-            && (await variantStore.ListDetailsForTravellerAsync(1, 1))
+            && (await variantStore.ListDetailsForCharacterAsync(1, 1))
                 .Single(e => e.Equipment.Id == 1)
                 .Quantity == 3,
         "Quantity and attachments are independent per Traveller"
@@ -2070,7 +2172,7 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
     cancelledOptions.Quantity = 99;
     cancelledOptions.SmartTracker = true;
     Check(
-        (await variantStore.ListDetailsForTravellerAsync(1, optionsOther.Id)).Single().Quantity == 2
+        (await variantStore.ListDetailsForCharacterAsync(1, optionsOther.Id)).Single().Quantity == 2
             && !otherLoadout.SmartTracker,
         "Editing a copy does not save changes before confirmation"
     );
@@ -2080,14 +2182,14 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
         invalidQuantity.Quantity = quantity;
         try
         {
-            await variantStore.SaveTravellerDetailsAsync(1, optionsOther.Id, invalidQuantity);
+            await variantStore.SaveCharacterDetailsAsync(1, optionsOther.Id, invalidQuantity);
             throw new Exception("Invalid equipped quantity accepted");
         }
         catch (ArgumentException) { }
     }
     try
     {
-        await variantStore.SaveTravellerDetailsAsync(int.MaxValue, 1, configuredRifle);
+        await variantStore.SaveCharacterDetailsAsync(int.MaxValue, 1, configuredRifle);
         throw new Exception("Cross-campaign options edit accepted");
     }
     catch (ArgumentException) { }
@@ -2102,25 +2204,25 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
     );
     try
     {
-        await variantStore.AddToTravellerAsync(
+        await variantStore.AddToCharacterAsync(
             1,
             1,
-            new TravellerEquipmentDetails { Equipment = melee, Scope = true }
+            new CharacterEquipmentDetails { Equipment = melee, Scope = true }
         );
         throw new Exception("Melee attachments accepted");
     }
     catch (ArgumentException) { }
     Check(
-        !(await variantStore.ListForTravellerAsync(1, 1)).Any(e => e.Id == melee.Id),
+        !(await variantStore.ListForCharacterAsync(1, 1)).Any(e => e.Id == melee.Id),
         "Invalid equipped options do not add an assignment"
     );
-    await variantStore.AddToTravellerAsync(
+    await variantStore.AddToCharacterAsync(
         1,
         1,
-        new TravellerEquipmentDetails { Equipment = melee, Quantity = 4 }
+        new CharacterEquipmentDetails { Equipment = melee, Quantity = 4 }
     );
     Check(
-        (await variantStore.ListDetailsForTravellerAsync(1, 1)).Single(e =>
+        (await variantStore.ListDetailsForCharacterAsync(1, 1)).Single(e =>
             e.Equipment.Id == melee.Id
         )
             is {
@@ -2139,20 +2241,185 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
     };
     try
     {
-        await variantStore.SaveTravellerDetailsAsync(
+        await variantStore.SaveCharacterDetailsAsync(
             1,
             1,
-            new TravellerEquipmentDetails { Equipment = forgedArmour, LaserSight = true }
+            new CharacterEquipmentDetails { Equipment = forgedArmour, LaserSight = true }
         );
         throw new Exception("Armour attachments accepted via forged category");
     }
     catch (ArgumentException) { }
     otherLoadout.Scope = false;
-    await variantStore.SaveTravellerDetailsAsync(1, optionsOther.Id, otherLoadout);
+    await variantStore.SaveCharacterDetailsAsync(1, optionsOther.Id, otherLoadout);
     Check(
-        (await variantStore.ListDetailsForTravellerAsync(1, optionsOther.Id)).Single()
+        (await variantStore.ListDetailsForCharacterAsync(1, optionsOther.Id)).Single()
             is { Quantity: 2, AttachmentSummary: "", Scope: false },
         "Attachment options can be cleared"
+    );
+    var npcTravellers = new CharacterService(rangeDb);
+    var npcStore = new NpcService(rangeDb, npcTravellers);
+    var playerCountBeforeNpc = (await npcTravellers.ListAsync(1)).Count;
+    var mailBeforeNpc = await npcTravellers.MailModifiersAsync(1);
+    var stewardBeforeNpc = await npcTravellers.StewardModifierAsync(1);
+    var tradeBeforeNpc = CharacterService.TradingModifier(
+        await npcTravellers.ListAsync(1),
+        "Broker"
+    );
+    var npcToken = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nL1sAAAAASUVORK5CYII="
+    );
+    await npcStore.SaveAsync(
+        new Npc(
+            new Character(0, 1, "", " Zana ", " Human ", "", "0", 0, 0, 0, TokenImage: npcToken),
+            " Broker ",
+            " Female ",
+            " Always smiling ",
+            " Counts every credit "
+        )
+    );
+    var npc = (await npcStore.ListAsync(1)).Single();
+    Check(
+        npc
+            is {
+                Occupation: "Broker",
+                Gender: "Female",
+                Quirks1: "Always smiling",
+                Quirks2: "Counts every credit",
+                SkillLevel: NpcSkillLevel.Average
+            }
+            && npc.Character is { Name: "Zana", Race: "Human", Upp: "777777", IsNpc: true },
+        "Patron/enemy fields trim and default UPP without creating a player Traveller"
+    );
+    await npcStore.SaveAsync(npc with { Character = npc.Character with { Upp = "a98765" } });
+    Check(
+        (await npcStore.ListAsync(1)).Single().Character.Upp == "A98765",
+        "Patron/enemy UPP is uppercase"
+    );
+    await npcStore.SaveAsync(npc with { Character = npc.Character with { Upp = "FFFFFF" } });
+    await npcTravellers.SaveSkillAsync(1, new CharacterSkill(0, npc.Character.Id, "Steward", 10));
+    await npcTravellers.SaveSkillAsync(1, new CharacterSkill(0, npc.Character.Id, "Broker", 10));
+    await variantStore.AddToCharacterAsync(
+        1,
+        npc.Character.Id,
+        new CharacterEquipmentDetails
+        {
+            Equipment = configuredRifle.Equipment,
+            Quantity = 2,
+            Scope = true,
+            Equipped = true,
+        }
+    );
+    foreach (var skillRating in Enum.GetValues<NpcSkillLevel>())
+    {
+        npc = (await npcStore.ListAsync(1)).Single();
+        await npcStore.SaveAsync(npc with { SkillLevel = skillRating });
+        Check(
+            (await npcStore.ListAsync(1)).Single().SkillLevel == skillRating,
+            "All NPC skill levels persist without generating skills"
+        );
+    }
+    await using (var reopenedNpcDb = new MtuDbContext(rangeOptions))
+    {
+        var restoredNpc = (
+            await new NpcService(reopenedNpcDb, new CharacterService(reopenedNpcDb)).ListAsync(1)
+        ).Single();
+        Check(
+            restoredNpc.Character.TokenImage!.SequenceEqual(npcToken)
+                && restoredNpc.Character.Skills!.Count == 2
+                && restoredNpc.Character.Equipment!.Single().Id == 1,
+            "NPC token, shared skills and equipment summaries persist across contexts"
+        );
+        Check(
+            (
+                await new EquipmentService(reopenedNpcDb).ListDetailsForCharacterAsync(
+                    1,
+                    npc.Character.Id
+                )
+            ).Single()
+                is { Quantity: 2, Scope: true, Equipped: true },
+            "NPC equipment reuses quantity, attachments and equipped state"
+        );
+    }
+    Check(
+        (await npcTravellers.ListAsync(1)).Count == playerCountBeforeNpc
+            && (await npcStore.ListAsync(int.MaxValue)).Count == 0,
+        "Patrons and enemies are separate from player Travellers and other campaigns"
+    );
+    Check(
+        await npcTravellers.MailModifiersAsync(1) == mailBeforeNpc
+            && (await npcTravellers.StewardModifierAsync(1)).Value == stewardBeforeNpc.Value
+            && CharacterService.TradingModifier(
+                (await npcTravellers.ListAsync(1)).Append(
+                    (await npcStore.ListAsync(1)).Single().Character
+                ),
+                "Broker"
+            ) == tradeBeforeNpc,
+        "NPC ranks, characteristics and skills never affect party transport or trading modifiers"
+    );
+    var npcCampaigns = new CampaignService(rangeDb);
+    await npcCampaigns.SaveAsync(new Campaign(0, "NPC other campaign", 1, 1105, null, null, false));
+    var npcOtherCampaign = (await npcCampaigns.ListAsync()).Single(c =>
+        c.Name == "NPC other campaign"
+    );
+    try
+    {
+        await npcStore.SaveAsync(
+            npc with
+            {
+                Character = npc.Character with { CampaignId = npcOtherCampaign.Id },
+            }
+        );
+        throw new Exception("Cross-campaign NPC edit accepted");
+    }
+    catch (ArgumentException) { }
+    try
+    {
+        await npcStore.DeleteAsync(npcOtherCampaign.Id, npc.Character.Id);
+        throw new Exception("Cross-campaign NPC deletion accepted");
+    }
+    catch (ArgumentException) { }
+    try
+    {
+        await npcStore.SaveAsync(npc with { Character = npc.Character with { Id = 1 } });
+        throw new Exception("Player edited through NPC service");
+    }
+    catch (ArgumentException) { }
+    try
+    {
+        await npcTravellers.SaveAsync(npc.Character);
+        throw new Exception("NPC edited through player service");
+    }
+    catch (InvalidOperationException) { }
+    try
+    {
+        await npcTravellers.DeleteAsync(1, npc.Character.Id);
+        throw new Exception("NPC deleted through player service");
+    }
+    catch (InvalidOperationException) { }
+    try
+    {
+        await npcStore.SaveAsync(npc with { SkillLevel = (NpcSkillLevel)999 });
+        throw new Exception("Invalid NPC skill level accepted");
+    }
+    catch (ArgumentException) { }
+    await npcStore.DeleteAsync(1, npc.Character.Id);
+    Check(
+        !await rangeDb.NPCs.AnyAsync(p => p.CharacterId == npc.Character.Id)
+            && !await rangeDb.CharacterSkills.AnyAsync(p => p.CharacterId == npc.Character.Id)
+            && !await rangeDb.CharacterEquipment.AnyAsync(p => p.CharacterId == npc.Character.Id)
+            && await rangeDb.Equipment.AnyAsync(e => e.Id == 1),
+        "Deleting NPC cascades skills and equipment assignments while preserving catalogue"
+    );
+    await npcStore.SaveAsync(
+        new Npc(
+            new Character(0, npcOtherCampaign.Id, "", "Other patron", "", "777777", "0", 0, 0, 0)
+        )
+    );
+    await npcCampaigns.DeleteAsync(npcOtherCampaign.Id);
+    Check(
+        !await rangeDb.NPCs.AnyAsync()
+            && (await npcTravellers.ListAsync(1)).Count == playerCountBeforeNpc,
+        "Deleting NPC campaign preserves other campaign Travellers"
     );
 }
 
@@ -2354,17 +2621,17 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
         throw new Exception("Invalid day accepted");
     }
     catch (ArgumentException) { }
-    var travellerService = new TravellerService(db);
+    var characterService = new CharacterService(db);
     var secondCampaign = (await campaignService.ListAsync()).Single(c => c.Id != firstCampaign.Id);
-    await travellerService.SaveAsync(
-        new Traveller(0, firstCampaign.Id, "Player", "Kira", "Human", "a98765", "3", 2, 1, 4)
+    await characterService.SaveAsync(
+        new Character(0, firstCampaign.Id, "Player", "Kira", "Human", "a98765", "3", 2, 1, 4)
     );
-    var traveller = (await travellerService.ListAsync(firstCampaign.Id)).Single();
+    var character = (await characterService.ListAsync(firstCampaign.Id)).Single();
     Check(
-        traveller
+        character
             is {
                 PlayerName: "Player",
-                TravellerName: "Kira",
+                Name: "Kira",
                 Race: "Human",
                 Upp: "A98765",
                 TermsServed: "3",
@@ -2375,175 +2642,173 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
         "Traveller fields are saved"
     );
     Check(
-        (await travellerService.ListAsync(secondCampaign.Id)).Count == 0,
+        (await characterService.ListAsync(secondCampaign.Id)).Count == 0,
         "Travellers are isolated by campaign"
     );
     Check(
-        (await travellerService.MailModifiersAsync(secondCampaign.Id)) == (0, null),
+        (await characterService.MailModifiersAsync(secondCampaign.Id)) == (0, null),
         "Empty campaign has no mail modifiers"
     );
     Check(
         new[] { '0', '1', '2', '3', '5', '6', '8', '9', 'B', 'C', 'E', 'F' }
-            .Select(c => TravellerService.SocialDm("12345" + c))
+            .Select(c => CharacterService.SocialDm("12345" + c))
             .SequenceEqual(new int?[] { -3, -2, -2, -1, -1, 0, 0, 1, 1, 2, 2, 3 })
-            && TravellerService.SocialDm("12345?") is null
-            && TravellerService.SocialDm("123") is null,
+            && CharacterService.SocialDm("12345?") is null
+            && CharacterService.SocialDm("123") is null,
         "SOC DM boundaries and incomplete UPP"
     );
-    await travellerService.SaveAsync(
-        new Traveller(0, firstCampaign.Id, "", "Second", "", "12345C", "", 0, 4, 0)
+    await characterService.SaveAsync(
+        new Character(0, firstCampaign.Id, "", "Second", "", "12345C", "", 0, 4, 0)
     );
-    await travellerService.SaveAsync(
-        new Traveller(0, secondCampaign.Id, "", "Other", "", "12345F", "", 9, 0, 0)
+    await characterService.SaveAsync(
+        new Character(0, secondCampaign.Id, "", "Other", "", "12345F", "", 9, 0, 0)
     );
     Check(
-        (await travellerService.MailModifiersAsync(firstCampaign.Id)) == (4, 2),
+        (await characterService.MailModifiersAsync(firstCampaign.Id)) == (4, 2),
         "Campaign mail modifiers select highest rank and SOC"
     );
     Check(
-        (await travellerService.MailModifiersAsync(secondCampaign.Id)) == (9, 3),
+        (await characterService.MailModifiersAsync(secondCampaign.Id)) == (9, 3),
         "Mail modifiers exclude other campaigns"
     );
     Check(
-        await travellerService.StewardModifierAsync(firstCampaign.Id)
+        await characterService.StewardModifierAsync(firstCampaign.Id)
             is { Value: -3, HasSkill: false },
         "Unskilled Steward uses highest campaign INT minus three"
     );
-    await travellerService.SaveSkillAsync(
+    await characterService.SaveSkillAsync(
         firstCampaign.Id,
-        new TravellerSkill(0, traveller.Id, "Jack-of-All-Trades", 2)
+        new CharacterSkill(0, character.Id, "Jack-of-All-Trades", 2)
     );
     Check(
-        await travellerService.StewardModifierAsync(firstCampaign.Id)
+        await characterService.StewardModifierAsync(firstCampaign.Id)
             is { Value: -1, HasSkill: false },
         "Untrained Steward uses same Traveller JoaT plus INT"
     );
-    await travellerService.SaveSkillAsync(
+    await characterService.SaveSkillAsync(
         firstCampaign.Id,
-        (await travellerService.ListSkillsAsync(firstCampaign.Id, traveller.Id)).Single() with
+        (await characterService.ListSkillsAsync(firstCampaign.Id, character.Id)).Single() with
         {
             Level = 5,
         }
     );
     Check(
-        await travellerService.StewardModifierAsync(firstCampaign.Id)
+        await characterService.StewardModifierAsync(firstCampaign.Id)
             is { Value: 0, HasSkill: false },
         "JoaT cap removes penalty without granting Steward training"
     );
-    await travellerService.DeleteSkillAsync(
+    await characterService.DeleteSkillAsync(
         firstCampaign.Id,
-        traveller.Id,
-        (await travellerService.ListSkillsAsync(firstCampaign.Id, traveller.Id)).Single().Id
+        character.Id,
+        (await characterService.ListSkillsAsync(firstCampaign.Id, character.Id)).Single().Id
     );
-    var secondTraveller = (await travellerService.ListAsync(firstCampaign.Id)).Single(t =>
-        t.TravellerName == "Second"
+    var secondTraveller = (await characterService.ListAsync(firstCampaign.Id)).Single(t =>
+        t.Name == "Second"
     );
-    var otherSteward = (await travellerService.ListAsync(secondCampaign.Id)).Single();
-    await travellerService.SaveAsync(secondTraveller with { Upp = "123C5C" });
+    var otherSteward = (await characterService.ListAsync(secondCampaign.Id)).Single();
+    await characterService.SaveAsync(secondTraveller with { Upp = "123C5C" });
     Check(
-        await travellerService.StewardModifierAsync(firstCampaign.Id)
+        await characterService.StewardModifierAsync(firstCampaign.Id)
             is { Value: -1, HasSkill: false },
         "Unskilled Steward uses best INT in group"
     );
-    await travellerService.SaveAsync(secondTraveller with { Upp = "123?5C" });
+    await characterService.SaveAsync(secondTraveller with { Upp = "123?5C" });
     Check(
-        (await travellerService.StewardModifierAsync(firstCampaign.Id)).MissingInt.SequenceEqual(
+        (await characterService.StewardModifierAsync(firstCampaign.Id)).MissingInt.SequenceEqual(
             new[] { "Second" }
         ),
         "Unknown unskilled INT is identified"
     );
-    await travellerService.SaveAsync(secondTraveller);
-    await travellerService.SaveSkillAsync(
+    await characterService.SaveAsync(secondTraveller);
+    await characterService.SaveSkillAsync(
         firstCampaign.Id,
-        new TravellerSkill(0, secondTraveller.Id, "Steward", 0)
+        new CharacterSkill(0, secondTraveller.Id, "Steward", 0)
     );
-    await travellerService.SaveSkillAsync(
+    await characterService.SaveSkillAsync(
         secondCampaign.Id,
-        new TravellerSkill(0, otherSteward.Id, "Steward", 9)
+        new CharacterSkill(0, otherSteward.Id, "Steward", 9)
     );
     Check(
-        (await travellerService.StewardModifierAsync(firstCampaign.Id)).Value == -1,
+        (await characterService.StewardModifierAsync(firstCampaign.Id)).Value == -1,
         "Steward zero and negative INT DM are used together"
     );
-    await travellerService.SaveSkillAsync(
+    await characterService.SaveSkillAsync(
         firstCampaign.Id,
-        new TravellerSkill(0, traveller.Id, "Steward", 1)
+        new CharacterSkill(0, character.Id, "Steward", 1)
     );
     Check(
-        (await travellerService.StewardModifierAsync(firstCampaign.Id)).Value == 1,
+        (await characterService.StewardModifierAsync(firstCampaign.Id)).Value == 1,
         "Best same-traveller Steward plus INT excludes other campaigns"
     );
-    await travellerService.SaveAsync(secondTraveller with { Upp = "123?5C" });
+    await characterService.SaveAsync(secondTraveller with { Upp = "123?5C" });
     Check(
-        (await travellerService.StewardModifierAsync(firstCampaign.Id)).MissingInt.SequenceEqual(
+        (await characterService.StewardModifierAsync(firstCampaign.Id)).MissingInt.SequenceEqual(
             new[] { "Second" }
         ),
         "Unknown Steward intelligence is identified"
     );
-    await travellerService.SaveAsync(secondTraveller with { Inactive = true, Upp = "123?5C" });
+    await characterService.SaveAsync(secondTraveller with { Inactive = true, Upp = "123?5C" });
     using (var reopened = new MtuDbContext(options))
         Check(
-            (await new TravellerService(reopened).ListAsync(firstCampaign.Id))
+            (await new CharacterService(reopened).ListAsync(firstCampaign.Id))
                 .Single(t => t.Id == secondTraveller.Id)
                 .Inactive,
             "Inactive flag persists while Traveller remains listed"
         );
     Check(
-        (await travellerService.MailModifiersAsync(firstCampaign.Id)) == (2, -1),
+        (await characterService.MailModifiersAsync(firstCampaign.Id)) == (2, -1),
         "Inactive Traveller rank and SOC excluded from freight mail modifiers"
     );
     Check(
-        await travellerService.StewardModifierAsync(firstCampaign.Id)
+        await characterService.StewardModifierAsync(firstCampaign.Id)
             is { Value: 1, HasSkill: true, MissingInt.Count: 0 },
         "Inactive Steward and missing INT excluded from passengers"
     );
-    await travellerService.SaveAsync(traveller with { Inactive = true });
+    await characterService.SaveAsync(character with { Inactive = true });
     Check(
-        (await travellerService.MailModifiersAsync(firstCampaign.Id)) == (0, null),
+        (await characterService.MailModifiersAsync(firstCampaign.Id)) == (0, null),
         "All inactive gives no mail modifiers"
     );
     Check(
-        await travellerService.StewardModifierAsync(firstCampaign.Id)
+        await characterService.StewardModifierAsync(firstCampaign.Id)
             is { Value: null, HasSkill: false, MissingInt.Count: 0 },
         "All inactive gives no passenger Steward modifier"
     );
-    await travellerService.SaveAsync(traveller);
+    await characterService.SaveAsync(character);
     Check(
-        await travellerService.StewardModifierAsync(firstCampaign.Id)
+        await characterService.StewardModifierAsync(firstCampaign.Id)
             is { Value: 1, HasSkill: true },
         "Reactivated Traveller contributes again"
     );
-    await travellerService.DeleteSkillAsync(
+    await characterService.DeleteSkillAsync(
         firstCampaign.Id,
-        traveller.Id,
-        (await travellerService.ListSkillsAsync(firstCampaign.Id, traveller.Id)).Single().Id
+        character.Id,
+        (await characterService.ListSkillsAsync(firstCampaign.Id, character.Id)).Single().Id
     );
-    await travellerService.DeleteAsync(
+    await characterService.DeleteAsync(
         firstCampaign.Id,
-        (await travellerService.ListAsync(firstCampaign.Id))
-            .Single(t => t.TravellerName == "Second")
-            .Id
+        (await characterService.ListAsync(firstCampaign.Id)).Single(t => t.Name == "Second").Id
     );
-    await travellerService.DeleteAsync(
+    await characterService.DeleteAsync(
         secondCampaign.Id,
-        (await travellerService.ListAsync(secondCampaign.Id)).Single().Id
+        (await characterService.ListAsync(secondCampaign.Id)).Single().Id
     );
-    await travellerService.SaveSkillAsync(
+    await characterService.SaveSkillAsync(
         firstCampaign.Id,
-        new TravellerSkill(0, traveller.Id, "Pilot (spacecraft)", 0)
+        new CharacterSkill(0, character.Id, "Pilot (spacecraft)", 0)
     );
-    await travellerService.SaveSkillAsync(
+    await characterService.SaveSkillAsync(
         firstCampaign.Id,
-        new TravellerSkill(0, traveller.Id, "Broker", 2)
+        new CharacterSkill(0, character.Id, "Broker", 2)
     );
-    var savedSkills = await travellerService.ListSkillsAsync(firstCampaign.Id, traveller.Id);
+    var savedSkills = await characterService.ListSkillsAsync(firstCampaign.Id, character.Id);
     Check(
         savedSkills.Count == 2
             && savedSkills[0] is { Name: "Broker", Level: 2 }
             && savedSkills[1].Level == 0,
         "Skills save and sort with level zero"
     );
-    var listedSkills = (await travellerService.ListAsync(firstCampaign.Id)).Single().Skills!;
+    var listedSkills = (await characterService.ListAsync(firstCampaign.Id)).Single().Skills!;
     Check(
         listedSkills
             .Select(skill => (skill.Name, skill.Level))
@@ -2552,23 +2817,23 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     );
     try
     {
-        await travellerService.SaveSkillAsync(
+        await characterService.SaveSkillAsync(
             firstCampaign.Id,
-            new TravellerSkill(0, traveller.Id, "broker", 1)
+            new CharacterSkill(0, character.Id, "broker", 1)
         );
         throw new Exception("Duplicate skill accepted");
     }
     catch (ArgumentException) { }
     try
     {
-        await travellerService.SaveSkillAsync(
+        await characterService.SaveSkillAsync(
             secondCampaign.Id,
-            new TravellerSkill(0, traveller.Id, "Steward", 1)
+            new CharacterSkill(0, character.Id, "Steward", 1)
         );
         throw new Exception("Cross-campaign skill accepted");
     }
     catch (ArgumentException) { }
-    await travellerService.SaveSkillAsync(
+    await characterService.SaveSkillAsync(
         firstCampaign.Id,
         savedSkills[0] with
         {
@@ -2579,83 +2844,77 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     await using (var reopened = new MtuDbContext(options))
         Check(
             (
-                await new TravellerService(reopened).ListSkillsAsync(firstCampaign.Id, traveller.Id)
+                await new CharacterService(reopened).ListSkillsAsync(firstCampaign.Id, character.Id)
             ).Any(skill => skill is { Name: "Brokerage", Level: 3 }),
             "Skill edits persist"
         );
-    await travellerService.DeleteSkillAsync(firstCampaign.Id, traveller.Id, savedSkills[1].Id);
+    await characterService.DeleteSkillAsync(firstCampaign.Id, character.Id, savedSkills[1].Id);
     Check(
-        (await travellerService.ListSkillsAsync(firstCampaign.Id, traveller.Id)).Count == 1,
+        (await characterService.ListSkillsAsync(firstCampaign.Id, character.Id)).Count == 1,
         "Skill removal"
     );
-    await travellerService.SaveAsync(
-        traveller with
-        {
-            TravellerName = "Kira Updated",
-            NaturalDr = 5,
-        }
-    );
+    await characterService.SaveAsync(character with { Name = "Kira Updated", NaturalDr = 5 });
     await using (var reopened = new MtuDbContext(options))
         Check(
-            (await new TravellerService(reopened).ListAsync(firstCampaign.Id)).Single()
-                is { TravellerName: "Kira Updated", NaturalDr: 5 },
+            (await new CharacterService(reopened).ListAsync(firstCampaign.Id)).Single()
+                is { Name: "Kira Updated", NaturalDr: 5 },
             "Traveller edits persist"
         );
     var pngToken = Convert.FromBase64String(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+nL1sAAAAASUVORK5CYII="
     );
     Check(
-        TravellerToken.ContentType(pngToken) == "image/png"
-            && TravellerToken.ContentType("not an image"u8.ToArray()) is null,
+        CharacterToken.ContentType(pngToken) == "image/png"
+            && CharacterToken.ContentType("not an image"u8.ToArray()) is null,
         "Token file type validation"
     );
-    var withToken = (await travellerService.ListAsync(firstCampaign.Id)).Single() with
+    var withToken = (await characterService.ListAsync(firstCampaign.Id)).Single() with
     {
         TokenImage = pngToken,
     };
-    await travellerService.SaveAsync(withToken);
+    await characterService.SaveAsync(withToken);
     await using (var reopened = new MtuDbContext(options))
     {
         var restoredToken = (
-            await new TravellerService(reopened).ListAsync(firstCampaign.Id)
+            await new CharacterService(reopened).ListAsync(firstCampaign.Id)
         ).Single();
         Check(
             restoredToken.TokenImage!.SequenceEqual(pngToken),
             "Token image persists across database contexts"
         );
-        await new TravellerService(reopened).SaveAsync(
+        await new CharacterService(reopened).SaveAsync(
             restoredToken with
             {
                 PlayerName = "Renamed player",
             }
         );
     }
-    var unchangedToken = (await travellerService.ListAsync(firstCampaign.Id)).Single();
+    var unchangedToken = (await characterService.ListAsync(firstCampaign.Id)).Single();
     Check(
         unchangedToken.TokenImage!.SequenceEqual(pngToken),
         "Editing other fields preserves token"
     );
-    await travellerService.SaveAsync(unchangedToken with { TokenImage = null });
+    await characterService.SaveAsync(unchangedToken with { TokenImage = null });
     Check(
-        (await travellerService.ListAsync(firstCampaign.Id)).Single().TokenImage is null,
+        (await characterService.ListAsync(firstCampaign.Id)).Single().TokenImage is null,
         "Token can be removed"
     );
     try
     {
-        await travellerService.SaveAsync(unchangedToken with { TokenImage = "bad"u8.ToArray() });
+        await characterService.SaveAsync(unchangedToken with { TokenImage = "bad"u8.ToArray() });
         throw new Exception("Invalid token accepted");
     }
     catch (ArgumentException) { }
     try
     {
-        await travellerService.SaveAsync(traveller with { CampaignId = secondCampaign.Id });
+        await characterService.SaveAsync(character with { CampaignId = secondCampaign.Id });
         throw new Exception("Cross-campaign edit allowed");
     }
     catch (InvalidOperationException) { }
-    await travellerService.SaveAsync(
-        new Traveller(0, secondCampaign.Id, "P", "Other", "", "", "0", 0, 0, 0)
+    await characterService.SaveAsync(
+        new Character(0, secondCampaign.Id, "P", "Other", "", "", "0", 0, 0, 0)
     );
-    var otherTraveller = (await travellerService.ListAsync(secondCampaign.Id)).Single();
+    var otherTraveller = (await characterService.ListAsync(secondCampaign.Id)).Single();
     var equipmentStore = new EquipmentService(db);
     var armour = await equipmentStore.SaveAsync(
         new EquipmentItem
@@ -2713,9 +2972,9 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
         }
         catch (ArgumentException) { }
     }
-    await equipmentStore.AddToTravellerAsync(firstCampaign.Id, traveller.Id, armour.Id);
-    await equipmentStore.AddToTravellerAsync(firstCampaign.Id, traveller.Id, weapon.Id);
-    await equipmentStore.AddToTravellerAsync(secondCampaign.Id, otherTraveller.Id, armour.Id);
+    await equipmentStore.AddToCharacterAsync(firstCampaign.Id, character.Id, armour.Id);
+    await equipmentStore.AddToCharacterAsync(firstCampaign.Id, character.Id, weapon.Id);
+    await equipmentStore.AddToCharacterAsync(secondCampaign.Id, otherTraveller.Id, armour.Id);
     await using (var reopened = new MtuDbContext(options))
     {
         var restored = (await new EquipmentService(reopened).ListAsync());
@@ -2749,14 +3008,14 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
             "All weapon attributes persist"
         );
         Check(
-            (await new TravellerService(reopened).ListAsync(firstCampaign.Id))
+            (await new CharacterService(reopened).ListAsync(firstCampaign.Id))
                 .Single()
                 .Equipment!.Count == 2,
             "Traveller list contains persisted equipment"
         );
         Check(
             (
-                await new EquipmentService(reopened).ListForTravellerAsync(
+                await new EquipmentService(reopened).ListForCharacterAsync(
                     secondCampaign.Id,
                     otherTraveller.Id
                 )
@@ -2766,19 +3025,19 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     }
     try
     {
-        await equipmentStore.AddToTravellerAsync(firstCampaign.Id, traveller.Id, armour.Id);
+        await equipmentStore.AddToCharacterAsync(firstCampaign.Id, character.Id, armour.Id);
         throw new Exception("Duplicate equipment accepted");
     }
     catch (ArgumentException) { }
     try
     {
-        await equipmentStore.AddToTravellerAsync(secondCampaign.Id, traveller.Id, weapon.Id);
+        await equipmentStore.AddToCharacterAsync(secondCampaign.Id, character.Id, weapon.Id);
         throw new Exception("Cross-campaign equipment add accepted");
     }
     catch (ArgumentException) { }
     try
     {
-        await equipmentStore.RemoveFromTravellerAsync(secondCampaign.Id, traveller.Id, armour.Id);
+        await equipmentStore.RemoveFromCharacterAsync(secondCampaign.Id, character.Id, armour.Id);
         throw new Exception("Cross-campaign equipment removal accepted");
     }
     catch (ArgumentException) { }
@@ -2796,7 +3055,7 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     catch (ArgumentException) { }
     try
     {
-        await equipmentStore.AddToTravellerAsync(firstCampaign.Id, traveller.Id, int.MaxValue);
+        await equipmentStore.AddToCharacterAsync(firstCampaign.Id, character.Id, int.MaxValue);
         throw new Exception("Missing equipment accepted");
     }
     catch (ArgumentException) { }
@@ -2805,32 +3064,32 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     revisedArmour.Notes = "Updated notes";
     await equipmentStore.SaveAsync(revisedArmour);
     Check(
-        (await equipmentStore.ListForTravellerAsync(firstCampaign.Id, traveller.Id))
+        (await equipmentStore.ListForCharacterAsync(firstCampaign.Id, character.Id))
             .Single(e => e.Id == armour.Id)
             .Protection == 10
-            && (await equipmentStore.ListForTravellerAsync(secondCampaign.Id, otherTraveller.Id))
+            && (await equipmentStore.ListForCharacterAsync(secondCampaign.Id, otherTraveller.Id))
                 .Single()
                 .Notes == "Updated notes",
         "Catalogue edits update all assigned Travellers"
     );
-    await equipmentStore.RemoveFromTravellerAsync(firstCampaign.Id, traveller.Id, weapon.Id);
+    await equipmentStore.RemoveFromCharacterAsync(firstCampaign.Id, character.Id, weapon.Id);
     Check(
         (await equipmentStore.ListAsync()).Any(e => e.Id == weapon.Id)
-            && (await equipmentStore.ListForTravellerAsync(firstCampaign.Id, traveller.Id)).Count
+            && (await equipmentStore.ListForCharacterAsync(firstCampaign.Id, character.Id)).Count
                 == 1,
         "Traveller removal preserves catalogue item"
     );
-    await equipmentStore.AddToTravellerAsync(firstCampaign.Id, traveller.Id, weapon.Id);
+    await equipmentStore.AddToCharacterAsync(firstCampaign.Id, character.Id, weapon.Id);
     await equipmentStore.DeleteAsync(weapon.Id);
     Check(
-        !await db.TravellerEquipment.AnyAsync(e => e.EquipmentId == weapon.Id),
+        !await db.CharacterEquipment.AnyAsync(e => e.EquipmentId == weapon.Id),
         "Deleting equipment cascades its assignments"
     );
 
-    await travellerService.DeleteAsync(secondCampaign.Id, otherTraveller.Id);
-    Check((await travellerService.ListAsync(secondCampaign.Id)).Count == 0, "Traveller deletion");
+    await characterService.DeleteAsync(secondCampaign.Id, otherTraveller.Id);
+    Check((await characterService.ListAsync(secondCampaign.Id)).Count == 0, "Traveller deletion");
     Check(
-        !await db.TravellerEquipment.AnyAsync(e => e.TravellerId == otherTraveller.Id)
+        !await db.CharacterEquipment.AnyAsync(e => e.CharacterId == otherTraveller.Id)
             && (await equipmentStore.ListAsync()).Count == 1,
         "Deleting Traveller preserves catalogue and removes assignment"
     );
@@ -2840,15 +3099,15 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
         "Deleting active campaign selects another"
     );
     Check(
-        (await travellerService.ListAsync(firstCampaign.Id)).Count == 0,
+        (await characterService.ListAsync(firstCampaign.Id)).Count == 0,
         "Deleting a campaign deletes its Travellers"
     );
     Check(
-        !await db.TravellerSkills.AnyAsync(s => s.TravellerId == traveller.Id),
+        !await db.CharacterSkills.AnyAsync(s => s.CharacterId == character.Id),
         "Deleting a campaign cascades to Traveller skills"
     );
     Check(
-        !await db.TravellerEquipment.AnyAsync() && (await equipmentStore.ListAsync()).Count == 1,
+        !await db.CharacterEquipment.AnyAsync() && (await equipmentStore.ListAsync()).Count == 1,
         "Deleting campaign cascades equipment assignments and preserves catalogue"
     );
     await campaignService.DeleteAsync((await campaignService.ListAsync()).Single().Id);

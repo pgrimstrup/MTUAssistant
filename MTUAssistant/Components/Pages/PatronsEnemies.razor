@@ -1,0 +1,162 @@
+@page "/patrons-enemies"
+@implements IDisposable
+@inject CampaignService Campaigns
+@inject NpcService Characters
+
+<PageTitle>Patrons and Enemies</PageTitle>
+<div class="characters-page">
+    <header class="page-header"><div><h1>Patrons and Enemies</h1>@if (campaign is not null) { <p>@campaign.Name</p> }</div>
+        @if (campaign is not null) { <button type="button" class="btn btn-primary" @onclick="Add" disabled="@busy">Add Character</button> }
+    </header>
+    @if (campaign is null) { <p class="empty-message">Select a campaign to view its patrons and enemies.</p> }
+    else
+    {
+        @if (error is not null) { <p class="error" role="alert">@error</p> }
+        @if (editing is not null)
+        {
+            <section class="editor" aria-labelledby="character-editor-heading">
+                <h2 id="character-editor-heading">@(editing.Character.Id == 0 ? "Add Character" : "Edit Character")</h2>
+                <div class="fields">
+                    <label>Name <input class="form-control" @bind="name" maxlength="120" disabled="@busy" /></label>
+                    <label>Occupation <input class="form-control" @bind="occupation" maxlength="120" disabled="@busy" /></label>
+                    <label>Race <input class="form-control" @bind="race" maxlength="120" disabled="@busy" /></label>
+                    <label>Gender <input class="form-control" @bind="gender" maxlength="120" disabled="@busy" /></label>
+                    <label>Quirks 1 <input class="form-control" @bind="quirks1" maxlength="500" disabled="@busy" /></label>
+                    <label>Quirks 2 <input class="form-control" @bind="quirks2" maxlength="500" disabled="@busy" /></label>
+                    <label>UPP <input class="form-control upp" @bind="Upp" @bind:event="oninput" maxlength="40" disabled="@busy" /></label>
+                    <label>Skill level <select class="form-select" @bind="skillLevel" disabled="@busy">
+                        @foreach (var level in Enum.GetValues<NpcSkillLevel>()) { <option value="@level">@level</option> }
+                    </select></label>
+                </div>
+                <div class="token-editor">
+                    @if (CharacterToken.DataUri(tokenImage) is { } preview) { <img class="token-preview" src="@preview" alt="Token preview" /> }
+                    <label>Token image <InputFile @key="tokenInputKey" class="form-control" accept="image/png,image/jpeg,image/gif,image/webp" OnChange="SelectToken" disabled="@busy" /><span class="token-hint">PNG, JPEG, GIF or WebP, up to 2 MB</span></label>
+                    @if (tokenImage is not null) { <button type="button" class="btn btn-outline-secondary" @onclick="RemoveToken" disabled="@busy">Remove token</button> }
+                </div>
+                <div class="actions"><button type="button" class="btn btn-outline-secondary" @onclick="Cancel" disabled="@busy">Cancel</button><button type="button" class="btn btn-primary" @onclick="Save" disabled="@busy">Save</button></div>
+            </section>
+        }
+        @if (pendingDelete is { } deleting)
+        {
+            <div class="confirm" role="alert"><span>Delete @deleting.Character.Name?</span><button type="button" class="btn btn-danger" @onclick="Delete" disabled="@busy">Delete Character</button><button type="button" class="btn btn-outline-secondary" @onclick="() => pendingDelete = null" disabled="@busy">Cancel</button></div>
+        }
+        @if (!busy && items.Count == 0) { <p class="empty-message">No patrons or enemies in this campaign yet.</p> }
+        else if (items.Count > 0)
+        {
+            <div class="table-wrap"><table class="table characters-table">
+                <thead><tr><th>Token</th><th>Name / Occupation</th><th>Race / Gender</th><th>Quirks</th><th>UPP</th><th>Skill level</th><th>Skills</th><th>Equipment</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+                <tbody>@foreach (var item in items)
+                {
+                    var actor = item.Character;
+                    <tr @key="actor.Id">
+                        <td>@if (CharacterToken.DataUri(actor.TokenImage) is { } token) { <img class="token-thumbnail" src="@token" alt="@($"{actor.Name} token")" /> }</td>
+                        <th scope="row" class="nowrap">@actor.Name<span class="secondary">@item.Occupation</span></th>
+                        <td class="nowrap">@actor.Race<span class="secondary">@item.Gender</span></td>
+                        <td class="quirks">@item.Quirks1<span class="secondary">@item.Quirks2</span></td>
+                        <td class="upp nowrap">@actor.Upp</td><td class="nowrap">@item.SkillLevel</td>
+                        <td class="summary">@string.Join(", ", (actor.Skills ?? []).Select(s => $"{s.Name} {s.Level}"))</td>
+                        <td class="summary">@string.Join(", ", (actor.Equipment ?? []).Select(e => e.Summary))</td>
+                        <td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenSkills(actor)" disabled="@busy">Skills</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenEquipment(actor)" disabled="@busy">Equip</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(item)" disabled="@busy">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(item)" disabled="@busy">Delete</button></td>
+                    </tr>
+                }</tbody>
+            </table></div>
+        }
+        @if (selectedSkills is { } skilled) { <CharacterSkills @key="skilled.Id" Character="skilled" OnChanged="Reload" OnClose="() => selectedSkills = null" /> }
+        @if (selectedEquipment is { } equipped) { <CharacterEquipment @key="equipped.Id" Character="equipped" OnChanged="Reload" OnClose="() => selectedEquipment = null" /> }
+    }
+</div>
+
+@code {
+    private Campaign? campaign;
+    private IReadOnlyList<Npc> items = [];
+    private Npc? editing, pendingDelete;
+    private Character? selectedSkills, selectedEquipment;
+    private string name = "", occupation = "", race = "", gender = "", quirks1 = "", quirks2 = "", upp = "777777";
+    private string Upp { get => upp; set => upp = value.ToUpperInvariant(); }
+    private NpcSkillLevel skillLevel = NpcSkillLevel.Average;
+    private byte[]? tokenImage;
+    private int tokenInputKey, version;
+    private bool busy, disposed;
+    private string? error;
+    protected override async Task OnInitializedAsync()
+    {
+        Campaigns.Changed += CampaignChanged;
+        try { await SetCampaign((await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive)); }
+        catch (Exception) { error = "Unable to load the active campaign."; }
+    }
+    private void CampaignChanged(Campaign? value) => _ = InvokeAsync(async () => { await SetCampaign(value); if (!disposed) StateHasChanged(); });
+    private async Task SetCampaign(Campaign? value)
+    {
+        if (campaign?.Id == value?.Id) { campaign = value; return; }
+        campaign = value; items = []; editing = pendingDelete = null; selectedSkills = selectedEquipment = null; tokenImage = null; error = null; version++;
+        await Reload();
+    }
+    private async Task Reload()
+    {
+        if (campaign is not { } current) return;
+        var request = ++version;
+        try
+        {
+            var loaded = await Characters.ListAsync(current.Id);
+            if (!disposed && version == request && campaign?.Id == current.Id) { items = loaded; error = null; }
+        }
+        catch (Exception) { if (!disposed && version == request) error = "Unable to load patrons and enemies."; }
+    }
+    private void Add() { if (campaign is { } current) Edit(new Npc(new Character(0, current.Id, "", "", "", "777777", "0", 0, 0, 0, IsNpc: true))); }
+    private void Edit(Npc item)
+    {
+        editing = item; pendingDelete = null; selectedSkills = selectedEquipment = null; error = null;
+        name = item.Character.Name; occupation = item.Occupation; race = item.Character.Race; gender = item.Gender;
+        quirks1 = item.Quirks1; quirks2 = item.Quirks2; Upp = item.Character.Upp; skillLevel = item.SkillLevel;
+        tokenImage = item.Character.TokenImage; tokenInputKey++;
+    }
+    private void Cancel() { editing = null; tokenImage = null; error = null; }
+    private void RemoveToken() { tokenImage = null; tokenInputKey++; error = null; }
+    private void OpenSkills(Character actor) { editing = pendingDelete = null; selectedEquipment = null; selectedSkills = actor; }
+    private void OpenEquipment(Character actor) { editing = pendingDelete = null; selectedSkills = null; selectedEquipment = actor; }
+    private void ConfirmDelete(Npc item) { pendingDelete = item; editing = null; selectedSkills = selectedEquipment = null; error = null; }
+    private async Task SelectToken(InputFileChangeEventArgs args)
+    {
+        if (editing is not { } current || busy) return;
+        busy = true;
+        try
+        {
+            if (args.File.Size > CharacterToken.MaxBytes) throw new ArgumentException("Choose an image no larger than 2 MB.");
+            await using var source = args.File.OpenReadStream(CharacterToken.MaxBytes);
+            using var memory = new MemoryStream(); await source.CopyToAsync(memory);
+            var bytes = memory.ToArray();
+            if (CharacterToken.ContentType(bytes) is null) throw new ArgumentException("Choose a PNG, JPEG, GIF or WebP image.");
+            if (editing != current || disposed) return;
+            tokenImage = bytes; error = null;
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to read this image. Please choose it again."; }
+        finally { busy = false; }
+    }
+    private async Task Save()
+    {
+        if (busy || editing is not { } current || campaign?.Id != current.Character.CampaignId) return;
+        busy = true;
+        try
+        {
+            await Characters.SaveAsync(current with { Character = current.Character with { Name = name, Race = race, Upp = upp, TokenImage = tokenImage }, Occupation = occupation, Gender = gender, Quirks1 = quirks1, Quirks2 = quirks2, SkillLevel = skillLevel });
+            if (campaign?.Id == current.Character.CampaignId) { await Reload(); editing = null; }
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to save this character."; }
+        finally { busy = false; }
+    }
+    private async Task Delete()
+    {
+        if (busy || pendingDelete is not { } current || campaign?.Id != current.Character.CampaignId) return;
+        busy = true;
+        try
+        {
+            await Characters.DeleteAsync(current.Character.CampaignId, current.Character.Id);
+            if (campaign?.Id == current.Character.CampaignId) { pendingDelete = null; await Reload(); }
+        }
+        catch (Exception) { error = "Unable to delete this character."; }
+        finally { busy = false; }
+    }
+    public void Dispose() { disposed = true; version++; Campaigns.Changed -= CampaignChanged; }
+}

@@ -1,7 +1,7 @@
 namespace MTU.Core;
 
-/// <summary>Quantity and attachments belong to a Traveller's equipment, not the shared catalogue.</summary>
-public sealed class TravellerEquipmentDetails
+/// <summary>Quantity and attachments belong to a character's equipment, not the shared catalogue.</summary>
+public sealed class CharacterEquipmentDetails
 {
     public EquipmentItem Equipment { get; init; } = new();
     public int Quantity { get; set; } = 1;
@@ -17,7 +17,7 @@ public sealed class TravellerEquipmentDetails
         Equipment.Kind == EquipmentKind.Weapon && Equipment.Range > 0;
     public bool IntelligentWeapon => SupportsAttachments && SmartTracker;
 
-    public TravellerEquipmentDetails Copy() => (TravellerEquipmentDetails)MemberwiseClone();
+    public CharacterEquipmentDetails Copy() => (CharacterEquipmentDetails)MemberwiseClone();
 
     public string AttachmentSummary
     {

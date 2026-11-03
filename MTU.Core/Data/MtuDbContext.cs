@@ -14,10 +14,11 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
         );
 
     public DbSet<CampaignEntity> Campaigns => Set<CampaignEntity>();
-    public DbSet<TravellerEntity> Travellers => Set<TravellerEntity>();
+    public DbSet<NpcEntity> NPCs => Set<NpcEntity>();
+    public DbSet<CharacterEntity> Characters => Set<CharacterEntity>();
     public DbSet<EquipmentItem> Equipment => Set<EquipmentItem>();
-    public DbSet<TravellerEquipmentEntity> TravellerEquipment => Set<TravellerEquipmentEntity>();
-    public DbSet<TravellerSkillEntity> TravellerSkills => Set<TravellerSkillEntity>();
+    public DbSet<CharacterEquipmentEntity> CharacterEquipment => Set<CharacterEquipmentEntity>();
+    public DbSet<CharacterSkillEntity> CharacterSkills => Set<CharacterSkillEntity>();
     public DbSet<SectorRefreshState> SectorRefreshState => Set<SectorRefreshState>();
     public DbSet<SectorEntity> Sectors => Set<SectorEntity>();
     public DbSet<SectorNameEntity> SectorNames => Set<SectorNameEntity>();
@@ -31,6 +32,14 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<NpcEntity>().HasKey(p => p.CharacterId);
+        modelBuilder
+            .Entity<NpcEntity>()
+            .HasOne(p => p.Character)
+            .WithOne()
+            .HasForeignKey<NpcEntity>(p => p.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         modelBuilder.Entity<SectorEntity>(e =>
         {
             e.HasIndex(s => new
@@ -68,7 +77,7 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
         });
 
         modelBuilder
-            .Entity<TravellerEquipmentEntity>()
+            .Entity<CharacterEquipmentEntity>()
             .Property(e => e.Quantity)
             .HasDefaultValue(1);
         modelBuilder.Entity<EquipmentItem>().Ignore(e => e.Summary);
@@ -82,38 +91,38 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
             })
             .IsUnique();
         modelBuilder
-            .Entity<TravellerEquipmentEntity>()
-            .HasKey(e => new { e.TravellerId, e.EquipmentId });
+            .Entity<CharacterEquipmentEntity>()
+            .HasKey(e => new { e.CharacterId, e.EquipmentId });
         modelBuilder
-            .Entity<TravellerEquipmentEntity>()
-            .HasOne(e => e.Traveller)
+            .Entity<CharacterEquipmentEntity>()
+            .HasOne(e => e.Character)
             .WithMany()
-            .HasForeignKey(e => e.TravellerId)
+            .HasForeignKey(e => e.CharacterId)
             .OnDelete(DeleteBehavior.Cascade);
         modelBuilder
-            .Entity<TravellerEquipmentEntity>()
+            .Entity<CharacterEquipmentEntity>()
             .HasOne(e => e.Equipment)
             .WithMany()
             .HasForeignKey(e => e.EquipmentId)
             .OnDelete(DeleteBehavior.Cascade);
         modelBuilder
-            .Entity<TravellerSkillEntity>()
-            .HasOne(s => s.Traveller)
+            .Entity<CharacterSkillEntity>()
+            .HasOne(s => s.Character)
             .WithMany()
-            .HasForeignKey(s => s.TravellerId)
+            .HasForeignKey(s => s.CharacterId)
             .OnDelete(DeleteBehavior.Cascade);
-        modelBuilder.Entity<TravellerSkillEntity>().Property(s => s.Name).UseCollation("NOCASE");
+        modelBuilder.Entity<CharacterSkillEntity>().Property(s => s.Name).UseCollation("NOCASE");
         modelBuilder
-            .Entity<TravellerSkillEntity>()
-            .HasIndex(s => new { s.TravellerId, s.Name })
+            .Entity<CharacterSkillEntity>()
+            .HasIndex(s => new { s.CharacterId, s.Name })
             .IsUnique();
         modelBuilder
-            .Entity<TravellerEntity>()
+            .Entity<CharacterEntity>()
             .HasOne(t => t.Campaign)
             .WithMany()
             .HasForeignKey(t => t.CampaignId)
             .OnDelete(DeleteBehavior.Cascade);
-        modelBuilder.Entity<TravellerEntity>().HasIndex(t => new { t.CampaignId, t.TravellerName });
+        modelBuilder.Entity<CharacterEntity>().HasIndex(t => new { t.CampaignId, t.Name });
         modelBuilder
             .Entity<CampaignEntity>()
             .HasIndex(c => c.IsActive)

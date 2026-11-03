@@ -152,13 +152,15 @@ public class CampaignEntity
     public bool IsActive { get; set; }
 }
 
-public class TravellerEntity
+public class CharacterEntity
 {
+    public bool IsNpc { get; set; }
+
     public int Id { get; set; }
     public int CampaignId { get; set; }
     public CampaignEntity Campaign { get; set; } = null!;
     public string PlayerName { get; set; } = "";
-    public string TravellerName { get; set; } = "";
+    public string Name { get; set; } = "";
     public string Race { get; set; } = "";
     public string Upp { get; set; } = "";
     public string TermsServed { get; set; } = "0";
@@ -169,16 +171,16 @@ public class TravellerEntity
     public bool Inactive { get; set; }
 }
 
-public class TravellerSkillEntity
+public class CharacterSkillEntity
 {
     public int Id { get; set; }
-    public int TravellerId { get; set; }
-    public TravellerEntity Traveller { get; set; } = null!;
+    public int CharacterId { get; set; }
+    public CharacterEntity Character { get; set; } = null!;
     public string Name { get; set; } = "";
     public int Level { get; set; }
 }
 
-public class TravellerEquipmentEntity
+public class CharacterEquipmentEntity
 {
     public bool Equipped { get; set; }
     public int Quantity { get; set; } = 1;
@@ -189,8 +191,19 @@ public class TravellerEquipmentEntity
     public bool Fof { get; set; }
     public bool Phud { get; set; }
     public bool SmartTracker { get; set; }
-    public int TravellerId { get; set; }
-    public TravellerEntity Traveller { get; set; } = null!;
+    public int CharacterId { get; set; }
+    public CharacterEntity Character { get; set; } = null!;
     public int EquipmentId { get; set; }
     public EquipmentItem Equipment { get; set; } = null!;
+}
+
+public class NpcEntity
+{
+    public int CharacterId { get; set; }
+    public CharacterEntity Character { get; set; } = null!;
+    public string Occupation { get; set; } = "";
+    public string Gender { get; set; } = "";
+    public string Quirks1 { get; set; } = "";
+    public string Quirks2 { get; set; } = "";
+    public NpcSkillLevel SkillLevel { get; set; } = NpcSkillLevel.Average;
 }

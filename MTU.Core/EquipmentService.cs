@@ -151,15 +151,15 @@ public sealed class EquipmentService(MtuDbContext db)
         await db.SaveChangesAsync();
     }
 
-    public async Task<IReadOnlyList<EquipmentItem>> ListForTravellerAsync(
+    public async Task<IReadOnlyList<EquipmentItem>> ListForCharacterAsync(
         int campaignId,
-        int travellerId
+        int characterId
     )
     {
-        await RequireTraveller(campaignId, travellerId);
+        await RequireCharacter(campaignId, characterId);
         return await db
-            .TravellerEquipment.AsNoTracking()
-            .Where(e => e.TravellerId == travellerId)
+            .CharacterEquipment.AsNoTracking()
+            .Where(e => e.CharacterId == characterId)
             .OrderBy(e => e.Equipment.Kind)
             .ThenBy(e => e.Equipment.Name)
             .ThenBy(e => e.Equipment.Tl)
@@ -168,23 +168,23 @@ public sealed class EquipmentService(MtuDbContext db)
             .ToArrayAsync();
     }
 
-    public async Task<IReadOnlyList<TravellerEquipmentDetails>> ListDetailsForTravellerAsync(
+    public async Task<IReadOnlyList<CharacterEquipmentDetails>> ListDetailsForCharacterAsync(
         int campaignId,
-        int travellerId
+        int characterId
     )
     {
-        await RequireTraveller(campaignId, travellerId);
+        await RequireCharacter(campaignId, characterId);
         var entries = await db
-            .TravellerEquipment.AsNoTracking()
+            .CharacterEquipment.AsNoTracking()
             .Include(e => e.Equipment)
-            .Where(e => e.TravellerId == travellerId)
+            .Where(e => e.CharacterId == characterId)
             .OrderBy(e => e.Equipment.Kind)
             .ThenBy(e => e.Equipment.Name)
             .ThenBy(e => e.Equipment.Tl)
             .ThenBy(e => e.EquipmentId)
             .ToArrayAsync();
         return entries
-            .Select(e => new TravellerEquipmentDetails
+            .Select(e => new CharacterEquipmentDetails
             {
                 Equipment = e.Equipment,
                 Quantity = e.Quantity,
@@ -200,55 +200,55 @@ public sealed class EquipmentService(MtuDbContext db)
             .ToArray();
     }
 
-    public Task AddToTravellerAsync(int campaignId, int travellerId, int equipmentId) =>
-        AddToTravellerAsync(
+    public Task AddToCharacterAsync(int campaignId, int characterId, int equipmentId) =>
+        AddToCharacterAsync(
             campaignId,
-            travellerId,
-            new TravellerEquipmentDetails { Equipment = new EquipmentItem { Id = equipmentId } }
+            characterId,
+            new CharacterEquipmentDetails { Equipment = new EquipmentItem { Id = equipmentId } }
         );
 
-    public async Task AddToTravellerAsync(
+    public async Task AddToCharacterAsync(
         int campaignId,
-        int travellerId,
-        TravellerEquipmentDetails details
+        int characterId,
+        CharacterEquipmentDetails details
     )
     {
-        await RequireTraveller(campaignId, travellerId);
+        await RequireCharacter(campaignId, characterId);
         var equipment =
             await db
                 .Equipment.AsNoTracking()
                 .SingleOrDefaultAsync(e => e.Id == details.Equipment.Id)
             ?? throw new ArgumentException("Select equipment from the catalogue.");
         if (
-            await db.TravellerEquipment.AnyAsync(e =>
-                e.TravellerId == travellerId && e.EquipmentId == equipment.Id
+            await db.CharacterEquipment.AnyAsync(e =>
+                e.CharacterId == characterId && e.EquipmentId == equipment.Id
             )
         )
             throw new ArgumentException(
                 "This Traveller already has this equipment. Change its quantity using Options."
             );
-        var entity = new TravellerEquipmentEntity
+        var entity = new CharacterEquipmentEntity
         {
-            TravellerId = travellerId,
+            CharacterId = characterId,
             EquipmentId = equipment.Id,
         };
         ApplyDetails(entity, equipment, details);
-        db.TravellerEquipment.Add(entity);
+        db.CharacterEquipment.Add(entity);
         await db.SaveChangesAsync();
     }
 
-    public async Task SaveTravellerDetailsAsync(
+    public async Task SaveCharacterDetailsAsync(
         int campaignId,
-        int travellerId,
-        TravellerEquipmentDetails details
+        int characterId,
+        CharacterEquipmentDetails details
     )
     {
-        await RequireTraveller(campaignId, travellerId);
+        await RequireCharacter(campaignId, characterId);
         var entity =
             await db
-                .TravellerEquipment.Include(e => e.Equipment)
+                .CharacterEquipment.Include(e => e.Equipment)
                 .SingleOrDefaultAsync(e =>
-                    e.TravellerId == travellerId && e.EquipmentId == details.Equipment.Id
+                    e.CharacterId == characterId && e.EquipmentId == details.Equipment.Id
                 )
             ?? throw new ArgumentException("This Traveller no longer has this equipment.");
         ApplyDetails(entity, entity.Equipment, details);
@@ -257,24 +257,24 @@ public sealed class EquipmentService(MtuDbContext db)
 
     public async Task SetEquippedAsync(
         int campaignId,
-        int travellerId,
+        int characterId,
         int equipmentId,
         bool equipped
     )
     {
-        await RequireTraveller(campaignId, travellerId);
+        await RequireCharacter(campaignId, characterId);
         var entity =
-            await db.TravellerEquipment.SingleOrDefaultAsync(e =>
-                e.TravellerId == travellerId && e.EquipmentId == equipmentId
+            await db.CharacterEquipment.SingleOrDefaultAsync(e =>
+                e.CharacterId == characterId && e.EquipmentId == equipmentId
             ) ?? throw new ArgumentException("This Traveller no longer has this equipment.");
         entity.Equipped = equipped;
         await db.SaveChangesAsync();
     }
 
     private static void ApplyDetails(
-        TravellerEquipmentEntity entity,
+        CharacterEquipmentEntity entity,
         EquipmentItem equipment,
-        TravellerEquipmentDetails details
+        CharacterEquipmentDetails details
     )
     {
         if (details.Quantity < 1)
@@ -306,19 +306,19 @@ public sealed class EquipmentService(MtuDbContext db)
         entity.SmartTracker = details.SmartTracker;
     }
 
-    public async Task RemoveFromTravellerAsync(int campaignId, int travellerId, int equipmentId)
+    public async Task RemoveFromCharacterAsync(int campaignId, int characterId, int equipmentId)
     {
-        await RequireTraveller(campaignId, travellerId);
-        var link = await db.TravellerEquipment.SingleAsync(e =>
-            e.TravellerId == travellerId && e.EquipmentId == equipmentId
+        await RequireCharacter(campaignId, characterId);
+        var link = await db.CharacterEquipment.SingleAsync(e =>
+            e.CharacterId == characterId && e.EquipmentId == equipmentId
         );
-        db.TravellerEquipment.Remove(link);
+        db.CharacterEquipment.Remove(link);
         await db.SaveChangesAsync();
     }
 
-    private async Task RequireTraveller(int campaignId, int travellerId)
+    private async Task RequireCharacter(int campaignId, int characterId)
     {
-        if (!await db.Travellers.AnyAsync(t => t.Id == travellerId && t.CampaignId == campaignId))
+        if (!await db.Characters.AnyAsync(t => t.Id == characterId && t.CampaignId == campaignId))
             throw new ArgumentException("This Traveller is not in the current campaign.");
     }
 }

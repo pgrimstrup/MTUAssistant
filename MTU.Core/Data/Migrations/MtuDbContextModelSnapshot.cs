@@ -94,6 +94,126 @@ namespace MTU.Core.Data.Migrations
             );
 
             modelBuilder.Entity(
+                "MTU.Core.Data.CharacterEntity",
+                b =>
+                {
+                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("INTEGER");
+
+                    b.Property<int>("CampaignId").HasColumnType("INTEGER");
+
+                    b.Property<int>("HighestNavalRank").HasColumnType("INTEGER");
+
+                    b.Property<int>("HighestScoutRank").HasColumnType("INTEGER");
+
+                    b.Property<bool>("Inactive").HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsNpc").HasColumnType("INTEGER");
+
+                    b.Property<string>("Name").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<int>("NaturalDr").HasColumnType("INTEGER");
+
+                    b.Property<string>("PlayerName").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<string>("Race").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<string>("TermsServed").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<byte[]>("TokenImage").HasColumnType("BLOB");
+
+                    b.Property<string>("Upp").IsRequired().HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CampaignId", "Name");
+
+                    b.ToTable("Characters");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.CharacterEquipmentEntity",
+                b =>
+                {
+                    b.Property<int>("CharacterId").HasColumnType("INTEGER");
+
+                    b.Property<int>("EquipmentId").HasColumnType("INTEGER");
+
+                    b.Property<bool>("Equipped").HasColumnType("INTEGER");
+
+                    b.Property<bool>("Fof").HasColumnType("INTEGER");
+
+                    b.Property<bool>("HolographicSight").HasColumnType("INTEGER");
+
+                    b.Property<bool>("LaserSight").HasColumnType("INTEGER");
+
+                    b.Property<bool>("Phud").HasColumnType("INTEGER");
+
+                    b.Property<int>("Quantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(1);
+
+                    b.Property<bool>("Scope").HasColumnType("INTEGER");
+
+                    b.Property<bool>("SmartTracker").HasColumnType("INTEGER");
+
+                    b.Property<bool>("TargetingSystem").HasColumnType("INTEGER");
+
+                    b.HasKey("CharacterId", "EquipmentId");
+
+                    b.HasIndex("EquipmentId");
+
+                    b.ToTable("CharacterEquipment");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.CharacterSkillEntity",
+                b =>
+                {
+                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("INTEGER");
+
+                    b.Property<int>("CharacterId").HasColumnType("INTEGER");
+
+                    b.Property<int>("Level").HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .UseCollation("NOCASE");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CharacterId", "Name").IsUnique();
+
+                    b.ToTable("CharacterSkills");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.NpcEntity",
+                b =>
+                {
+                    b.Property<int>("CharacterId").HasColumnType("INTEGER");
+
+                    b.Property<string>("Gender").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<string>("Occupation").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<string>("Quirks1").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<string>("Quirks2").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<int>("SkillLevel").HasColumnType("INTEGER");
+
+                    b.HasKey("CharacterId");
+
+                    b.ToTable("NPCs");
+                }
+            );
+
+            modelBuilder.Entity(
                 "MTU.Core.Data.RouteEntity",
                 b =>
                 {
@@ -308,102 +428,6 @@ namespace MTU.Core.Data.Migrations
             );
 
             modelBuilder.Entity(
-                "MTU.Core.Data.TravellerEntity",
-                b =>
-                {
-                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("INTEGER");
-
-                    b.Property<int>("CampaignId").HasColumnType("INTEGER");
-
-                    b.Property<int>("HighestNavalRank").HasColumnType("INTEGER");
-
-                    b.Property<int>("HighestScoutRank").HasColumnType("INTEGER");
-
-                    b.Property<bool>("Inactive").HasColumnType("INTEGER");
-
-                    b.Property<int>("NaturalDr").HasColumnType("INTEGER");
-
-                    b.Property<string>("PlayerName").IsRequired().HasColumnType("TEXT");
-
-                    b.Property<string>("Race").IsRequired().HasColumnType("TEXT");
-
-                    b.Property<string>("TermsServed").IsRequired().HasColumnType("TEXT");
-
-                    b.Property<byte[]>("TokenImage").HasColumnType("BLOB");
-
-                    b.Property<string>("TravellerName").IsRequired().HasColumnType("TEXT");
-
-                    b.Property<string>("Upp").IsRequired().HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CampaignId", "TravellerName");
-
-                    b.ToTable("Travellers");
-                }
-            );
-
-            modelBuilder.Entity(
-                "MTU.Core.Data.TravellerEquipmentEntity",
-                b =>
-                {
-                    b.Property<int>("TravellerId").HasColumnType("INTEGER");
-
-                    b.Property<int>("EquipmentId").HasColumnType("INTEGER");
-
-                    b.Property<bool>("Equipped").HasColumnType("INTEGER");
-
-                    b.Property<bool>("Fof").HasColumnType("INTEGER");
-
-                    b.Property<bool>("HolographicSight").HasColumnType("INTEGER");
-
-                    b.Property<bool>("LaserSight").HasColumnType("INTEGER");
-
-                    b.Property<bool>("Phud").HasColumnType("INTEGER");
-
-                    b.Property<int>("Quantity")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasDefaultValue(1);
-
-                    b.Property<bool>("Scope").HasColumnType("INTEGER");
-
-                    b.Property<bool>("SmartTracker").HasColumnType("INTEGER");
-
-                    b.Property<bool>("TargetingSystem").HasColumnType("INTEGER");
-
-                    b.HasKey("TravellerId", "EquipmentId");
-
-                    b.HasIndex("EquipmentId");
-
-                    b.ToTable("TravellerEquipment");
-                }
-            );
-
-            modelBuilder.Entity(
-                "MTU.Core.Data.TravellerSkillEntity",
-                b =>
-                {
-                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("INTEGER");
-
-                    b.Property<int>("Level").HasColumnType("INTEGER");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("TEXT")
-                        .UseCollation("NOCASE");
-
-                    b.Property<int>("TravellerId").HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TravellerId", "Name").IsUnique();
-
-                    b.ToTable("TravellerSkills");
-                }
-            );
-
-            modelBuilder.Entity(
                 "MTU.Core.EquipmentItem",
                 b =>
                 {
@@ -496,6 +520,70 @@ namespace MTU.Core.Data.Migrations
             );
 
             modelBuilder.Entity(
+                "MTU.Core.Data.CharacterEntity",
+                b =>
+                {
+                    b.HasOne("MTU.Core.Data.CampaignEntity", "Campaign")
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Campaign");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.CharacterEquipmentEntity",
+                b =>
+                {
+                    b.HasOne("MTU.Core.Data.CharacterEntity", "Character")
+                        .WithMany()
+                        .HasForeignKey("CharacterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MTU.Core.EquipmentItem", "Equipment")
+                        .WithMany()
+                        .HasForeignKey("EquipmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Character");
+
+                    b.Navigation("Equipment");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.CharacterSkillEntity",
+                b =>
+                {
+                    b.HasOne("MTU.Core.Data.CharacterEntity", "Character")
+                        .WithMany()
+                        .HasForeignKey("CharacterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Character");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.NpcEntity",
+                b =>
+                {
+                    b.HasOne("MTU.Core.Data.CharacterEntity", "Character")
+                        .WithOne()
+                        .HasForeignKey("MTU.Core.Data.NpcEntity", "CharacterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Character");
+                }
+            );
+
+            modelBuilder.Entity(
                 "MTU.Core.Data.RouteEntity",
                 b =>
                 {
@@ -576,56 +664,6 @@ namespace MTU.Core.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Sector");
-                }
-            );
-
-            modelBuilder.Entity(
-                "MTU.Core.Data.TravellerEntity",
-                b =>
-                {
-                    b.HasOne("MTU.Core.Data.CampaignEntity", "Campaign")
-                        .WithMany()
-                        .HasForeignKey("CampaignId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Campaign");
-                }
-            );
-
-            modelBuilder.Entity(
-                "MTU.Core.Data.TravellerEquipmentEntity",
-                b =>
-                {
-                    b.HasOne("MTU.Core.EquipmentItem", "Equipment")
-                        .WithMany()
-                        .HasForeignKey("EquipmentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("MTU.Core.Data.TravellerEntity", "Traveller")
-                        .WithMany()
-                        .HasForeignKey("TravellerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Equipment");
-
-                    b.Navigation("Traveller");
-                }
-            );
-
-            modelBuilder.Entity(
-                "MTU.Core.Data.TravellerSkillEntity",
-                b =>
-                {
-                    b.HasOne("MTU.Core.Data.TravellerEntity", "Traveller")
-                        .WithMany()
-                        .HasForeignKey("TravellerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Traveller");
                 }
             );
 

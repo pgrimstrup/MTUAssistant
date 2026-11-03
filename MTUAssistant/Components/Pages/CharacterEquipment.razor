@@ -2,8 +2,8 @@
 
 <section class="equipment-panel" aria-labelledby="traveller-equipment-heading">
     <div class="equipment-heading"><div class="traveller-identity">
-        @if (TravellerToken.DataUri(Traveller.TokenImage) is { } token) { <img class="header-token" src="@token" alt="@($"{Traveller.TravellerName} token")" /> }
-        <h2 id="traveller-equipment-heading">@Traveller.TravellerName · Equipment</h2></div><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="OnClose">Close</button></div>
+        @if (CharacterToken.DataUri(Character.TokenImage) is { } token) { <img class="header-token" src="@token" alt="@($"{Character.Name} token")" /> }
+        <h2 id="traveller-equipment-heading">@Character.Name · Equipment</h2></div><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="OnClose">Close</button></div>
     @if (error is not null) { <p class="error" role="alert">@error</p> }
     @if (loading) { <p>Loading equipment…</p> }
     else
@@ -18,7 +18,7 @@
                 }
                 else
                 {
-                    <div class="equipment-list"><table class="table equipment-table" aria-label="@(kind == EquipmentKind.Armour ? "Traveller armour" : "Traveller weapons")">
+                    <div class="equipment-list"><table class="table equipment-table" aria-label="@(kind == EquipmentKind.Armour ? "Character armour" : "Character weapons")">
                         <thead><tr><th scope="col" class="equipped-cell"><span class="visually-hidden">Worn or equipped</span></th><th scope="col">Name</th><th scope="col">Quantity</th>
                             @if (kind == EquipmentKind.Armour) { <th scope="col" class="wrap-cell">Protection</th><th scope="col">TL</th><th scope="col">Rad</th><th scope="col">Kg</th><th scope="col">Cost</th><th scope="col" class="wrap-cell">Required Skill</th> }
                             else { <th scope="col">TL</th><th scope="col">Range</th><th scope="col">Damage</th><th scope="col">Kg</th><th scope="col">Cost</th><th scope="col">Magazine</th><th scope="col">Mag Cost</th><th scope="col" class="wrap-cell traits-cell">Traits</th> }
@@ -54,17 +54,17 @@
         <button type="button" class="btn btn-primary" @onclick="Add" disabled="@(busy || loading || selectedId == 0)">Add Equipment</button>
         <button type="button" class="btn btn-outline-secondary" @onclick="New" disabled="@(busy || loading)">New Equipment</button>
     </div>
-    @if (detailsEditing is not null) { <TravellerEquipmentDialog @key="detailsEditing" Traveller="Traveller" Item="detailsEditing" Adding="addingDetails" OnSaved="DetailsSaved" OnClose="() => detailsEditing = null" /> }
+    @if (detailsEditing is not null) { <CharacterEquipmentDialog @key="detailsEditing" Character="Character" Item="detailsEditing" Adding="addingDetails" OnSaved="DetailsSaved" OnClose="() => detailsEditing = null" /> }
     @if (editing is not null) { <EquipmentDialog @key="editing" Item="editing" OnSaved="Saved" OnClose="() => editing = null" /> }
 </section>
 
 @code {
-    [Parameter, EditorRequired] public Traveller Traveller { get; set; } = default!;
+    [Parameter, EditorRequired] public Character Character { get; set; } = default!;
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     private IReadOnlyList<EquipmentItem> catalogue = [];
-    private IReadOnlyList<TravellerEquipmentDetails> equipment = [];
-    private TravellerEquipmentDetails? detailsEditing;
+    private IReadOnlyList<CharacterEquipmentDetails> equipment = [];
+    private CharacterEquipmentDetails? detailsEditing;
     private bool addingDetails;
     private EquipmentItem? editing;
     private int selectedId;
@@ -77,19 +77,19 @@
         try
         {
             catalogue = await EquipmentStore.ListAsync();
-            equipment = await EquipmentStore.ListDetailsForTravellerAsync(Traveller.CampaignId, Traveller.Id);
+            equipment = await EquipmentStore.ListDetailsForCharacterAsync(Character.CampaignId, Character.Id);
             error = null;
         }
         catch (Exception) { error = "Unable to load equipment."; }
         finally { loading = false; }
     }
-    private async Task SetEquipped(TravellerEquipmentDetails item, bool value)
+    private async Task SetEquipped(CharacterEquipmentDetails item, bool value)
     {
         if (busy) return;
         busy = true;
         try
         {
-            await EquipmentStore.SetEquippedAsync(Traveller.CampaignId, Traveller.Id, item.Equipment.Id, value);
+            await EquipmentStore.SetEquippedAsync(Character.CampaignId, Character.Id, item.Equipment.Id, value);
             item.Equipped = value;
             error = null;
             await OnChanged.InvokeAsync();
@@ -116,7 +116,7 @@
         addingDetails = true;
         detailsEditing = new() { Equipment = item };
     }
-    private void Options(TravellerEquipmentDetails item) { addingDetails = false; detailsEditing = item; }
+    private void Options(CharacterEquipmentDetails item) { addingDetails = false; detailsEditing = item; }
     private async Task DetailsSaved()
     {
         detailsEditing = null;
@@ -130,7 +130,7 @@
         busy = true;
         try
         {
-            await EquipmentStore.RemoveFromTravellerAsync(Traveller.CampaignId, Traveller.Id, item.Id);
+            await EquipmentStore.RemoveFromCharacterAsync(Character.CampaignId, Character.Id, item.Id);
             await Load();
             await OnChanged.InvokeAsync();
         }
