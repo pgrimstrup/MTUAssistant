@@ -8,6 +8,12 @@
     background: #05070d;
 }
 
+.presentation-map { height: 100dvh; min-height: 0; border: 0; border-radius: 0; }
+.presentation-map .map-host, .presentation-map .map-host:active { cursor: default; }
+.present-link { display:grid; place-items:center; width:2.25rem; height:2.25rem; border:1px solid var(--app-border); border-radius:.4rem; background:var(--app-surface); color:inherit; text-decoration:none; }
+.present-link svg { width:1.35rem; height:1.35rem; fill:currentColor; }
+.present-link:hover { background: var(--app-accent-soft); border-color: var(--app-accent); }
+
 .map-host {
     position: absolute;
     inset: 0;
@@ -22,12 +28,26 @@
     display: block;
 }
 
+.map-host ::deep .presentation-pointer {
+    position:absolute;
+    width:25px;
+    height:25px;
+    border-radius:50%;
+    border:1.5px solid rgba(170, 225, 255, .8);
+    background:rgba(135, 206, 250, .4);
+    box-shadow:0 0 7px rgba(135, 206, 250, .35);
+    transform:translate(-50%, -50%);
+    pointer-events:none;
+    z-index:1;
+}
+
 .map-hud {
     position: absolute;
     top: 0.75rem;
     right: 0.75rem;
     display: flex;
     flex-direction: column;
+    align-items: flex-end;
     gap: 0.35rem;
 }
 

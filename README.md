@@ -88,3 +88,13 @@ Skills and Equip reuse the same inline editors and catalogue dialogs as Travelle
 ### Character schema naming
 
 Shared records use Characters / CharacterEntity and CharacterService. NPCs / NpcEntity stores the one-to-one NPC profile, with NpcService providing NPC operations. CharacterSkills and CharacterEquipment use CharacterId foreign keys; the shared character name is Name. Shared editors and helpers use Character naming. The Travellers and Patrons and Enemies screen names remain unchanged. The CharacterNaming migration renames populated tables and columns in place, preserves IDs and relationships, and supports rollback without deleting character data.
+
+## Map presentation
+
+On the Home map, the cast icon (**Present map**) opens a separate read-only map window. Move it to the presentation monitor and use the browser's fullscreen command (F11 on Windows). It follows the Admin map's centre, zoom, search navigation and selected hex. A different window size shows more or less surrounding space at the same map scale. Admin navigation and campaign controls are omitted. The shared System Data panel follows the selected hex and displays the world heading, UWP, trade codes, travel advisory and stellar details; deselection clears it. Presentation clicks and drags do not change the map, while its details panel can be scrolled.
+
+Each Admin tab keeps a presentation session in browser session storage. Map snapshots are sent through a named BroadcastChannel and cached locally for late opening, reload and reopening. Only map camera coordinates and selection are shared; the presentation loads the selected world details from the same local catalogue. This initial version requires both windows in the same browser profile and application origin; it does not synchronize to another browser or device. Leaving Home freezes the last presentation snapshot; returning resumes updates. No database migration is required. The view is read-only UI, not an authentication boundary for other application routes.
+
+Presentation checks: `node MTUAssistant/Components/Map/PresentationSync.test.mjs` and the existing map geometry/selection checks.
+
+The Presentation map also shows the Admin pointer as a 25 CSS-pixel, semi-transparent light-blue circle. Pointer positions use map coordinates so they align across different window sizes and zoom levels. The marker hides when the pointer leaves the Admin canvas, its window loses focus, Home is left, or the location is outside the presentation viewport. Pointer updates are transient and are not saved with the cached map snapshot.

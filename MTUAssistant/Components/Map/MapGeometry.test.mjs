@@ -3,7 +3,7 @@ import { HEX_X, hexCenter, findHex, detailLevel, LabelLayout, parseHex, worldPri
 import { readFile } from 'node:fs/promises';
 // Collocated browser modules use public /js URLs; map those to physical wwwroot files in Node.
 let rendererSource = await readFile(new URL('./MapView.razor.js', import.meta.url), 'utf8');
-for (const moduleName of ['WorldSelection.js', 'MapGeometry.js'])
+for (const moduleName of ['WorldSelection.js', 'MapGeometry.js', 'PresentationSync.js'])
     rendererSource = rendererSource.replaceAll(`../../js/${moduleName}`,
         new URL(`../../wwwroot/js/${moduleName}`, import.meta.url).href);
 const { DynamicMap } = await import(`data:text/javascript;base64,${Buffer.from(rendererSource).toString('base64')}`);
@@ -253,3 +253,76 @@ assert.deepEqual(locationCalls.at(-1),['SetPointerLocation',null,null]);
 locationMap.pointerPosition=null;
 locationMap.updatePointerLocation();
 assert.equal(locationCalls.length,3);
+
+// Presentation camera coordinates stay stable across catalogue origins and window sizes.
+const presentationHost = { clientWidth: 1600, clientHeight: 900 };
+const presentationCalls = [];
+const presentationMap = new DynamicMap(presentationHost, {}, { invokeMethodAsync(...args) { presentationCalls.push(args); return Promise.resolve(); } }, { readOnly: true });
+presentationMap.overview = { minSectorX: -4, minSectorY: -2 };
+presentationMap.worldW = 1000; presentationMap.worldH = 1000;
+let camera = {}, draws = 0, published = 0;
+presentationMap.viewport = {
+    setZoom(zoom) { camera.zoom = zoom; },
+    moveCenter(x, y) { camera.x = x; camera.y = y; },
+    resize() { camera = {}; },
+    clampZoom() { throw Error('Presentation must preserve Admin zoom'); }
+};
+presentationMap.update = () => draws++;
+presentationMap.presentation = { publish() { published++; } };
+const snapshot = { version: 1, x: 12, y: 34, zoom: 2, selected: { x: 10, y: 35, key: '42/0101' } };
+presentationMap.applyPresentation(snapshot);
+assert.deepEqual(camera, { x: 12 + 4 * 32 * HEX_X, y: 114, zoom: 2 });
+assert.deepEqual(presentationMap.selected, { x: 10 + 4 * 32 * HEX_X, y: 115, key: '42/0101' });
+presentationHost.clientWidth = 800; presentationHost.clientHeight = 600;
+presentationMap.onResize();
+assert.deepEqual(camera, { x: 12 + 4 * 32 * HEX_X, y: 114, zoom: 2 }, 'resize retains the same centre and zoom');
+presentationMap.saveView();
+assert.equal(published, 0, 'Presentation never publishes or overwrites the saved Admin viewport');
+await presentationMap.selectWorld({});
+presentationMap.pointerPosition = { x: 10, y: 10 };
+presentationMap.updatePointerLocation();
+assert.equal(draws, 2);
+assert.equal(presentationCalls.length, 1, 'camera resizing and user input do not reload world details');
+assert.equal(presentationCalls[0][0], 'SelectHex');
+presentationMap.applyPresentation({ ...snapshot, selected: null });
+assert.equal(presentationMap.selected, null, 'clearing a selection removes its highlight');
+assert.deepEqual(presentationCalls[1], ['ClearPresentationSelection'], 'deselection clears world details');
+console.log('Presentation camera origins, resize, deselection and read-only rendering checks passed.');
+
+// Pointer transmission uses map coordinates, independent of canvas size or device pixel ratio.
+const pointerPackets = [];
+const pointerSource = new DynamicMap({ clientWidth: 800, clientHeight: 400 }, {}, {});
+pointerSource.overview = { minSectorX: -2, minSectorY: 3 };
+pointerSource.app = { canvas: { getBoundingClientRect: () => ({ left: 100, top: 50, width: 400, height: 200 }) } };
+pointerSource.viewport = { toWorld: (x, y) => ({ x: x / 4 + 10, y: y / 4 + 20 }) };
+pointerSource.presentation = { publishPointer: point => pointerPackets.push(point) };
+pointerSource.pointerPosition = { x: 200, y: 100 };
+pointerSource.publishPresentationPointer();
+assert.deepEqual(pointerPackets[0], { x: 60 - 2 * 32 * HEX_X, y: 165 });
+pointerSource.publishPresentationPointer();
+assert.equal(pointerPackets.length, 1, 'unchanged coordinates do not send duplicate updates');
+pointerSource.pointerPosition = null;
+pointerSource.publishPresentationPointer();
+assert.equal(pointerPackets[1], null);
+pointerSource.pointerPosition = { x: 90, y: 100 };
+pointerSource.publishPresentationPointer();
+assert.equal(pointerPackets.length, 2, 'outside-canvas pointer remains hidden');
+const marker = { hidden: true, style: {} };
+presentationMap.presentationPointer = marker;
+presentationMap.viewport = { left: 0, top: 0, scale: { x: 2, y: 2 } };
+presentationMap.presentedPointer = { x: 100 - 4 * 32 * HEX_X, y: 150 - 2 * 40 };
+presentationMap.drawPresentationPointer();
+assert.equal(marker.hidden, false);
+assert.equal(marker.style.left, '200px');
+assert.equal(marker.style.top, '300px');
+presentationMap.viewport.scale = { x: 3, y: 3 };
+presentationMap.drawPresentationPointer();
+assert.equal(marker.style.left, '300px', 'pointer follows zoom in the same map location');
+assert.equal(marker.style.top, '450px');
+presentationMap.presentedPointer = { x: 10000, y: 10000 };
+presentationMap.drawPresentationPointer();
+assert.equal(marker.hidden, true, 'offscreen pointer is hidden');
+presentationMap.presentedPointer = null;
+presentationMap.drawPresentationPointer();
+assert.equal(marker.hidden, true, 'leaving the Admin map clears the marker');
+console.log('Presentation pointer projection, zoom, deduplication and visibility checks passed.');

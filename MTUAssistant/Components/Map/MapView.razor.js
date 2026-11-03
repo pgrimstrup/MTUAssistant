@@ -1,4 +1,5 @@
 import { observeClicks } from "../../js/WorldSelection.js";
+import { presentationSession, connectPresentation } from "../../js/PresentationSync.js";
 import { HEX_X, SECTOR_WIDTH, SECTOR_HEIGHT, MAP_PADDING, DETAIL_LEVELS,
     hexCenter, findHex, parseHex, detailLevel, intersects, worldPriority, worldLabelRules,
     mapAppearance, baseSymbols, isSubsectorCapital, worldName, borderSegments, routePoints, insetBorderSegment } from "../../js/MapGeometry.js";
@@ -28,16 +29,16 @@ async function loadLibraries() {
     await scriptsPromise;
 }
 
-export async function createMap(host, statusEl, callback) {
+export async function createMap(host, statusEl, callback, options = {}, presentationLink = null) {
     await loadLibraries();
-    const map = new DynamicMap(host, statusEl, callback);
+    const map = new DynamicMap(host, statusEl, callback, options, presentationLink);
     try { await map.start(); return map; }
     catch (error) { map.dispose(); throw error; }
 }
 
 export class DynamicMap {
-    constructor(host, statusEl, callback) {
-        Object.assign(this, { host, statusEl, callback });
+    constructor(host, statusEl, callback, options = {}, presentationLink = null) {
+        Object.assign(this, { host, statusEl, callback, readOnly: !!options.readOnly, session: options.session, presentationLink });
         this.abort = new AbortController();
         this.sectorCache = new Map();
         this.markers = [];
@@ -59,11 +60,18 @@ export class DynamicMap {
             autoDensity: true, resolution: Math.min(window.devicePixelRatio || 1, 2) });
         if (this.disposed) { this.app.destroy(true, { children: true }); this.app = null; return; }
         this.host.appendChild(this.app.canvas);
+        if (this.readOnly) {
+            this.presentationPointer = document.createElement("div");
+            this.presentationPointer.className = "presentation-pointer";
+            this.presentationPointer.setAttribute("aria-hidden", "true");
+            this.presentationPointer.hidden = true;
+            this.host.appendChild(this.presentationPointer);
+        }
         this.viewport = new pixi_viewport.Viewport({ screenWidth: this.host.clientWidth,
             screenHeight: this.host.clientHeight, worldWidth: this.worldW, worldHeight: this.worldH,
             events: this.app.renderer.events });
         this.app.stage.addChild(this.viewport);
-        this.viewport.drag().pinch().wheel({ smooth: 6 }).decelerate({ friction: .92 });
+        if (!this.readOnly) this.viewport.drag().pinch().wheel({ smooth: 6 }).decelerate({ friction: .92 });
         this.viewport.interactiveChildren = false;
 
         this.grid = new PIXI.Graphics();
@@ -76,7 +84,7 @@ export class DynamicMap {
             layer.eventMode = "none";
             this.viewport.addChild(layer);
         }
-        this.removeClickObserver = observeClicks(this.app.canvas, event => this.selectWorld(event));
+        if (!this.readOnly) this.removeClickObserver = observeClicks(this.app.canvas, event => this.selectWorld(event));
         this.onPointerMove = event => {
             if (event.pointerType === "touch") return;
             this.pointerPosition = { x:event.clientX, y:event.clientY };
@@ -85,10 +93,16 @@ export class DynamicMap {
         this.onPointerLeave = () => { this.pointerPosition = null; this.updatePointerLocation(); };
         this.app.canvas.addEventListener("pointermove", this.onPointerMove, { passive:true });
         this.app.canvas.addEventListener("pointerleave", this.onPointerLeave, { passive:true });
+        this.app.canvas.addEventListener("pointercancel", this.onPointerLeave, { passive:true });
+        globalThis.addEventListener("blur", this.onPointerLeave);
+        globalThis.addEventListener("pagehide", this.onPointerLeave);
+        this.onVisibilityChange = () => { if (document.hidden) this.onPointerLeave(); };
+        document.addEventListener("visibilitychange", this.onVisibilityChange);
         this.resizeObserver = new ResizeObserver(() => this.onResize());
         this.resizeObserver.observe(this.host);
         this.onResize();
-        if (!this.restoreView()) this.fit();
+        if (this.readOnly || !this.restoreView()) this.fit();
+        this.startPresentation();
         this.tick = () => this.onTick();
         this.app.ticker.add(this.tick);
         this.update();
@@ -123,11 +137,13 @@ export class DynamicMap {
         await this.loadOverview();
         if (this.disposed) return;
         this.selected = null;
+        this.presentationSelectionKey = null;
         this.updatePointerLocation();
         this.onResize();
         if (centre && previousOverview) this.viewport.moveCenter(
             centre.x + (previousOverview.minSectorX - this.overview.minSectorX) * SECTOR_WIDTH,
             centre.y + (previousOverview.minSectorY - this.overview.minSectorY) * SECTOR_HEIGHT);
+        if (this.readOnly && this.presentationState) this.applyPresentation(this.presentationState);
         this.lastView = "";
         this.update();
     }
@@ -145,8 +161,11 @@ export class DynamicMap {
     onResize() {
         if (!this.viewport || !this.host.clientWidth || !this.host.clientHeight) return;
         this.viewport.resize(this.host.clientWidth, this.host.clientHeight, this.worldW, this.worldH);
-        this.viewport.clampZoom({ minScale: this.fitZoom, maxScale: MAX_ZOOM });
-        this.updatePanBounds();
+        if (!this.readOnly) {
+            this.viewport.clampZoom({ minScale: this.fitZoom, maxScale: MAX_ZOOM });
+            this.updatePanBounds();
+        }
+        else if (this.presentationState) this.applyPresentation(this.presentationState);
         this.lastView = "";
     }
 
@@ -218,6 +237,7 @@ export class DynamicMap {
         this.statusEl.textContent = this.sectors.length === 0 ? "No sector data — import world data to populate the map."
             : `${DETAIL_LEVELS[level].name} · ${zoom.toFixed(1)} px/pc · ${worlds.length.toLocaleString()} worlds`
                 + (level >= 1 && failed ? ` · ${failed} sectors unavailable; retrying` : level >= 1 && pending ? " · loading sector data…" : "");
+        if (this.readOnly && !this.presentationState) this.statusEl.textContent = "Waiting for the Home map…";
     }
 
     ensureDetails(sectors) {
@@ -561,6 +581,8 @@ export class DynamicMap {
     }
 
     updatePointerLocation() {
+        if (this.readOnly) return;
+        this.publishPresentationPointer();
         if (this.disposed || !this.viewport || (!this.pointerPosition && !this.pointerLocationKey)) return;
         let sectorName = null, subsectorName = null;
         if (this.pointerPosition) {
@@ -586,6 +608,7 @@ export class DynamicMap {
     }
 
     async selectWorld(event) {
+        if (this.readOnly) return;
         const bounds = this.app.canvas.getBoundingClientRect();
         let point = this.viewport.toWorld((event.clientX - bounds.left) * this.host.clientWidth / bounds.width,
             (event.clientY - bounds.top) * this.host.clientHeight / bounds.height);
@@ -605,8 +628,102 @@ export class DynamicMap {
         } catch (error) { if (!this.disposed) console.warn("World selection failed", error); }
     }
 
+    startPresentation() {
+        if (!this.readOnly) {
+            this.session = presentationSession();
+            if (this.presentationLink) {
+                const url = new URL("presentation", document.baseURI);
+                url.searchParams.set("session", this.session);
+                this.presentationLink.href = url.href;
+                this.presentationLink.target = "mtu-presentation-" + this.session;
+                this.openPresentation = event => {
+                    const window = globalThis.open(url.href, this.presentationLink.target, "popup,width=1280,height=800");
+                    if (window) { window.opener = null; event.preventDefault(); }
+                };
+                this.presentationLink.addEventListener("click", this.openPresentation);
+            }
+        }
+        this.presentation = connectPresentation({ session: this.session, readOnly: this.readOnly,
+            onState: state => this.applyPresentation(state),
+            onPointer: point => { this.presentedPointer = point; this.drawPresentationPointer(); } });
+        if (!this.readOnly) this.publishPresentation();
+    }
+
+    publishPresentation() {
+        if (this.readOnly || !this.presentation || !this.viewport) return;
+        const offsetX = this.overview.minSectorX * SECTOR_WIDTH;
+        const offsetY = this.overview.minSectorY * SECTOR_HEIGHT;
+        const { x, y } = this.viewport.center;
+        this.presentation.publish({ version: 1, x: x + offsetX, y: y + offsetY, zoom: this.viewport.scale.x,
+            selected: this.selected ? { x: this.selected.x + offsetX, y: this.selected.y + offsetY,
+                key: this.selected.key ?? null } : null });
+    }
+
+    applyPresentation(state) {
+        if (this.disposed) return;
+        this.presentationState = state;
+        const offsetX = this.overview.minSectorX * SECTOR_WIDTH;
+        const offsetY = this.overview.minSectorY * SECTOR_HEIGHT;
+        this.viewport.setZoom(state.zoom, true);
+        this.viewport.moveCenter(state.x - offsetX, state.y - offsetY);
+        this.selected = state.selected ? { ...state.selected,
+            x: state.selected.x - offsetX, y: state.selected.y - offsetY } : null;
+        this.updatePresentationSelection();
+        this.drawPresentationPointer();
+        this.lastView = "";
+        this.update();
+    }
+
+    updatePresentationSelection() {
+        if (!this.readOnly) return;
+        const key = this.selected ? JSON.stringify([this.selected.x, this.selected.y, this.selected.key]) : "none";
+        if (key === this.presentationSelectionKey) return;
+        this.presentationSelectionKey = key;
+        let result;
+        if (this.selected) {
+            const hex = findHex(this.selected.x, this.selected.y);
+            result = this.callback.invokeMethodAsync("SelectHex", this.overview.minSectorX + hex.sectorColumn,
+                this.overview.minSectorY + hex.sectorRow, hex.column, hex.row);
+        } else result = this.callback.invokeMethodAsync("ClearPresentationSelection");
+        result.catch(error => { if (!this.disposed) console.warn("Presentation world details update failed", error); });
+    }
+
+    publishPresentationPointer() {
+        if (this.disposed || this.readOnly || !this.presentation || !this.viewport) return;
+        let point = null;
+        if (this.pointerPosition) {
+            const bounds = this.app.canvas.getBoundingClientRect();
+            if (bounds.width > 0 && bounds.height > 0) {
+                const x = (this.pointerPosition.x - bounds.left) * this.host.clientWidth / bounds.width;
+                const y = (this.pointerPosition.y - bounds.top) * this.host.clientHeight / bounds.height;
+                if (x >= 0 && y >= 0 && x <= this.host.clientWidth && y <= this.host.clientHeight) {
+                    const world = this.viewport.toWorld(x, y);
+                    point = { x: world.x + this.overview.minSectorX * SECTOR_WIDTH,
+                        y: world.y + this.overview.minSectorY * SECTOR_HEIGHT };
+                }
+            }
+        }
+        const key = JSON.stringify(point);
+        if (key === this.publishedPointerKey) return;
+        this.publishedPointerKey = key;
+        this.presentation.publishPointer(point);
+    }
+
+    drawPresentationPointer() {
+        const marker = this.presentationPointer;
+        if (!marker) return;
+        const point = this.presentedPointer;
+        if (!point || !this.viewport) { marker.hidden = true; return; }
+        const x = (point.x - this.overview.minSectorX * SECTOR_WIDTH - this.viewport.left) * this.viewport.scale.x;
+        const y = (point.y - this.overview.minSectorY * SECTOR_HEIGHT - this.viewport.top) * this.viewport.scale.y;
+        marker.hidden = x < 0 || y < 0 || x > this.host.clientWidth || y > this.host.clientHeight;
+        marker.style.left = `${x}px`;
+        marker.style.top = `${y}px`;
+    }
+
     saveView() {
-        if (!this.viewport) return;
+        if (!this.viewport || this.readOnly) return;
+        this.publishPresentation();
         try {
             const { x, y } = this.viewport.center;
             localStorage.setItem(VIEW_STORAGE_KEY, JSON.stringify({ x, y, zoom: this.viewport.scale.x }));
@@ -627,12 +744,19 @@ export class DynamicMap {
         if (this.disposed) return;
         this.disposed = true;
         this.saveView();
+        this.presentation?.close();
+        this.presentationLink?.removeEventListener("click", this.openPresentation);
         this.abort.abort();
         this.removeClickObserver?.();
         if (this.app?.canvas) {
             this.app.canvas.removeEventListener("pointermove", this.onPointerMove);
             this.app.canvas.removeEventListener("pointerleave", this.onPointerLeave);
+            this.app.canvas.removeEventListener("pointercancel", this.onPointerLeave);
         }
+        globalThis.removeEventListener("blur", this.onPointerLeave);
+        globalThis.removeEventListener("pagehide", this.onPointerLeave);
+        document.removeEventListener("visibilitychange", this.onVisibilityChange);
+        this.presentationPointer?.remove();
         this.resizeObserver?.disconnect();
         for (const entry of this.sectorCache.values()) entry.controller.abort();
         this.sectorCache.clear();

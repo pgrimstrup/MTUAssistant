@@ -6,14 +6,20 @@
 @inject MTUAssistant.Services.MapPointerLocation PointerLocation
 @inject ILogger<MapView> Logger
 
-<div class="map-shell">
+<div class="map-shell @(ReadOnly ? "presentation-map" : null)">
     <div @ref="host" class="map-host"></div>
 
-    <div class="map-hud">
-        <button type="button" title="Zoom in" aria-label="Zoom in" @onclick="ZoomIn">+</button>
-        <button type="button" title="Zoom out" aria-label="Zoom out" @onclick="ZoomOut">&minus;</button>
-        <button type="button" title="Fit to screen" aria-label="Fit to screen" @onclick="Fit">&#x26F6;</button>
-    </div>
+    @if (!ReadOnly)
+    {
+        <div class="map-hud">
+            <button type="button" title="Zoom in" aria-label="Zoom in" @onclick="ZoomIn">+</button>
+            <button type="button" title="Zoom out" aria-label="Zoom out" @onclick="ZoomOut">&minus;</button>
+            <button type="button" title="Fit to screen" aria-label="Fit to screen" @onclick="Fit">&#x26F6;</button>
+            <a @ref="presentationLink" class="present-link" target="_blank" rel="noopener" aria-label="Present map" title="Present map">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3h18a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7v-2h7V5H3v3H1V5a2 2 0 0 1 2-2ZM1 18a3 3 0 0 1 3 3H1v-3Zm0-4a7 7 0 0 1 7 7H6a5 5 0 0 0-5-5v-2Zm0-4a11 11 0 0 1 11 11h-2a9 9 0 0 0-9-9v-2Z" /></svg>
+            </a>
+        </div>
+    }
 
     <div class="map-key" aria-label="Map legend">
         <span class="map-key-water">● Water</span>
@@ -35,6 +41,9 @@
 </div>
 
 @code {
+    [Parameter] public bool ReadOnly { get; set; }
+    [Parameter] public string? PresentationSession { get; set; }
+    private ElementReference presentationLink;
     private ElementReference host;
     private ElementReference status;
     private IJSObjectReference? module;
@@ -64,7 +73,7 @@
             selectionVersion++;
             await map.InvokeVoidAsync("reloadData");
             if (disposed) return;
-            await RestoreWorldSelection();
+            if (!ReadOnly) await RestoreWorldSelection();
             selectionError = null;
             StateHasChanged();
         }
@@ -197,6 +206,15 @@
     }
 
     [JSInvokable]
+    public async Task ClearPresentationSelection()
+    {
+        if (disposed || !ReadOnly) return;
+        selectionVersion++;
+        selectionError = null;
+        await WorldSelected.InvokeAsync(null);
+    }
+
+    [JSInvokable]
     public async Task SelectHex(int sectorX, int sectorY, int column, int row)
     {
         var version = ++selectionVersion;
@@ -224,9 +242,10 @@
         {
             module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Map/MapView.razor.js");
             callback = DotNetObjectReference.Create(this);
-            map = await module.InvokeAsync<IJSObjectReference>("createMap", host, status, callback);
+            map = await module.InvokeAsync<IJSObjectReference>("createMap", host, status, callback, new { readOnly = ReadOnly, session = PresentationSession }, presentationLink);
             if (!disposed)
             {
+                if (ReadOnly) { await InvokeAsync(StateHasChanged); return; }
                 if (reloadPending) await ReloadMapData();
                 else if (SystemId is not null || SectorId is not null || SubsectorId is not null) await FocusSearchTarget();
                 else await RestoreWorldSelection();

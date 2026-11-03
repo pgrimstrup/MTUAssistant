@@ -1,0 +1,1 @@
+.presentation-layout { display:grid; grid-template-columns:minmax(0, 1fr) 20rem; height:100dvh; overflow:hidden; }

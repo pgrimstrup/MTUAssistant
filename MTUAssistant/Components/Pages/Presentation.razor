@@ -1,0 +1,23 @@
+@page "/presentation"
+@layout MTUAssistant.Components.Layout.PresentationLayout
+@using MTUAssistant.Components.Map
+
+<PageTitle>Map Presentation</PageTitle>
+
+@if (string.IsNullOrWhiteSpace(Session))
+{
+    <p class="m-4">Open this window using the Home map’s “Present map” link.</p>
+}
+else
+{
+    <div class="presentation-layout">
+        <MapView ReadOnly="true" PresentationSession="@Session" WorldSelected="SelectWorld" />
+        <SystemDataPanel World="selectedWorld" Presentation="true" />
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "session")] public string? Session { get; set; }
+    private SelectedWorld? selectedWorld;
+    private void SelectWorld(SelectedWorld? world) => selectedWorld = world;
+}
