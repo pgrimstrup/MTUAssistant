@@ -28,3 +28,22 @@
 .player-combat-tracker ::deep .portrait-frame { display:flex; align-items:center; justify-content:center; width:48px; height:48px; border-radius:50%; grid-row:span 2; }
 .player-combat-tracker ::deep .portrait-frame.friend { background:rgba(0,255,0,.25); }
 .player-combat-tracker ::deep .portrait-frame.foe { background:rgba(255,0,0,.25); }
+.player-combat-actions { flex:0 0 clamp(18rem,29vw,29rem); min-width:0; padding:.85rem; overflow:auto; background:#171c25; color:#e4e9f2; border-left:1px solid #354050; }
+.player-combat-actions[hidden] { display:none; }
+.player-combat-actions ::deep h2 { font-size:1rem; margin:0 0 .7rem; }
+.player-combat-actions ::deep .actor-heading { display:flex; gap:.65rem; align-items:center; margin-bottom:1rem; }
+.player-combat-actions ::deep h3 { font-size:.9rem; margin:0 0 .4rem; }
+.player-combat-actions ::deep .actor-heading p { color:#c0c8d8; font-size:.8rem; margin:0; }
+.player-combat-actions ::deep .portrait-frame { display:flex; align-items:center; justify-content:center; width:54px; height:54px; flex-shrink:0; border-radius:50%; }
+.player-combat-actions ::deep .friend { background:rgba(0,255,0,.25); }
+.player-combat-actions ::deep .foe { background:rgba(255,0,0,.25); }
+.player-combat-actions ::deep img,.player-combat-actions ::deep .initials { width:46px; height:46px; object-fit:contain; border-radius:50%; }
+.player-combat-actions ::deep .initials { display:flex; align-items:center; justify-content:center; background:#334c70; }
+.player-combat-actions ::deep .action-columns { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.4rem; }
+.player-combat-actions ::deep .action-columns h3 { font-size:.72rem; color:#c0c8d8; min-height:1.8rem; }
+.player-combat-actions ::deep .action-button { display:block; width:100%; min-height:2rem; padding:.35rem .2rem; margin-bottom:.35rem; font-size:.72rem; color:inherit; background:#ffffff08; border:1px solid #354050; border-radius:.3rem; opacity:1; }
+.player-combat-actions ::deep .chosen { border-color:#70c9ff; background:#70c9ff20; }
+.player-combat-actions ::deep .action-summary { margin-top:1rem; padding-top:.8rem; border-top:1px solid #354050; }
+.player-combat-actions ::deep dl { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:.4rem; margin:0; font-size:.8rem; }
+.player-combat-actions ::deep dt { color:#c0c8d8; font-weight:400; white-space:nowrap; }
+.player-combat-actions ::deep dd { margin:0; overflow-wrap:anywhere; }

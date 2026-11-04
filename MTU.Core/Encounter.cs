@@ -11,7 +11,8 @@ public sealed record EncounterSnapshot(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         Dictionary<int, int>? HitPoints,
     Dictionary<int, int> Ambush,
-    Dictionary<int, CombatHealth>? Attributes = null
+    Dictionary<int, CombatHealth>? Attributes = null,
+    Dictionary<int, CombatantActionState>? Actions = null
 );
 
 public sealed record PlayerCombatant(
@@ -35,14 +36,24 @@ public sealed record PlayerCombatant(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? OriginalEndurance
 );
 
-public sealed class Encounter
+public sealed partial class Encounter
 {
     public Dictionary<int, int> Initiative { get; } = [];
     private readonly Dictionary<int, CombatHealth> attributes = [];
     private readonly Dictionary<int, int> ambush = [];
     public bool Active { get; private set; }
     public int Round { get; private set; }
-    public int? SelectedId { get; set; }
+    private int? selectedId;
+    public int? SelectedId
+    {
+        get => selectedId;
+        set
+        {
+            if (selectedId != value)
+                ClearMovement(selectedId);
+            selectedId = value;
+        }
+    }
     public int EnemyTactics { get; private set; }
 
     public static int Stat(SceneCombatant e, int i) =>
@@ -92,6 +103,7 @@ public sealed class Encounter
             && IsDead(selected)
         )
             Next(entries);
+        CaptureSelectedOrigin(entries);
     }
 
     public string HealthColour(SceneCombatant e) =>
@@ -110,6 +122,9 @@ public sealed class Encounter
             .ThenBy(e => e.IsNpc)
             .ThenBy(e => e.Id);
 
+    public static int? TravellerTacticsLevel(SceneCombatant entry) =>
+        new[] { entry.MilitaryTactics, entry.Tactics }.Max();
+
     public static (IReadOnlyDictionary<int, int> Initiative, int Tactics) RollTravellers(
         IEnumerable<SceneCombatant> entries,
         bool aware,
@@ -123,13 +138,15 @@ public sealed class Encounter
             e => dice() + Dm(Math.Max(Stat(e, 1), Stat(e, 3)))
         );
         var leader = travellers
-            .Where(e => e.MilitaryTactics.HasValue)
-            .OrderByDescending(e => e.MilitaryTactics!.Value + Dm(Math.Max(Stat(e, 3), Stat(e, 4))))
+            .Where(e => TravellerTacticsLevel(e).HasValue)
+            .OrderByDescending(e =>
+                TravellerTacticsLevel(e)!.Value + Dm(Math.Max(Stat(e, 3), Stat(e, 4)))
+            )
             .FirstOrDefault();
         var tactics =
             aware && leader is not null
                 ? dice()
-                    + leader.MilitaryTactics!.Value
+                    + TravellerTacticsLevel(leader)!.Value
                     + Dm(Math.Max(Stat(leader, 3), Stat(leader, 4)))
                     - 8
                 : 0;
@@ -148,6 +165,7 @@ public sealed class Encounter
         dice ??= () => Random.Shared.Next(1, 7) + Random.Shared.Next(1, 7);
         Initiative.Clear();
         ambush.Clear();
+        ResetTurnActions();
         var leader = entries
             .Where(e => e.IsNpc && e.MilitaryTactics.HasValue)
             .OrderByDescending(e => e.MilitaryTactics + Dm(Math.Max(Stat(e, 3), Stat(e, 4))))
@@ -181,10 +199,15 @@ public sealed class Encounter
         Active = true;
         Round = 1;
         SelectedId = Order(entries).FirstOrDefault(e => !IsDead(e))?.Id;
+        foreach (var entry in entries)
+            EnsureTurnOrigin(entry.Id, entries, true);
     }
 
     public void Next(IReadOnlyList<SceneCombatant> entries)
     {
+        ClearMovement(SelectedId);
+        if (SelectedId is int completed)
+            actions[completed] = ActionFor(completed) with { ReactionCount = 0 };
         var order = Order(entries).ToList();
         if (!order.Any(e => !IsDead(e)))
         {
@@ -194,6 +217,7 @@ public sealed class Encounter
         if (SelectedId is null)
         {
             SelectedId = order.First(e => !IsDead(e)).Id;
+            CaptureSelectedOrigin(entries, true);
             return;
         }
         var index = order.FindIndex(e => e.Id == SelectedId);
@@ -201,6 +225,7 @@ public sealed class Encounter
         if (next is not null)
         {
             SelectedId = next.Id;
+            CaptureSelectedOrigin(entries, true);
             return;
         }
         if (Round == 1)
@@ -208,6 +233,7 @@ public sealed class Encounter
                 Initiative[id] -= ambush.GetValueOrDefault(id);
         Round++;
         SelectedId = Order(entries).First(e => !IsDead(e)).Id;
+        CaptureSelectedOrigin(entries, true);
     }
 
     public IReadOnlyList<PlayerCombatant> PlayerTracker(IReadOnlyList<SceneCombatant> entries)
@@ -247,12 +273,21 @@ public sealed class Encounter
             new(Initiative),
             null,
             new(ambush),
-            new(attributes)
+            new(attributes),
+            new(actions)
         );
 
     public void Restore(EncounterSnapshot state, IReadOnlyList<SceneCombatant> entries)
     {
         var ids = entries.Select(e => e.Id).ToHashSet();
+        actions.Clear();
+        foreach (var pair in state.Actions ?? [])
+            if (ids.Contains(pair.Key))
+                actions[pair.Key] = NormalizeActions(pair.Value) with
+                {
+                    TargetId =
+                        pair.Value.TargetId is int target && ids.Contains(target) ? target : null,
+                };
         Initiative.Clear();
         attributes.Clear();
         ambush.Clear();
@@ -270,15 +305,19 @@ public sealed class Encounter
         Active = state.Active;
         Round = state.Active ? Math.Max(1, state.Round) : 0;
         EnemyTactics = state.EnemyTactics;
-        SelectedId =
+        selectedId =
             state.SelectedId is int id && entries.Any(e => e.Id == id && (!Active || !IsDead(e)))
                 ? id
             : Active ? Order(entries).FirstOrDefault(e => !IsDead(e))?.Id
             : null;
+        if (Active)
+            foreach (var entry in entries)
+                EnsureTurnOrigin(entry.Id, entries);
     }
 
     public void Exit()
     {
+        ResetTurnActions();
         Active = false;
         Round = 0;
         SelectedId = null;

@@ -278,3 +278,18 @@ await selectingMap.selectTokenAt({button:0,clientX:50,clientY:30,preventDefault(
 selectingMap.readOnly=true;await selectingMap.selectTokenAt({button:0,clientX:410,clientY:320});assert.equal(selections.length,1,'cast view cannot select tokens');
 selectingMap.readOnly=false;selectingMap.placement=1;await selectingMap.selectTokenAt({button:0,clientX:410,clientY:320});assert.equal(selections.length,1,'double clicking during placement does not change turn');
 console.log('Grid-cell double-click selection, hidden Admin tokens, move flushing and read-only/placement guards passed.');
+
+const rangeMap=new Battlemap({style:{}},{gridSize:100},'movement-range');
+rangeMap.view={x:10,y:20,scale:2};rangeMap.combatMode=true;
+const circles=[],rangeFills=[],rangeStrokes=[];
+rangeMap.rangeGraphics={position:{set(){}},scale:{set(){}},clear(){circles.length=0;rangeFills.length=0;return this;},circle(x,y,radius){circles.push({x,y,radius});return this;},fill(style){rangeFills.push(style);return this;},stroke(style){rangeStrokes.push(style);return this;}};
+rangeMap.setMovementRanges([{id:1,column:2,row:3,diameter:4.5,colour:'#87cefa',isVisible:true}]);
+assert.deepEqual(circles,[{x:250,y:350,radius:150}]);assert.equal(rangeFills[0].alpha,.15);
+rangeMap.setMovementRanges([{id:1,column:2,row:3,diameter:37.5,colour:'#87cefa',isVisible:true}]);assert.equal(circles[0].radius,1250);
+rangeMap.combatMode=false;rangeMap.drawMovementRanges();assert.equal(circles.length,0);
+console.log('Movement circle dimensions, square-centred origin, 15% fill and combat-only rendering passed.');
+for(const [diameter,radius] of [[13.5,450],[25.5,850],[37.5,1250]]) {
+    rangeMap.combatMode=true;
+    rangeMap.setMovementRanges([{id:1,column:2,row:3,diameter,colour:'#87cefa',isVisible:true}]);
+    assert.equal(circles[0].radius,radius,'each Move selection draws its exact radius');
+}

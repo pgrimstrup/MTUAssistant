@@ -1,0 +1,104 @@
+@using MTU.Core
+
+<aside class="combat-actions" aria-label="Combat actions">
+    <div class="action-top">
+        <h2>Combat Actions</h2>
+        @if (Actor is { } actor)
+        {
+            var state = Encounter.ActionFor(actor.Id);
+            <header class="actor-heading">
+                <span class="portrait-frame @(Encounter.Active ? actor.IsNpc ? "foe" : "friend" : null)">
+                    @if (actor.HasTokenImage) { <img src="@($"api/characters/{CampaignId}/{actor.CharacterId}/token")" alt="" /> }
+                    else { <span class="initials">@Initials(actor.Name)</span> }
+                </span>
+                <div><h3>@actor.Name</h3><p>@(actor.IsNpc ? actor.Occupation : actor.PlayerName)</p><small>Stance: @state.Stance</small></div>
+            </header>
+            <div class="action-columns">
+                @foreach (var group in Groups)
+                {
+                    <section><h3>@group.Title <span>@(group.Column != 2 ? $"{state.MinorCount}/3" : $"{(state.MajorAction is null ? 0 : 1)}/{(state.MinorCount > 1 ? 0 : 1)}")</span></h3>
+                        @foreach (var action in group.Actions)
+                        {
+                            <button type="button" class="action-button @(state.IsSelected(action, group.Column) ? "chosen" : null)" disabled="@(Disabled || !Encounter.CanChooseAction(actor.Id, action))" aria-pressed="@((state.IsSelected(action, group.Column)).ToString().ToLowerInvariant())" @onclick="() => ActionSelected.InvokeAsync((group.Column, action))">@state.ButtonText(action, group.Column)</button>
+                        }
+                        @if (group.Column == 2) { <button type="button" class="action-button reset-actions" disabled="@Disabled" @onclick="() => ResetRequested.InvokeAsync()">Reset</button> }
+                        @if (group.Column != 2 && state.ColumnActions(group.Column).Count > 0) { <p class="column-sequence">@string.Join(" → ", state.ColumnActions(group.Column))</p> }
+                    </section>
+                }
+            </div>
+            @if (!Encounter.Active) { <p class="hint">Begin an encounter to choose an action.</p> }
+            <div class="action-options">
+                @if (state.NeedsTarget)
+                {
+                    <label>Target
+                        <select class="form-select" value="@(state.TargetId?.ToString() ?? "")" disabled="@(Disabled || state.ActionsResolved)" @onchange="ChangeTarget">
+                            <option value="" selected="@(state.TargetId is null)">No target</option>
+                            @foreach (var target in Entries.Where(e => e.IsNpc != actor.IsNpc))
+                            { <option value="@target.Id" selected="@(state.TargetId == target.Id)">@target.Name@(!target.IsVisible ? " (hidden)" : "")</option> }
+                        </select>
+                    </label>
+                    @if (state.NeedsReaction)
+                    {
+                        <label>Target Reaction
+                            <select class="form-select" value="@state.TargetReaction" disabled="@(Disabled || state.ActionsResolved || state.TargetId is null)" @onchange="ChangeReaction">
+                                @foreach (var reaction in Encounter.TargetReactions) { <option value="@reaction" selected="@(state.TargetReaction == reaction)">@reaction</option> }
+                            </select>
+                        </label>
+                        @if (state.TargetReaction == "Dive for Cover" && Entries.FirstOrDefault(e => e.Id == state.TargetId) is { } reactingTarget)
+                        {
+                            <label>Target Reaction Stance
+                                <select class="form-select" value="@(state.TargetReactionStance ?? Encounter.ActionFor(reactingTarget.Id).Stance)" disabled="@(Disabled || state.ActionsResolved)" @onchange="ChangeReactionStance">
+                                    @foreach (var stance in CombatActionChoices.Stances) { <option value="@stance" selected="@((state.TargetReactionStance ?? Encounter.ActionFor(reactingTarget.Id).Stance) == stance)">@stance</option> }
+                                </select>
+                            </label>
+                        }
+                    }
+                }
+                @if (state.NeedsStance)
+                {
+                    <label>Stance
+                        <select class="form-select" value="@state.SelectedStance" disabled="@(Disabled || state.ActionsResolved)" @onchange="ChangeStance">
+                            @foreach (var stance in CombatActionChoices.Stances) { <option value="@stance" selected="@(state.SelectedStance == stance)">@stance</option> }
+                        </select>
+                    </label>
+                }
+                @if (state.MovementDiameter.HasValue)
+                { <p class="hint">Movement range: @state.MovementDiameter.Value.ToString("0.#") m diameter.@(!actor.OnMap ? " Place this token to display its range." : "")</p> }
+                <button type="button" class="btn btn-primary resolve-actions" disabled="@(Disabled || state.ActionsResolved || (state.MinorCount == 0 && state.MajorAction is null))" @onclick="() => ResolveRequested.InvokeAsync()">Resolve Actions</button>
+            </div>
+        }
+        else { <p class="hint">Select a combatant in the tracker or double-click their token.</p> }
+    </div>
+    <section class="action-summary" aria-label="Action summary" aria-live="polite">
+        <h2>Action Summary</h2>
+        @if (CombatActionSummary.Create(Encounter, Actor, Entries, Loadout) is { } summary)
+        {
+            <dl>
+                @foreach (var row in summary.Rows) { <dt>@row.Label</dt><dd>@row.Value</dd> }
+            </dl>
+        }
+        else { <p class="hint">Choose an action to see its summary.</p> }
+    </section>
+</aside>
+
+@code {
+    [Parameter] public CombatLoadout? Loadout { get; set; }
+    [Parameter] public int CampaignId { get; set; }
+    [Parameter] public SceneCombatant? Actor { get; set; }
+    [Parameter] public Encounter Encounter { get; set; } = new();
+    [Parameter] public IReadOnlyList<SceneCombatant> Entries { get; set; } = [];
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback ResetRequested { get; set; }
+    [Parameter] public EventCallback ResolveRequested { get; set; }
+    [Parameter] public EventCallback<(int Column, string Action)> ActionSelected { get; set; }
+    [Parameter] public EventCallback<int?> TargetChanged { get; set; }
+    [Parameter] public EventCallback<string> StanceChanged { get; set; }
+    [Parameter] public EventCallback<string> TargetReactionChanged { get; set; }
+    [Parameter] public EventCallback<string> TargetReactionStanceChanged { get; set; }
+    private static readonly (int Column, string Title, string[] Actions)[] Groups = [(1, "Minor Before", CombatActionChoices.Minor), (2, "Major Action", CombatActionChoices.Major), (3, "Minor After", CombatActionChoices.Minor)];
+    private Task ChangeStance(ChangeEventArgs e) => StanceChanged.InvokeAsync(e.Value?.ToString() ?? "Standing");
+    private Task ChangeReaction(ChangeEventArgs e) => TargetReactionChanged.InvokeAsync(e.Value?.ToString() ?? "None");
+    private Task ChangeReactionStance(ChangeEventArgs e) => TargetReactionStanceChanged.InvokeAsync(e.Value?.ToString() ?? "Standing");
+    private Task ChangeTarget(ChangeEventArgs e) => TargetChanged.InvokeAsync(int.TryParse(e.Value?.ToString(), out var id) ? id : null);
+    private static string Initials(string name) => string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(s => s[0])).ToUpperInvariant();
+}

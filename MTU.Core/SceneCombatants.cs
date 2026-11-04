@@ -14,7 +14,10 @@ public sealed record SceneCombatant(
     int? Column,
     int? Row,
     string Upp = "",
-    int? MilitaryTactics = null
+    int? MilitaryTactics = null,
+    string PlayerName = "",
+    string Occupation = "",
+    int? Tactics = null
 )
 {
     public bool OnMap => Column.HasValue && Row.HasValue;
@@ -70,6 +73,14 @@ public sealed partial class SceneService
                 db.CharacterSkills.Where(s =>
                         s.CharacterId == t.CharacterId && s.Name == "Tactics (Military)"
                     )
+                    .Select(s => (int?)s.Level)
+                    .Max(),
+                t.Character.PlayerName,
+                db.NPCs.Where(n => n.CharacterId == t.CharacterId)
+                    .Select(n => n.Occupation)
+                    .FirstOrDefault()
+                    ?? "",
+                db.CharacterSkills.Where(s => s.CharacterId == t.CharacterId && s.Name == "Tactics")
                     .Select(s => (int?)s.Level)
                     .Max()
             ))
@@ -138,6 +149,16 @@ public sealed partial class SceneService
                 .CharacterSkills.Where(s =>
                     s.CharacterId == characterId && s.Name == "Tactics (Military)"
                 )
+                .Select(s => (int?)s.Level)
+                .MaxAsync(),
+            character.PlayerName,
+            await db
+                .NPCs.Where(n => n.CharacterId == characterId)
+                .Select(n => n.Occupation)
+                .FirstOrDefaultAsync()
+                ?? "",
+            await db
+                .CharacterSkills.Where(s => s.CharacterId == characterId && s.Name == "Tactics")
                 .Select(s => (int?)s.Level)
                 .MaxAsync()
         );
@@ -234,6 +255,18 @@ public sealed partial class SceneService
             await db
                 .CharacterSkills.Where(s =>
                     s.CharacterId == token.CharacterId && s.Name == "Tactics (Military)"
+                )
+                .Select(s => (int?)s.Level)
+                .MaxAsync(),
+            token.Character.PlayerName,
+            await db
+                .NPCs.Where(n => n.CharacterId == token.CharacterId)
+                .Select(n => n.Occupation)
+                .FirstOrDefaultAsync()
+                ?? "",
+            await db
+                .CharacterSkills.Where(s =>
+                    s.CharacterId == token.CharacterId && s.Name == "Tactics"
                 )
                 .Select(s => (int?)s.Level)
                 .MaxAsync()

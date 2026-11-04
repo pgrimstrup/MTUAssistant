@@ -57,3 +57,11 @@ pointerAdmin.publishPointer(null);assert.equal(pointer,null,'leaving the canvas 
 pointerAdmin.publishPointer({x:10,y:20});pointerAdmin.close();assert.equal(pointer,null,'disposing the Admin renderer clears the pointer');
 pointerPlayer.close();pointerLate.close();
 console.log('Battlemap live pointer, read-only protection, late join, storage and cleanup passed.');
+
+const {playerMovementRanges}=await import('../../wwwroot/js/BattlemapPresentationSync.js');
+const ranges=playerMovementRanges([{id:1,column:2,row:3,diameter:4.5,colour:'#87cefa',isVisible:true},{id:2,column:4,row:5,diameter:37.5,colour:'#3388ff',isVisible:false}]);
+assert.equal(ranges.length,1);assert.equal(ranges[0].id,1);
+assert.ok(validBattlemapSnapshot({...state,movementRanges:ranges}));
+assert.equal(validBattlemapSnapshot({...state,movementRanges:[{...ranges[0],diameter:Infinity}]}),false);
+console.log('Cast movement range filtering and validation passed.');
+for(const diameter of [4.5,7.5,10.5,13.5,19.5,25.5,37.5]) assert.ok(validBattlemapSnapshot({...state,movementRanges:[{...ranges[0],diameter}]}),'cast accepts each Move cycle diameter');

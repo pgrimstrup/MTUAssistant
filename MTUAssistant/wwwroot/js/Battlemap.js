@@ -1,6 +1,7 @@
+import { movementGeometry, weaponRangeBand } from './MovementIndicators.js';
 import { attachCastWindow } from './CastWindow.js';
 import { presentationSession } from './PresentationSync.js';
-import { connectBattlemapPresentation, playerTokens, playerCombatants } from './BattlemapPresentationSync.js';
+import { connectBattlemapPresentation, playerTokens, playerCombatants, playerMovementRanges, playerMovementTrails, playerTargetSelection } from './BattlemapPresentationSync.js';
 export function fitView(width, height, imageWidth, imageHeight) {
     const scale = Math.min(width / imageWidth, height / imageHeight);
     return { x: (width - imageWidth * scale) / 2, y: (height - imageHeight * scale) / 2, scale };
@@ -55,6 +56,7 @@ export class Battlemap {
         this.disposed = false;
         this.characterTokens = new Map();
         this.pendingSaves = new Set();
+        this.movementTrails = new Map(); this.movementLabels = new Map(); this.movementEpoch = 0;
     }
     async start(url) {
         if (!globalThis.PIXI) await new Promise((resolve, reject) => {
@@ -90,9 +92,13 @@ export class Battlemap {
         this.background = new PIXI.Container();
         this.tokens = new PIXI.Container();
         this.fog = new PIXI.Container();
+        this.rangeGraphics = new PIXI.Graphics();
         this.grid = new PIXI.Graphics();
+        this.movementOverlay = new PIXI.Container();
+        this.movementStroke = new PIXI.Graphics(); this.movementOverlay.addChild(this.movementStroke);
+        this.targetRingGraphics = new PIXI.Graphics();
         this.world.addChild(this.background);
-        this.app.stage.addChild(this.world, this.grid, this.tokens, this.fog);
+        this.app.stage.addChild(this.world, this.grid, this.rangeGraphics, this.movementOverlay, this.targetRingGraphics, this.tokens, this.fog);
         this.placementPreview = new PIXI.Graphics();
         this.tokens.addChild(this.placementPreview);
         this.tiles = new Map();
@@ -113,6 +119,7 @@ export class Battlemap {
         this.animateTurn = ticker => {
             this.pulseTime += ticker.deltaMS;
             this.advancePan(ticker.deltaMS);
+            this.drawTargetRing();
             const token = this.characterTokens.get(this.selectedId);
             if (token && this.combatMode && !token.isDead) this.drawTurnRing(token);
         };
@@ -139,6 +146,7 @@ export class Battlemap {
             this.dragging = token ? { id:event.pointerId, token, column:token.column, row:token.row,
                 offsetX:point.x-token.column*this.scene.gridSize, offsetY:point.y-token.row*this.scene.gridSize }
                 : { id:event.pointerId, x:event.clientX, y:event.clientY };
+            if (token) { this.dragging.previousTrail = this.movementTrails.get(token.id); this.dragging.movementEpoch = this.movementEpoch; }
             this.host.setPointerCapture(event.pointerId);
         };
         this.move = event => {
@@ -169,7 +177,7 @@ export class Battlemap {
             this.dragging = null;
             if (this.host.hasPointerCapture(event.pointerId)) this.host.releasePointerCapture(event.pointerId);
             if (!drag.token) return;
-            if (event.type !== 'pointerup') { this.positionToken(drag.token, drag.column, drag.row); return; }
+            if (event.type !== 'pointerup') { this.restoreMovementTrail(drag); this.positionToken(drag.token, drag.column, drag.row); return; }
             if (drag.column === drag.token.column && drag.row === drag.token.row) return;
             drag.token.saving = true;
             this.trackSave((async () => {
@@ -177,7 +185,7 @@ export class Battlemap {
                 try { saved = await this.callback.invokeMethodAsync('MoveToken', drag.token.id, drag.token.column, drag.token.row); }
                 finally {
                     if (!this.disposed && this.characterTokens.get(drag.token.id) === drag.token) {
-                        if (!saved) this.positionToken(drag.token, drag.column, drag.row);
+                        if (!saved) { this.restoreMovementTrail(drag); this.positionToken(drag.token, drag.column, drag.row); }
                         drag.token.saving = false;
                     }
                 }
@@ -235,8 +243,10 @@ export class Battlemap {
             point.y >= token.row*this.scene.gridSize && point.y < (token.row+1)*this.scene.gridSize);
     }
     positionToken(token, column, row) {
+        if (this.combatMode && this.dragging?.token === token && this.dragging.movementEpoch === this.movementEpoch) this.updateMovementTrail(token, this.dragging.column, this.dragging.row, column, row);
         token.column = column; token.row = row;
         token.container.position.set(column*this.scene.gridSize, row*this.scene.gridSize);
+        this.drawMovementIndicators(); this.drawTargetRing();
         this.publishPresentation();
     }
     trackSave(promise) {
@@ -311,23 +321,107 @@ export class Battlemap {
         }
         token.container.destroy({children:true}); token.texture?.destroy(true); token.fallbackTexture?.destroy(true); token.filter?.destroy();
         this.characterTokens.delete(id);
+        this.movementTrails.delete(id); this.drawMovementIndicators(); this.drawTargetRing();
         if (publish) this.publishPresentation();
     }
     setCombatMode(active) {
-        this.setEncounterState(active,this.selectedId,[...(this.deadIds ?? [])],this.combatRound,this.playerTracker ?? [],[...(this.tokenHealth?.values() ?? [])]);
+        this.setEncounterState(active,this.selectedId,[...(this.deadIds ?? [])],this.combatRound,this.playerTracker ?? [],[...(this.tokenHealth?.values() ?? [])],this.movementRanges ?? [],this.targetId ?? null,this.targetRange ?? null,this.actionSummary ?? null);
     }
-    setEncounterState(active,selectedId,deadIds = [],round = 0,tracker = [],health = tracker) {
+    setEncounterState(active,selectedId,deadIds = [],round = 0,tracker = [],health = tracker,ranges = [],targetId = null,targetRange = null,actionSummary = null) {
         const turnChanged = active === true && (!this.combatMode || selectedId !== this.selectedId || round !== this.combatRound);
         this.combatRound = round;
         this.playerTracker = playerCombatants(tracker);
         this.tokenHealth = new Map(health.map(e => [e.id,e]));
         this.combatMode = active === true;
+        if (!this.combatMode || turnChanged) this.clearMovementTrails();
+        this.movementRanges = ranges;
+        this.drawMovementRanges();
         this.selectedId = selectedId;
+        this.targetActorId = selectedId; this.targetId = targetId; this.targetRange = targetRange; this.actionSummary = actionSummary;
         this.deadIds = new Set(deadIds);
         for (const token of this.characterTokens.values()) this.tokenAppearance(token);
+        this.drawMovementIndicators(); this.drawTargetRing();
         if (!this.combatMode || turnChanged) this.cancelPan();
         if (turnChanged && !this.readOnly) this.panToToken(selectedId);
         this.publishPresentation();
+    }
+    updateMovementTrail(token,fromColumn,fromRow,toColumn,toRow) {
+        if (!this.combatMode || this.readOnly) return;
+        const previous = this.movementTrails.get(token.id);
+        const trail = {id:token.id,fromColumn:previous?.fromColumn ?? fromColumn,fromRow:previous?.fromRow ?? fromRow,toColumn,toRow,isNpc:token.isNpc};
+        if (trail.fromColumn === toColumn && trail.fromRow === toRow) this.movementTrails.delete(token.id);
+        else this.movementTrails.set(token.id,trail);
+    }
+    restoreMovementTrail(drag) {
+        if (drag.movementEpoch !== this.movementEpoch) return;
+        if (drag.previousTrail) this.movementTrails.set(drag.token.id,drag.previousTrail);
+        else this.movementTrails.delete(drag.token.id);
+    }
+    clearMovementTrails() { this.movementEpoch++; this.movementTrails.clear(); this.drawMovementIndicators(); }
+    setMovementTrails(trails) { this.movementTrails = new Map(trails.map(t => [t.id,t])); this.drawMovementIndicators(); }
+    setTargetSelection(selection) {
+        this.targetActorId = selection?.actorId ?? null; this.targetId = selection?.targetId ?? null; this.targetRange = selection?.rangeProfile ?? null;
+        this.drawMovementIndicators(); this.drawTargetRing();
+    }
+    targetTrail() {
+        if (!this.combatMode) return null;
+        const actor = this.characterTokens.get(this.targetActorId), target = this.characterTokens.get(this.targetId);
+        if (!actor || !target || actor.id === target.id) return null;
+        return {id:'target',fromColumn:actor.column,fromRow:actor.row,toColumn:target.column,toRow:target.row,isNpc:actor.isNpc,isTarget:true};
+    }
+    drawTargetRing() {
+        const graphics = this.targetRingGraphics;
+        if (!graphics || !this.view) return;
+        graphics.clear();
+        const trail = this.targetTrail();
+        if (!trail) return;
+        const {end} = movementGeometry(trail,this.scene.gridSize,this.view);
+        const wave = (Math.sin((this.pulseTime ?? 0)*Math.PI/700)+1)/2;
+        graphics.circle(end.x,end.y,this.scene.gridSize*this.view.scale*(.64+.07*wave))
+            .stroke({color:trail.isNpc ? 0xff0000 : 0x00ff00,alpha:.5+.5*wave,width:3});
+    }
+    drawMovementIndicators() {
+        const graphics = this.movementStroke;
+        if (!graphics || !this.view) return;
+        graphics.clear();
+        const visible = new Set();
+        const target = this.targetTrail();
+        const indicators = [...this.movementTrails.values(),...(target ? [target] : [])];
+        if (this.combatMode) for (const trail of indicators) {
+            const {start,end,midpoint,distance} = movementGeometry(trail,this.scene.gridSize,this.view);
+            const colour = trail.isTarget ? (trail.isNpc ? 0xff0000 : 0x00ff00) : 0xffffff;
+            graphics.moveTo(start.x,start.y).lineTo(end.x,end.y).stroke({color:colour,alpha:.25,width:6});
+            graphics.circle(start.x,start.y,5).fill({color:colour,alpha:.25});
+            let label = this.movementLabels.get(trail.id);
+            if (!label) {
+                const container = new PIXI.Container(), background = new PIXI.Graphics();
+                const text = new PIXI.Text({text:'',style:{fontFamily:'Arial',fontSize:14,fontWeight:'bold',fill:0xffffff}});
+                container.addChild(background,text); this.movementOverlay.addChild(container);
+                label = {container,background,text}; this.movementLabels.set(trail.id,label);
+            }
+            const band = trail.isTarget ? weaponRangeBand(distance,this.targetRange) : null;
+            label.text.text = `${distance.toFixed(1)} m${band ? ` · ${band}` : ""}`;
+            const width = label.text.width+10, height = label.text.height+6;
+            label.text.position.set(5,3);
+            label.background.clear().rect(0,0,width,height).fill({color:0x000000,alpha:.75});
+            label.container.position.set(midpoint.x-width/2,midpoint.y-height/2);
+            visible.add(trail.id);
+        }
+        for (const [id,label] of this.movementLabels) if (!visible.has(id)) { label.container.destroy({children:true}); this.movementLabels.delete(id); }
+    }
+    setMovementRanges(ranges) { this.movementRanges = ranges; this.drawMovementRanges(); }
+    drawMovementRanges() {
+        const graphics = this.rangeGraphics;
+        if (!graphics || !this.view) return;
+        graphics.clear();
+        graphics.position.set(this.view.x,this.view.y); graphics.scale.set(this.view.scale);
+        if (!this.combatMode) return;
+        const size = this.scene.gridSize;
+        for (const range of this.movementRanges ?? []) {
+            const radius = range.diameter/1.5*size/2;
+            graphics.circle((range.column+.5)*size,(range.row+.5)*size,radius)
+                .fill({color:range.colour,alpha:.15}).stroke({color:range.colour,alpha:.7,width:1/this.view.scale});
+        }
     }
     panToToken(id) {
         const token = this.characterTokens.get(id);
@@ -458,7 +552,7 @@ export class Battlemap {
     }
     publishPresentation() {
         if (!this.presentation || this.disposed || this.readOnly || this.presentationCleared) return;
-        this.presentation.publish({combatMode:this.combatMode === true,round:this.combatRound ?? 0,tracker:this.playerTracker ?? [],scene:this.scene, tokens:playerTokens([...this.characterTokens.values()]),
+        this.presentation.publish({combatMode:this.combatMode === true,round:this.combatRound ?? 0,actionSummary:this.combatMode && this.playerTracker?.some(e => e.id === this.actionSummary?.id && e.isVisible === true) ? this.actionSummary : null,tracker:this.playerTracker ?? [],movementRanges:playerMovementRanges(this.movementRanges ?? []),movementTrails:playerMovementTrails([...this.movementTrails.values()],[...this.characterTokens.values()]),targetSelection:this.combatMode ? playerTargetSelection(this.targetActorId,this.targetId,[...this.characterTokens.values()],this.targetRange) : null,scene:this.scene, tokens:playerTokens([...this.characterTokens.values()]),
             view:{...this.view, width:this.width,height:this.height,imageWidth:this.imageWidth,imageHeight:this.imageHeight}});
     }
     publishPresentationPointer() {
@@ -488,6 +582,8 @@ export class Battlemap {
     closePresentation() { this.pointerLeave?.(); this.presentationCleared = true; this.presentation?.publish(null); }
     draw() {
         const {x,y,scale} = this.view;
+        this.drawMovementRanges();
+        this.drawMovementIndicators(); this.drawTargetRing();
         this.world.position.set(x,y); this.world.scale.set(scale);
         for (const token of this.characterTokens.values()) this.decorateToken(token);
         this.tokens?.position.set(x,y); this.tokens?.scale.set(scale);
@@ -557,6 +653,7 @@ export class Battlemap {
         this.dragging=null;
         for (const token of this.characterTokens.values()) { token.texture?.destroy(true); token.fallbackTexture?.destroy(true); token.filter?.destroy(); }
         this.characterTokens.clear();
+        this.movementTrails.clear(); this.movementLabels.clear();
         this.presentation?.close();
         this.detachCastWindow?.();
         this.presentationPointer?.remove();

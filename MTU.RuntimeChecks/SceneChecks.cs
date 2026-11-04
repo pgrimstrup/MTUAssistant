@@ -11,6 +11,7 @@ public static class SceneChecks
     public static async Task RunAsync()
     {
         SceneImageChecks.Run();
+        CombatActionChecks.Run();
         static void Check(bool condition, string message)
         {
             if (!condition)
@@ -308,6 +309,20 @@ public static class SceneChecks
                 && roster.All(t => !t.IsNpc && !t.OnMap)
                 && !roster.Any(t => t.CharacterId == 104),
             "Explicit picker additions add Travellers once, unplaced, without inactive players"
+        );
+        db.CharacterSkills.Add(
+            new CharacterSkillEntity
+            {
+                CharacterId = 101,
+                Name = "Tactics",
+                Level = 1,
+            }
+        );
+        await db.SaveChangesAsync();
+        Check(
+            (await store.CombatantsAsync(1, saved.Id)).Single(t => t.CharacterId == 101).Tactics
+                == 1,
+            "Scene roster loads generic Tactics for pre-engagement training details"
         );
         var traveller = roster.Single(t => t.CharacterId == 101);
         var squad = new List<SceneCombatant>();

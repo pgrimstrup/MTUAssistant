@@ -1,17 +1,18 @@
+import { renderPlayerActions } from './PlayerCombatActions.js';
 import { switchCastView } from './CastWindow.js';
 import { createBattlemap, restoreView } from './Battlemap.js';
 import { connectBattlemapPresentation } from './BattlemapPresentationSync.js';
 import { renderPlayerTracker } from './PlayerCombatTracker.js';
 
-export function createPresentation(host,status,session,tracker) {
-    return new PresentedBattlemap(host,status,session,tracker);
+export function createPresentation(host,status,session,tracker,actions) {
+    return new PresentedBattlemap(host,status,session,tracker,actions);
 }
 class PresentedBattlemap {
-    constructor(host,status,session,tracker) {
-        Object.assign(this,{host,status,tracker,disposed:false,busy:false,pending:undefined,map:null,key:null});
+    constructor(host,status,session,tracker,actions) {
+        Object.assign(this,{host,status,tracker,actions,disposed:false,busy:false,pending:undefined,map:null,key:null});
         this.session = session;
         this.connection = connectBattlemapPresentation({session,readOnly:true,onPointer:point => { this.pointer = point; this.map?.setPresentedPointer(point); },onState:state => {
-            renderPlayerTracker(this.tracker,state);
+            renderPlayerTracker(this.tracker,state); renderPlayerActions(this.actions,state);
             this.pending=state; void this.pump();
         }});
     }
@@ -42,6 +43,9 @@ class PresentedBattlemap {
                     this.map.setGrid(state.scene);
                 }
                 this.map.setEncounterState(state.combatMode === true,state.tokens.find(t => t.isCurrent === true)?.id ?? null,state.tokens.filter(t => t.isDead === true).map(t => t.id));
+                this.map.setMovementRanges(state.movementRanges ?? []);
+                this.map.setMovementTrails(state.movementTrails ?? []);
+                this.map.setTargetSelection(state.targetSelection ?? null);
                 this.map.view=restoreView(state.view,this.map.width,this.map.height,this.map.imageWidth,this.map.imageHeight) ?? this.map.view;
                 this.map.setPresentedPointer(this.pointer ?? null);
                 this.map.apply(); this.status.textContent=state.scene.name;
@@ -52,7 +56,7 @@ class PresentedBattlemap {
     }
     async dispose() {
         this.disposed=true; this.connection.close();
-        renderPlayerTracker(this.tracker,null);
+        renderPlayerTracker(this.tracker,null); renderPlayerActions(this.actions,null);
         await this.map?.dispose(); this.map=null;
     }
 }

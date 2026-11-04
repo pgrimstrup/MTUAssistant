@@ -49,7 +49,11 @@ public sealed partial class SceneService
             : JsonSerializer.Deserialize<EncounterSnapshot>(targetJson)!;
         if (target.Active)
             throw new ArgumentException("Exit the encounter before adding Travellers.");
-        target = target with { Attributes = target.Attributes ?? [] };
+        target = target with
+        {
+            Attributes = target.Attributes ?? [],
+            Actions = target.Actions ?? [],
+        };
         var characters = await db
             .Characters.Where(c =>
                 c.CampaignId == campaignId
@@ -97,6 +101,9 @@ public sealed partial class SceneService
                 target.Attributes!.Remove(keep.Id);
                 target.HitPoints?.Remove(keep.Id);
                 var source = states.GetValueOrDefault(keep.SceneId);
+                target.Actions!.Remove(keep.Id);
+                if (source?.Actions?.TryGetValue(keep.Id, out var actionState) == true)
+                    target.Actions[keep.Id] = new CombatantActionState(Stance: actionState.Stance);
                 if (source?.Attributes?.TryGetValue(keep.Id, out var health) == true)
                     target.Attributes[keep.Id] = health;
                 else if (source?.HitPoints?.TryGetValue(keep.Id, out var hp) == true)

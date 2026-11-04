@@ -1,0 +1,15 @@
+.combat-actions { height:100%; min-height:0; display:flex; flex-direction:column; overflow:hidden; background:var(--app-panel,#171c25); border:1px solid var(--app-border); border-radius:.5rem; }
+.action-top { padding:.8rem; overflow:auto; flex:1; min-height:0; }
+h2 { font-size:1rem; margin:0 0 .7rem; } .actor-heading { display:flex; gap:.65rem; align-items:center; margin-bottom:1rem; }
+.actor-heading h3 { font-size:1rem; margin:0; } .actor-heading p { margin:.2rem 0; color:var(--app-muted); font-size:.8rem; } small { color:var(--app-muted); font-size:.75rem; }
+.portrait-frame { width:54px; height:54px; flex-shrink:0; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+.portrait-frame.friend { background:rgba(0,255,0,.25); } .portrait-frame.foe { background:rgba(255,0,0,.25); } .portrait-frame img,.initials { width:46px; height:46px; border-radius:50%; object-fit:contain; } .initials { display:flex; align-items:center; justify-content:center; background:#334c70; }
+.action-columns { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.4rem; } .action-columns h3 { font-size:.72rem; color:var(--app-muted); min-height:1.8rem; margin:0 0 .35rem; }
+.action-button { display:block; width:100%; min-height:2rem; padding:.35rem .2rem; margin-bottom:.35rem; font-size:.72rem; color:inherit; background:#ffffff08; border:1px solid var(--app-border); border-radius:.3rem; }
+.action-button:hover:not(:disabled),.action-button.chosen { border-color:#70c9ff; background:#70c9ff20; } .action-button:disabled { opacity:.4; }
+.action-options { margin-top:.8rem; } label { display:block; font-size:.8rem; margin-bottom:.6rem; } select { margin-top:.3rem; font-size:.8rem; } .hint { color:var(--app-muted); font-size:.8rem; margin:.65rem 0; }
+.action-summary { flex:0 0 auto; max-height:40%; overflow:auto; padding:.8rem; border-top:1px solid var(--app-border); background:#0002; } .action-summary h3 { font-size:.9rem; color:#b8dcff; }
+dl { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:.4rem; margin:0; font-size:.8rem; } dt { color:var(--app-muted); font-weight:400; white-space:nowrap; } dd { margin:0; overflow-wrap:anywhere; }
+
+.column-sequence { font-size:.7rem; color:var(--app-muted); overflow-wrap:anywhere; }
+.action-button.reset-actions { background:transparent; border-color:#f3c94b; color:#f3c94b; } .action-button.reset-actions:hover:not(:disabled) { background:#f3c94b18; border-color:#ffdc70; color:#ffdc70; }

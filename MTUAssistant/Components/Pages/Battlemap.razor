@@ -4,6 +4,7 @@
 @inject MTUAssistant.Services.BattlemapState BattlemapState
 @inject CampaignService Campaigns
 @inject SceneService ScenesStore
+@inject EquipmentService EquipmentStore
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 
@@ -43,6 +44,7 @@
                 </div>
                 <div class="battlemap-host" @ref="host" aria-label="Battlemap image with square grid"></div>
             </div>
+            <div class="action-column"><CombatActionsPanel CampaignId="scene.CampaignId" Actor="SelectedActor" Loadout="SelectedLoadout" Entries="entries" Encounter="encounter" Disabled="@(map is null || busy || !encounter.Active || SelectedActor is null || encounter.IsDead(SelectedActor))" ResolveRequested="ResolveActions" ResetRequested="ResetActions" ActionSelected="ChooseAction" TargetReactionChanged="SetTargetReaction" TargetReactionStanceChanged="SetTargetReactionStance" TargetChanged="SetTarget" StanceChanged="SetStance" /></div>
         </div>
         @if (preEngagement)
         {
@@ -51,9 +53,10 @@
                     <h2 id="engagement-title">Pre-engagement</h2>
                     <label><input type="checkbox" @bind="enemyAware" /> Enemy aware of the Travellers</label>
                     <label><input type="checkbox" @bind="travellersAware" /> Travellers aware of the Enemy</label>
-                    <label>Traveller Tactics (Military) Effect<input class="form-control" type="number" @bind="travellerTactics" disabled="@(!travellersAware)" /></label>
+                    <label>Traveller Tactics (Military) Effect<input class="form-control" type="number" @bind="travellerTactics" disabled="@(!travellersAware || !TacticsTravellers.Any())" aria-describedby="traveller-tactics-skills" /></label>
+                    <p id="traveller-tactics-skills" class="tactics-skills">@(TacticsTravellers.Any() ? string.Join("; ", TacticsTravellers.Select(e => $"{e.Name}: {TacticsSkills(e)}")) : "No Traveller has Tactics or Tactics (Military).")</p>
                     <p>Enter each Traveller's Initiative (DEX/INT) roll Effect, excluding Tactics and ambush modifiers.</p>
-                    <button type="button" class="btn btn-outline-primary" @onclick="AutoRollTravellers">Auto-Roll Initiative &amp; Tactics</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary auto-initiative" @onclick="AutoRollTravellers">Auto-Roll Initiative &amp; Tactics</button>
                     @foreach (var traveller in entries.Where(e => !e.IsNpc))
                     {
                         <label>@traveller.Name<input class="form-control" type="number" @bind="travellerRolls[traveller.Id]" /></label>
@@ -73,6 +76,8 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
     private readonly Encounter encounter = new();
     private bool preEngagement, enemyAware = true, travellersAware = true;
     private int travellerTactics;
+    private IEnumerable<SceneCombatant> TacticsTravellers => entries.Where(e => !e.IsNpc && Encounter.TravellerTacticsLevel(e).HasValue);
+    private static string TacticsSkills(SceneCombatant e) => string.Join(", ", new[] { e.Tactics.HasValue ? $"Tactics {e.Tactics}" : null, e.MilitaryTactics.HasValue ? $"Tactics (Military) {e.MilitaryTactics}" : null }.Where(s => s is not null));
     private readonly Dictionary<int, int> travellerRolls = [];
     private void OpenPreEngagement() { foreach (var e in entries.Where(e => !e.IsNpc)) travellerRolls[e.Id] = 0; travellerTactics = 0; preEngagement = true; }
     private void AutoRollTravellers()
@@ -95,14 +100,37 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
     private async Task BeginEncounter()
     {
         await CancelPlacement();
-        await ChangeEncounter(() => encounter.Begin(entries, enemyAware, travellersAware, travellerTactics, travellerRolls));
+        await ChangeEncounter(() => encounter.Begin(entries, enemyAware, travellersAware, TacticsTravellers.Any() ? travellerTactics : 0, travellerRolls));
         if (encounter.Active) preEngagement = false;
     }
     private Task ExitEncounter() => ChangeEncounter(encounter.Exit);
     private Task NextTurn() => ChangeEncounter(() => encounter.Next(entries));
-    private Task SelectCombatant(int id) => encounter.Active && entries.Any(e => e.Id == id && encounter.IsDead(e)) ? Task.CompletedTask : ChangeEncounter(() => encounter.SelectedId = id);
+    private Task SelectCombatant(int id) => encounter.Active && entries.Any(e => e.Id == id && encounter.IsDead(e)) ? Task.CompletedTask : ChangeEncounter(() => encounter.SelectCombatant(id, entries));
+    private SceneCombatant? SelectedActor => entries.FirstOrDefault(e => e.Id == encounter.SelectedId);
+    private Task ChooseAction((int Column, string Action) choice) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.ChooseAction(actor.Id, choice.Action, entries, choice.Column)) : Task.CompletedTask;
+    private Task ResolveActions() => SelectedActor is { } actor ? ChangeEncounter(() =>
+    {
+        var state = encounter.ActionFor(actor.Id);
+        if (SelectedLoadout?.TargetBand(state, actor, entries.FirstOrDefault(e => e.Id == state.TargetId)) == "Out of Range")
+            throw new ArgumentException("Ranged attack cannot be made: target is out of range.");
+        encounter.ResolveActions(actor.Id, entries);
+    }) : Task.CompletedTask;
+    private Task ResetActions() => SelectedActor is { } actor ? ChangeEncounter(() => encounter.ResetActions(actor.Id, entries)) : Task.CompletedTask;
+    private Task SetTarget(int? target) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetTarget(actor.Id, target, entries)) : Task.CompletedTask;
+    private Task SetTargetReaction(string reaction) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetTargetReaction(actor.Id, reaction, entries)) : Task.CompletedTask;
+    private Task SetTargetReactionStance(string stance) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetTargetReactionStance(actor.Id, stance, entries)) : Task.CompletedTask;
+    private Task SetStance(string stance) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetStance(actor.Id, stance, entries)) : Task.CompletedTask;
     private Task SetHitPoints((int Id, int Hp) change) => ChangeEncounter(() => encounter.SetHp(change.Id, change.Hp, entries));
-    private Task SyncEncounterMap() => map is null ? Task.CompletedTask : map.InvokeVoidAsync("setEncounterState", encounter.Active, encounter.SelectedId, entries.Where(encounter.IsDead).Select(e => e.Id).ToArray(), encounter.Round, encounter.PlayerTracker(entries), entries.Where(e => e.IsNpc).Select(e => new { e.Id, HealthWidth = encounter.HealthWidth(e), HealthColour = encounter.HealthColour(e) }).ToArray()).AsTask();
+    private readonly Dictionary<int, CombatLoadout> loadouts = [];
+    private CombatLoadout? SelectedLoadout => SelectedActor is { } actor ? loadouts.GetValueOrDefault(actor.CharacterId) : null;
+    private async Task SyncEncounterMap()
+    {
+        if (BattlemapState.Current is not { } scene) return;
+        foreach (var id in entries.Select(e => e.CharacterId).Distinct().Where(id => !loadouts.ContainsKey(id)))
+            loadouts[id] = new CombatLoadout(await EquipmentStore.ListDetailsForCharacterAsync(scene.CampaignId, id));
+        if (map is null) return;
+        await map.InvokeVoidAsync("setEncounterState", encounter.Active, encounter.SelectedId, entries.Where(encounter.IsDead).Select(e => e.Id).ToArray(), encounter.Round, encounter.PlayerTracker(entries), entries.Where(e => e.IsNpc).Select(e => new { e.Id, HealthWidth = encounter.HealthWidth(e), HealthColour = encounter.HealthColour(e) }).ToArray(), encounter.MovementRanges(entries), encounter.SelectedId is int selected ? encounter.ActionFor(selected).TargetId : null, SelectedActor is { } actor && encounter.ActionFor(actor.Id).MajorAction == "Ranged Attack" ? SelectedLoadout?.RangeFor(encounter.ActionFor(actor.Id)) : null, CombatActionSummary.Create(encounter, SelectedActor, entries, SelectedLoadout, player: true));
+    }
     private ElementReference host, presentationLink;
     private IJSObjectReference? module, map;
     private string? loadedKey, error;
@@ -136,6 +164,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
             var current = await ScenesStore.FindAsync(scene.CampaignId, scene.Id);
             if (disposed) return;
             if (current is null) { await Close(); return; }
+            loadouts.Clear();
             await ScenesStore.PruneInactiveTravellersAsync(current.CampaignId, current.Id);
             entries = (await ScenesStore.CombatantsAsync(current.CampaignId, current.Id)).ToList();
             var savedEncounter = await ScenesStore.LoadEncounterAsync(current.CampaignId, current.Id);
@@ -269,6 +298,8 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
             var token = await ScenesStore.PositionCombatantAsync(scene.CampaignId, scene.Id, id, column, row);
             if (disposed) return token;
             var index = entries.FindIndex(e => e.Id == id); if (index >= 0) entries[index] = token;
+            if (encounter.AnchorMovement(id, column, row)) await ScenesStore.SaveEncounterAsync(scene.CampaignId, scene.Id, encounter.Snapshot());
+            await SyncEncounterMap();
             error = null; StateHasChanged(); return token;
         }
         catch (Exception) { error = "Unable to save the placement. Please try again."; if (!disposed) StateHasChanged(); return null; }
@@ -279,8 +310,13 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         if (disposed || tokenScene is not { } scene) return false;
         try
         {
+            if (encounter.Active)
+            {
+                encounter.EnsureTurnOrigin(id, entries);
+                await ScenesStore.SaveEncounterAsync(scene.CampaignId, scene.Id, encounter.Snapshot());
+            }
             var token = await ScenesStore.PositionCombatantAsync(scene.CampaignId, scene.Id, id, column, row);
-            if (!disposed) { var index = entries.FindIndex(e => e.Id == id); if (index >= 0) entries[index] = token; error = null; StateHasChanged(); }
+            if (!disposed) { var index = entries.FindIndex(e => e.Id == id); if (index >= 0) entries[index] = token; await SyncEncounterMap(); error = null; StateHasChanged(); }
             return true;
         }
         catch (Exception) { error = "Unable to save the move. The token has returned to its previous square."; if (!disposed) StateHasChanged(); return false; }

@@ -33,17 +33,46 @@ function validPlayerCombatant(e) {
             ([e.originalStrength,e.originalDexterity,e.originalEndurance].every(v => Number.isInteger(v) && v >= 0)
                 && e.currentStrength <= e.originalStrength && e.currentDexterity <= e.originalDexterity && e.currentEndurance <= e.originalEndurance));
 }
+export function playerMovementRanges(ranges) {
+    return ranges.filter(r => r.isVisible === true).map(r => ({id:r.id,column:r.column,row:r.row,diameter:r.diameter,colour:r.colour,isVisible:true}));
+}
+function validMovementRange(r) {
+    return r.isVisible === true && Number.isInteger(r.id) && r.id > 0
+        && [r.column,r.row].every(v => Number.isInteger(v) && v >= 0)
+        && [4.5,7.5,10.5,13.5,19.5,25.5,37.5].includes(r.diameter) && /^#[0-9a-fA-F]{6}$/.test(r.colour);
+}
+export function playerMovementTrails(trails,tokens) {
+    return trails.filter(t => tokens.some(token => token.id === t.id && token.isVisible === true))
+        .map(t => ({id:t.id,fromColumn:t.fromColumn,fromRow:t.fromRow,toColumn:t.toColumn,toRow:t.toRow,isNpc:tokens.find(token => token.id === t.id).isNpc,isVisible:true}));
+}
+function validMovementTrail(t) {
+    return t.isVisible === true && Number.isInteger(t.id) && t.id > 0 && typeof t.isNpc === 'boolean'
+        && [t.fromColumn,t.fromRow,t.toColumn,t.toRow].every(v => Number.isInteger(v) && v >= 0);
+}
+export function playerTargetSelection(actorId,targetId,tokens,rangeProfile = null) {
+    return actorId !== targetId && tokens.some(t => t.id === actorId && t.isVisible === true) && tokens.some(t => t.id === targetId && t.isVisible === true)
+        ? {actorId,targetId,...(rangeProfile ? {rangeProfile:{range:rangeProfile.range,scope:rangeProfile.scope,aimBonus:rangeProfile.aimBonus}} : {})} : null;
+}
 export function validBattlemapSnapshot(state) {
     if (state === null) return true;
     const scene = state?.scene, view = state?.view;
-    return (state.round === undefined || (Number.isInteger(state.round) && state.round >= 0))
+    return (state.actionSummary == null || (state.combatMode === true && state.tracker?.some(e => e.id === state.actionSummary.id && e.isVisible === true) && Array.isArray(state.actionSummary.columns) && state.actionSummary.columns.every(c => typeof c.title === "string" && Array.isArray(c.buttons) && c.buttons.every(b => typeof b.text === "string" && typeof b.selected === "boolean")) && Array.isArray(state.actionSummary.rows) && state.actionSummary.rows.every(r => typeof r.label === "string" && typeof r.value === "string" && (!state.actionSummary.isNpc || !["Armour","Weapon"].includes(r.label)))))
+        && (state.round === undefined || (Number.isInteger(state.round) && state.round >= 0))
+        && (state.movementTrails === undefined || (Array.isArray(state.movementTrails) && state.movementTrails.every(validMovementTrail)))
+        && (state.movementRanges === undefined || (Array.isArray(state.movementRanges) && state.movementRanges.every(validMovementRange)))
         && (state.tracker === undefined || (Array.isArray(state.tracker) && state.tracker.every(validPlayerCombatant)))
         && !!scene && [scene.id,scene.campaignId,scene.gridSize].every(n => Number.isInteger(n) && n > 0)
         && /^#[0-9a-fA-F]{6}$/.test(scene.gridColour) && Number.isFinite(scene.gridlineWidth) && scene.gridlineWidth > 0
         && Number.isFinite(scene.gridOpacity) && scene.gridOpacity >= 0 && scene.gridOpacity <= 100
         && !!view && [view.x,view.y,view.scale,view.width,view.height,view.imageWidth,view.imageHeight].every(Number.isFinite)
         && [view.scale,view.width,view.height,view.imageWidth,view.imageHeight].every(n => n > 0)
-        && Array.isArray(state.tokens) && state.tokens.every(t => Number.isInteger(t.id) && t.id > 0
+        && Array.isArray(state.tokens)
+        && (state.targetSelection == null || (Number.isInteger(state.targetSelection.actorId) && Number.isInteger(state.targetSelection.targetId)
+            && (state.targetSelection.rangeProfile == null || (Number.isFinite(state.targetSelection.rangeProfile.range) && state.targetSelection.rangeProfile.range > 0 && typeof state.targetSelection.rangeProfile.scope === "boolean" && Number.isInteger(state.targetSelection.rangeProfile.aimBonus) && state.targetSelection.rangeProfile.aimBonus >= 0 && state.targetSelection.rangeProfile.aimBonus <= 6))
+            && state.targetSelection.actorId !== state.targetSelection.targetId
+            && state.tokens.some(t => t.id === state.targetSelection.actorId && t.isVisible === true)
+            && state.tokens.some(t => t.id === state.targetSelection.targetId && t.isVisible === true)))
+        && state.tokens.every(t => Number.isInteger(t.id) && t.id > 0
             && Number.isInteger(t.characterId) && t.characterId > 0 && t.isVisible === true
             && Number.isInteger(t.column) && t.column >= 0 && Number.isInteger(t.row) && t.row >= 0 && typeof t.name === 'string');
 }

@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import {movementGeometry} from '../../wwwroot/js/MovementIndicators.js';
+import {Battlemap} from '../../wwwroot/js/Battlemap.js';
+import {playerMovementTrails,validBattlemapSnapshot} from '../../wwwroot/js/BattlemapPresentationSync.js';
+const trail={id:1,fromColumn:1,fromRow:2,toColumn:4,toRow:6,isNpc:false};
+const geometry=movementGeometry(trail,100,{x:10,y:20,scale:2});
+assert.equal(geometry.distance,7.5);
+assert.deepEqual(geometry.start,{x:310,y:520});assert.deepEqual(geometry.end,{x:910,y:1320});assert.deepEqual(geometry.midpoint,{x:610,y:920});
+assert.equal(movementGeometry({...trail,toColumn:2,toRow:3},10,{x:0,y:0,scale:.25}).distance.toFixed(1),'2.1','diagonal distances round to one decimal');
+const map=new Battlemap({style:{}},{gridSize:100},'movement-test');map.combatMode=true;map.view={x:0,y:0,scale:2};
+const token={id:1,isNpc:false};map.updateMovementTrail(token,1,2,4,6);map.updateMovementTrail(token,4,6,5,6);
+assert.deepEqual(map.movementTrails.get(1),{...trail,toColumn:5},'successive drags retain the original turn origin');
+const before=map.movementTrails.get(1),epoch=map.movementEpoch;
+map.updateMovementTrail(token,5,6,8,8);map.restoreMovementTrail({token,previousTrail:before,movementEpoch:epoch});assert.deepEqual(map.movementTrails.get(1),before,'failed/cancelled moves restore the previous indicator');
+map.restoreMovementTrail({token,movementEpoch:epoch});assert.equal(map.movementTrails.size,0,'cancelled first drag removes its indicator');
+map.updateMovementTrail(token,1,2,4,6);map.clearMovementTrails();map.restoreMovementTrail({token,previousTrail:before,movementEpoch:epoch});assert.equal(map.movementTrails.size,0,'a late save failure cannot restore an old turn indicator');
+map.updateMovementTrail(token,1,2,1,2);assert.equal(map.movementTrails.size,0,'returning to the origin removes the zero-length line');
+const oldPixi=globalThis.PIXI;
+const point=()=>({set(x,y){this.x=x;this.y=y;}});
+class Container {constructor(){this.position=point();this.children=[];}addChild(...items){this.children.push(...items);}destroy(){this.destroyed=true;}}
+class Graphics {constructor(){this.strokes=[];}clear(){this.strokes=[];return this;}moveTo(x,y){this.start={x,y};return this;}lineTo(x,y){this.end={x,y};return this;}stroke(style){this.strokes.push(style);return this;}circle(x,y,radius){this.origin={x,y,radius};return this;}rect(x,y,w,h){this.rectValue={x,y,w,h};return this;}fill(style){this.fillStyle=style;return this;}}
+class Text {constructor({text,style}){this.text=text;this.style=style;this.position=point();}get width(){return this.text.length*8;}get height(){return 16;}}
+globalThis.PIXI={Container,Graphics,Text};
+map.movementStroke=new Graphics();map.movementOverlay=new Container();map.setMovementTrails([trail]);
+assert.deepEqual(map.movementStroke.strokes[0],{color:0xffffff,alpha:.25,width:6});
+assert.deepEqual(map.movementStroke.origin,{x:300,y:500,radius:5});
+assert.deepEqual(map.movementStroke.fillStyle,{color:0xffffff,alpha:.25});
+const label=map.movementLabels.get(1);assert.equal(label.text.text,'7.5 m');assert.equal(label.text.style.fontSize,14);
+const midpoint=movementGeometry(trail,100,map.view).midpoint;
+assert.equal(label.container.position.x+(label.text.width+10)/2,midpoint.x);assert.equal(label.container.position.y+(label.text.height+6)/2,midpoint.y);
+map.view.scale=.5;map.drawMovementIndicators();assert.equal(map.movementStroke.strokes[0].width,6,'stroke remains 6 screen pixels at every zoom');assert.equal(label.text.style.fontSize,14);
+map.setMovementTrails([{...trail,isNpc:true}]);assert.equal(map.movementStroke.strokes[0].color,0xffffff);
+map.tokenAppearance=()=>{};map.setEncounterState(true,1,[],1);assert.equal(map.movementTrails.size,0,'changing turns clears the indicator');
+map.setMovementTrails([trail]);map.setEncounterState(false,null,[],0);assert.equal(map.movementTrails.size,0);assert.equal(map.movementLabels.size,0);
+globalThis.PIXI=oldPixi;
+const publicTrails=playerMovementTrails([trail,{...trail,id:2}],[{id:1,isVisible:true,isNpc:false},{id:2,isVisible:false,isNpc:true}]);
+assert.equal(publicTrails.length,1);assert.equal(publicTrails[0].id,1);
+const state={scene:{id:1,campaignId:1,gridSize:100,gridColour:'#000000',gridlineWidth:2,gridOpacity:50},tokens:[],view:{x:0,y:0,scale:1,width:1000,height:600,imageWidth:2000,imageHeight:2000},movementTrails:publicTrails};
+assert.ok(validBattlemapSnapshot(state));assert.equal(validBattlemapSnapshot({...state,movementTrails:[{...publicTrails[0],toColumn:NaN}]}),false);
+console.log('Combat movement lines, metric distances, midpoint labels, zoom, rollback, turn cleanup and cast privacy passed.');
