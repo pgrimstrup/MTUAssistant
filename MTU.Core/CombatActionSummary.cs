@@ -56,16 +56,6 @@ public sealed record CombatActionSummary(
         rows.Add(
             new("Stance", state.SelectedStance == "Prone" ? "Prone (-1)" : state.SelectedStance)
         );
-        var statuses = new List<string>();
-        if (state.SelectedBehindCover)
-            statuses.Add("Behind Cover");
-        if (state.SelectedHiding)
-            statuses.Add("Hiding");
-        if (state.SelectedElevated)
-            statuses.Add("Elevated");
-        if (state.TargetTagged && (!player || target is not null))
-            statuses.Add("Target Tagged");
-        rows.Add(new("Status", statuses.Count == 0 ? "None" : string.Join(", ", statuses)));
         rows.Add(
             new(
                 "Reactions Made",
@@ -80,25 +70,7 @@ public sealed record CombatActionSummary(
                 (target?.Name ?? "None") + (band is null ? "" : " — " + RangeDescription(band))
             )
         );
-        if (state.NeedsReaction && (!player || target is not null))
-        {
-            rows.Add(
-                new(
-                    "Target Reaction",
-                    state.TargetReaction == "Dive for Cover" && target is not null
-                        ? $"Dive for Cover ({state.TargetReactionStance ?? encounter.ActionFor(target.Id).Stance})"
-                        : state.TargetReaction
-                )
-            );
-        }
         rows.Add(new("Sequence", state.SequenceSummary));
-        var aim = new List<string>();
-        if (state.RangedAimBonus > 0)
-            aim.Add($"Ranged Attack +{state.RangedAimBonus}");
-        if (state.AimBonus > 0)
-            aim.Add($"Carried Over +{state.AimBonus}");
-        if (aim.Count > 0)
-            rows.Add(new("Aim", string.Join(", ", aim)));
         rows.Add(
             new(
                 "Result",

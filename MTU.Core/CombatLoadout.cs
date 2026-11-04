@@ -22,6 +22,8 @@ public sealed class CombatLoadout(IReadOnlyList<CharacterEquipmentDetails> equip
 {
     private IEnumerable<CharacterEquipmentDetails> Equipped => equipment.Where(e => e.Equipped);
     public bool HasSmartTracker => Equipped.Any(e => e.SupportsAttachments && e.SmartTracker);
+    public CharacterEquipmentDetails? RangedWeapon =>
+        Equipped.FirstOrDefault(e => e.SupportsAttachments);
     public string Armour =>
         string.Join(
             ", ",
@@ -41,9 +43,7 @@ public sealed class CombatLoadout(IReadOnlyList<CharacterEquipmentDetails> equip
 
     public CombatWeaponRange? RangeFor(CombatantActionState state)
     {
-        var weapon = Equipped.FirstOrDefault(e =>
-            e.Equipment.Kind == EquipmentKind.Weapon && e.Equipment.Range > 0
-        );
+        var weapon = RangedWeapon;
         return weapon is null
             ? null
             : new(

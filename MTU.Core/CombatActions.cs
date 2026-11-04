@@ -34,7 +34,8 @@ public sealed record CombatantActionState(
     bool? PendingHiding = null,
     bool Elevated = false,
     bool? PendingElevated = null,
-    bool TagTargetHitConfirmed = false
+    bool TargetHasBeenHit = false,
+    AttackModifierSummary? ResolvedAttackModifiers = null
 )
 {
     public IReadOnlyList<string> ColumnActions(int column) =>
@@ -80,7 +81,7 @@ public sealed record CombatantActionState(
     public string ButtonText(string action, int column = 1) =>
         action switch
         {
-            "Aim" => $"Aim +{(column == 3 ? AimBonus : AimBeforeMajor)}",
+            "Aim" => $"Aim x{ColumnActions(column).Count(a => a == "Aim")}",
             "Move" when ColumnActions(column).Count(a => a == "Move") > 0 =>
                 $"Move {ColumnActions(column).Count(a => a == "Move")}",
             _ => action,
@@ -159,6 +160,10 @@ public static class CombatActionChoices
         "Reload (slow)",
         "Skill Check",
     ];
+
+    public static bool UnavailableWhileHiding(string action) =>
+        action is "Melee Attack" or "Ranged Attack" or "Aim" or "Tag Target";
+
     public static readonly string[] Stances = ["Standing", "Crouching", "Prone"];
 }
 
@@ -206,8 +211,22 @@ public sealed partial class Encounter
                 AfterMajorActions = state.AfterMajorActions ?? [],
             };
         }
-        if (state.MinorCount >= 2)
-            state = state with { MajorAction = null };
+        if (state.MajorAction is not null && state.MinorCount > 1)
+        {
+            var before = state.ColumnActions(1).Take(1).ToArray();
+            var after = before.Length == 0 ? state.ColumnActions(3).Take(1).ToArray() : [];
+            var single = before.Concat(after).ToArray();
+            state = state with
+            {
+                BeforeMajorActions = before,
+                AfterMajorActions = after,
+                MinorActions = single.Where(a => a is not ("Aim" or "Move")).ToArray(),
+                AimSelections = single.Count(a => a == "Aim"),
+                MoveSelections = single.Count(a => a == "Move"),
+            };
+            if (!state.NeedsStance)
+                state = state with { PendingStance = null };
+        }
         return state with { MovementDiameter = MovementDiameterFor(state) };
     }
 
@@ -237,7 +256,8 @@ public sealed partial class Encounter
             BehindCover: state.BehindCover,
             Hiding: state.Hiding,
             TargetTagged: state.TargetTagged,
-            Elevated: state.Elevated
+            Elevated: state.Elevated,
+            TargetHasBeenHit: state.TargetHasBeenHit
         );
     }
 
@@ -259,9 +279,9 @@ public sealed partial class Encounter
         var state = ActionFor(id);
         if (state.ActionsResolved)
             return false;
-        if (action == "Tag Target" && !smartTracker)
+        if (action == "Tag Target" && (!smartTracker || !state.TargetHasBeenHit))
             return false;
-        if (state.SelectedHiding && action is "Melee Attack" or "Ranged Attack")
+        if (state.SelectedHiding && CombatActionChoices.UnavailableWhileHiding(action))
             return false;
         if (CombatActionChoices.Major.Contains(action))
             return state.MinorCount < 2;
@@ -281,10 +301,14 @@ public sealed partial class Encounter
         EnsureTurnOrigin(id, entries);
         if (!CombatActionChoices.Minor.Concat(CombatActionChoices.Major).Contains(action))
             throw new ArgumentException("Choose an available action.");
-        if (action == "Tag Target" && !smartTracker)
-            throw new ArgumentException("Equip a weapon with Smart Tracker to use Tag Target.");
-        if (ActionFor(id).SelectedHiding && action is "Melee Attack" or "Ranged Attack")
-            throw new ArgumentException("Break from cover before making an attack.");
+        if (action == "Tag Target" && (!smartTracker || !ActionFor(id).TargetHasBeenHit))
+            throw new ArgumentException(
+                "Tag Target requires Smart Tracker and a target that has been hit."
+            );
+        if (ActionFor(id).SelectedHiding && CombatActionChoices.UnavailableWhileHiding(action))
+            throw new ArgumentException(
+                "Stop Hiding before attacking, aiming or tagging a target."
+            );
         if (!CanChooseAction(id, action, smartTracker))
             throw new ArgumentException(
                 "Major Actions are unavailable while two or more Minor Actions are selected."
@@ -302,10 +326,21 @@ public sealed partial class Encounter
             if (index < 0)
                 index = selected.Count;
             selected.RemoveAll(a => a == action);
-            var next =
-                action is "Aim" or "Move" ? (count + 1) % 4
-                : count == 0 ? 1
-                : 0;
+            var next = state.MajorAction is not null
+                ? count == 0
+                    ? 1
+                    : 0
+                : action is "Aim" or "Move"
+                    ? (count + 1) % 4
+                    : count == 0
+                        ? 1
+                        : 0;
+            if (state.MajorAction is not null)
+            {
+                selected.Clear();
+                index = 0;
+                state = state with { BeforeMajorActions = [], AfterMajorActions = [] };
+            }
             selected.InsertRange(Math.Min(index, selected.Count), Enumerable.Repeat(action, next));
             state =
                 column == 1
@@ -325,7 +360,6 @@ public sealed partial class Encounter
             MinorActions = sequence.Where(a => a is not ("Aim" or "Move")).ToArray(),
             AimSelections = sequence.Count(a => a == "Aim"),
             MoveSelections = moves,
-            MajorAction = state.MinorCount >= 2 ? null : state.MajorAction,
             MovementDiameter = MovementDiameterFor(state),
             RangeColumn =
                 moves == 0 ? null : state.TurnOriginColumn ?? state.RangeColumn ?? actor.Column,
@@ -359,7 +393,7 @@ public sealed partial class Encounter
         {
             TargetId = targetId,
             TargetTagged = state.TargetId == targetId && state.TargetTagged,
-            TagTargetHitConfirmed = state.TargetId == targetId && state.TagTargetHitConfirmed,
+            TargetHasBeenHit = state.TargetId == targetId && state.TargetHasBeenHit,
         };
     }
 
@@ -456,7 +490,7 @@ public sealed partial class Encounter
             PendingBehindCover = null,
             PendingHiding = null,
             PendingElevated = null,
-            TagTargetHitConfirmed = false,
+            ResolvedAttackModifiers = null,
         };
 
     private void ClearMovement(int? id)

@@ -212,6 +212,7 @@ public sealed class EquipmentService(MtuDbContext db)
                 Fof = e.Fof,
                 Phud = e.Phud,
                 SmartTracker = e.SmartTracker,
+                XRayOutliningAid = e.XRayOutliningAid,
             })
             .ToArray();
     }
@@ -306,6 +307,7 @@ public sealed class EquipmentService(MtuDbContext db)
                 || details.Fof
                 || details.Phud
                 || details.SmartTracker
+                || details.XRayOutliningAid
             )
         )
             throw new ArgumentException(
@@ -320,6 +322,7 @@ public sealed class EquipmentService(MtuDbContext db)
         entity.Fof = details.Fof;
         entity.Phud = details.Phud;
         entity.SmartTracker = details.SmartTracker;
+        entity.XRayOutliningAid = details.XRayOutliningAid;
     }
 
     public async Task RemoveFromCharacterAsync(int campaignId, int characterId, int equipmentId)

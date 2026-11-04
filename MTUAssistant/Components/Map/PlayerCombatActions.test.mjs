@@ -10,12 +10,12 @@ class Element {
 const doc={baseURI:'https://example.test/',createElement:tag=>new Element(tag)};
 const host=new Element('aside');
 const summary={id:1,characterId:10,name:'Captain <script>',secondary:'Alex',isNpc:false,hasTokenImage:true,
-    columns:[{title:'Minor Before',buttons:[{text:'Aim +1',selected:true}]},{title:'Major Action',buttons:[{text:'Ranged Attack',selected:true}]},{title:'Minor After',buttons:[{text:'Move',selected:false}]}],
-    rows:[{label:'Combatant',value:'Captain <script>'},{label:'Armour',value:'Suit (DR +12)'},{label:'Weapon',value:'Rifle (100m, 3D)'},{label:'Stance',value:'Prone (-1)'},{label:'Reactions Made',value:'2 Reactions (DM -2)'},{label:'Target',value:'Guard — Short Range (DM +1)'},{label:'Target Reaction',value:'Dive for Cover (Crouching)'}]};
+    columns:[{title:'Minor Before',buttons:[{text:'Aim x1',selected:true}]},{title:'Major Action',buttons:[{text:'Ranged Attack',selected:true}]},{title:'Minor After',buttons:[{text:'Move',selected:false}]}],
+    rows:[{label:'Combatant',value:'Captain <script>'},{label:'Armour',value:'Suit (DR +12)'},{label:'Weapon',value:'Rifle (100m, 3D)'},{label:'Stance',value:'Prone (-1)'},{label:'Reactions Made',value:'2 Reactions (DM -2)'},{label:'Target',value:'Guard — Short Range (DM +1)'}]};
 const state={combatMode:true,round:1,actionSummary:summary,scene:{id:1,campaignId:4,gridSize:100,gridColour:'#000000',gridOpacity:50,gridlineWidth:2},tokens:[],tracker:[{id:1,characterId:10,name:'Captain',isNpc:false,isVisible:true,initiative:10,currentHp:21,healthWidth:100,healthColour:'green'}],view:{x:0,y:0,scale:1,width:800,height:600,imageWidth:1000,imageHeight:1000}};
 const all=e=>[e,...e.children.flatMap(all)];
 renderPlayerActions(host,state,doc);
-assert.equal(host.hidden,false);assert.ok(all(host).some(e=>e.textContent === '2 Reactions (DM -2)'));assert.ok(all(host).some(e=>e.textContent === 'Dive for Cover (Crouching)'));assert.ok(!all(host).some(e=>e.textContent === 'Target Reaction Stance'));
+assert.equal(host.hidden,false);assert.ok(all(host).some(e=>e.textContent === '2 Reactions (DM -2)'));assert.ok(all(host).some(e=>e.textContent === 'Combatant Summary'));assert.ok(!all(host).some(e=>e.textContent === 'Target Reaction'));assert.ok(!all(host).some(e=>e.textContent === 'Target Reaction Stance'));
 assert.equal(all(host).find(e=>e.tag==='h3').textContent,summary.name,'names remain literal text');
 const buttons=all(host).filter(e=>e.tag==='button');
 assert.equal(buttons.length,3);assert.ok(!buttons.some(b=>b.textContent === "Reset"),"Reset is Admin only");assert.ok(buttons.every(e=>e.disabled));assert.equal(buttons[0].attributes['aria-pressed'],'true');

@@ -20,6 +20,7 @@
                     <label><input type="checkbox" @bind="model.Fof" /> Friend-or-Foe (FOF)</label>
                     <label><input type="checkbox" @bind="model.Phud" /> Personal Heads-up Display (P-HUD)</label>
                     <label><input type="checkbox" @bind="model.SmartTracker" /> Smart Tracker</label>
+                    <label><input type="checkbox" @bind="model.XRayOutliningAid" /> X-Ray Outlining Aid</label>
                 </div>
                 <p class="hint">Smart Tracker includes Intelligent Weapon.</p>
             </fieldset>
@@ -48,7 +49,7 @@
     {
         model = Item.Copy();
         if (!model.SupportsAttachments)
-            model.Scope = model.TargetingSystem = model.LaserSight = model.HolographicSight = model.Fof = model.Phud = model.SmartTracker = false;
+            model.Scope = model.TargetingSystem = model.LaserSight = model.HolographicSight = model.Fof = model.Phud = model.SmartTracker = model.XRayOutliningAid = false;
     }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

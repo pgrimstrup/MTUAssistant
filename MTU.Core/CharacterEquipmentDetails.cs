@@ -13,6 +13,7 @@ public sealed class CharacterEquipmentDetails
     public bool Fof { get; set; }
     public bool Phud { get; set; }
     public bool SmartTracker { get; set; }
+    public bool XRayOutliningAid { get; set; }
     public bool SupportsAttachments =>
         Equipment.Kind == EquipmentKind.Weapon && Equipment.Range > 0;
     public bool IntelligentWeapon => SupportsAttachments && SmartTracker;
@@ -36,6 +37,7 @@ public sealed class CharacterEquipmentDetails
                     (Fof, "FOF"),
                     (Phud, "P-HUD"),
                     (SmartTracker, "Smart Tracker (Intelligent Weapon)"),
+                    (XRayOutliningAid, "X-Ray Outlining Aid"),
                 }
                     .Where(option => option.Item1)
                     .Select(option => option.Item2)

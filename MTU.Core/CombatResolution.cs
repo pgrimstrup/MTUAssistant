@@ -11,17 +11,32 @@ public sealed partial class Encounter
     public void ResolveActions(
         int id,
         IReadOnlyList<SceneCombatant> entries,
-        bool smartTracker = false
+        bool smartTracker = false,
+        AttackModifierSummary? attackModifiers = null
     )
     {
         var actor = RequireActor(id, entries);
         var state = ActionFor(id);
         if (state.ActionsResolved)
             return;
+        if (
+            state.MajorAction == "Ranged Attack"
+            && attackModifiers?.UnavailableReason is { } reason
+        )
+            throw new ArgumentException(reason);
         if (state.MinorCount == 0 && state.MajorAction is null && !state.HasPendingStatus)
             throw new ArgumentException("Choose actions to resolve.");
-        if (state.SelectedHiding && state.MajorAction is "Melee Attack" or "Ranged Attack")
-            throw new ArgumentException("Break from cover before making an attack.");
+        if (
+            state.SelectedHiding
+            && (
+                state.IsSelected("Aim")
+                || state.IsSelected("Tag Target")
+                || state.MajorAction is "Melee Attack" or "Ranged Attack"
+            )
+        )
+            throw new ArgumentException(
+                "Stop Hiding before attacking, aiming or tagging a target."
+            );
         SceneCombatant? target = null;
         if (state.NeedsReaction || state.IsSelected("Tag Target"))
         {
@@ -29,9 +44,9 @@ public sealed partial class Encounter
             if (target is null || IsDead(target))
                 throw new ArgumentException("Choose a living target before resolving the action.");
         }
-        if (state.IsSelected("Tag Target") && (!smartTracker || !state.TagTargetHitConfirmed))
+        if (state.IsSelected("Tag Target") && (!smartTracker || !state.TargetHasBeenHit))
             throw new ArgumentException(
-                "Tag Target requires an equipped Smart Tracker and a confirmed hit on the target."
+                "Tag Target requires an equipped Smart Tracker and a target that has been hit."
             );
         if (target is not null && state.TargetReaction != "None")
         {
@@ -41,7 +56,12 @@ public sealed partial class Encounter
                 : state.TargetReaction == "Dive for Cover"
                     ? state.TargetReactionStance ?? defence.Stance
                 : defence.Stance;
-            defence = defence with { ReactionCount = defence.ReactionCount + 1, Stance = stance };
+            defence = defence with
+            {
+                ReactionCount = defence.ReactionCount + 1,
+                Stance = stance,
+                BehindCover = defence.BehindCover || state.TargetReaction == "Dive for Cover",
+            };
             actions[target.Id] = defence with { MovementDiameter = MovementDiameterFor(defence) };
         }
         state = state with
@@ -56,6 +76,7 @@ public sealed partial class Encounter
             PendingHiding = null,
             Elevated = state.SelectedElevated,
             PendingElevated = null,
+            ResolvedAttackModifiers = state.MajorAction == "Ranged Attack" ? attackModifiers : null,
             TargetTagged = state.TargetTagged || state.IsSelected("Tag Target"),
         };
         actions[id] = state with { MovementDiameter = MovementDiameterFor(state) };

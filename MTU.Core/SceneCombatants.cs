@@ -17,7 +17,8 @@ public sealed record SceneCombatant(
     int? MilitaryTactics = null,
     string PlayerName = "",
     string Occupation = "",
-    int? Tactics = null
+    int? Tactics = null,
+    IReadOnlyList<CharacterSkill>? Skills = null
 )
 {
     public bool OnMap => Column.HasValue && Row.HasValue;
@@ -297,6 +298,7 @@ public sealed partial class SceneService
                         "Tactics (Military)"
                     ),
                     Tactics = SkillRules.Rank(byCharacter[e.CharacterId], "Tactics"),
+                    Skills = byCharacter[e.CharacterId].ToArray(),
                 }
             )
             .ToArray();

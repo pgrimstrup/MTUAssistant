@@ -293,6 +293,10 @@ public sealed partial class Encounter
                         pair.Value.TargetTagged
                         && pair.Value.TargetId is int taggedTarget
                         && ids.Contains(taggedTarget),
+                    TargetHasBeenHit =
+                        pair.Value.TargetHasBeenHit
+                        && pair.Value.TargetId is int hitTarget
+                        && ids.Contains(hitTarget),
                 };
         Initiative.Clear();
         attributes.Clear();

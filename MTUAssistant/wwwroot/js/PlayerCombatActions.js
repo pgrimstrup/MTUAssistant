@@ -33,7 +33,7 @@ export function renderPlayerActions(host,state,doc = globalThis.document) {
             item.type='button'; item.disabled=true; item.setAttribute('aria-pressed',String(button.selected));
         }
     }
-    const section=add(host,'section',null,'action-summary'); add(section,'h2','Action Summary');
+    const section=add(host,'section',null,'action-summary'); add(section,'h2','Combatant Summary');
     const list=add(section,'dl');
     for (const row of summary.rows) {
         if (summary.isNpc && ['Armour','Weapon'].includes(row.label)) continue;

@@ -5,6 +5,7 @@ public static class CombatActionChecks
 {
     public static void Run()
     {
+        AttackModifierChecks.Run();
         static void Check(bool value, string message)
         {
             if (!value)
@@ -237,7 +238,12 @@ public static class CombatActionChecks
         e.ChooseAction(1, "Skill Check", roster, 2);
         Check(e.ActionFor(1).MajorAction == "Skill Check", "Major selections remain exclusive");
         e.ChooseAction(1, "Aim", roster, 3);
-        Check(e.ActionFor(1).MajorAction is null, "Adding the second minor clears major selection");
+        Check(
+            e.ActionFor(1).MajorAction == "Skill Check"
+                && e.ActionFor(1).MinorCount == 1
+                && e.ActionFor(1).ColumnActions(1).Count == 0,
+            "Minor selection replaces the earlier minor and preserves major"
+        );
         e = Fresh();
         for (var i = 1; i <= 3; i++)
         {
@@ -399,10 +405,8 @@ public static class CombatActionChecks
                         "Armour",
                         "Weapon",
                         "Stance",
-                        "Status",
                         "Reactions Made",
                         "Target",
-                        "Target Reaction",
                         "Sequence",
                         "Result",
                     }
@@ -568,17 +572,16 @@ public static class CombatActionChecks
         combinedAim.ChooseAction(hero.Id, "Aim", roster, 3);
         var combinedSummary = CombatActionSummary.Create(combinedAim, hero, roster, loadout)!;
         Check(
-            combinedSummary.Rows.Single(r => r.Label == "Aim").Value
-                == "Ranged Attack +2, Carried Over +1",
-            "Combined Aim summary"
+            !combinedSummary.Rows.Any(r => r.Label == "Aim")
+                && combinedAim.ActionFor(1).RangedAimBonus == 2
+                && combinedAim.ActionFor(1).AimBonus == 1,
+            "Aim calculation remains correct without a summary row"
         );
         combinedAim.ResetActions(hero.Id, roster);
         Check(
-            CombatActionSummary
-                .Create(combinedAim, hero, roster, loadout)!
-                .Rows.Single(r => r.Label == "Aim")
-                .Value == "Carried Over +2",
-            "Zero ranged bonus omitted"
+            combinedAim.ActionFor(1).AimBonus == 2
+                && combinedAim.ActionFor(1).ButtonText("Aim") == "Aim x0",
+            "Carried Aim stays separate from this turn button count"
         );
         Check(!summary.Rows.Any(r => r.Label == "Aim"), "No Aim row for zero bonuses");
         var attackerA = new SceneCombatant(
@@ -639,10 +642,8 @@ public static class CombatActionChecks
         reactions.SetTargetReactionStance(101, "Crouching", reactionRoster);
         var coverSummary = CombatActionSummary.Create(reactions, attackerA, reactionRoster, null)!;
         Check(
-            coverSummary.Rows.Single(r => r.Label == "Target Reaction").Value
-                == "Dive for Cover (Crouching)"
-                && !coverSummary.Rows.Any(r => r.Label == "Target Reaction Stance"),
-            "Cover stance combined into reaction summary"
+            !coverSummary.Rows.Any(r => r.Label is "Aim" or "Target Reaction" or "Status"),
+            "Combatant summary omits action-only details"
         );
         Check(
             reactions.ActionFor(103).Stance == "Standing"
@@ -866,11 +867,10 @@ public static class CombatActionChecks
             "Cover and hiding survive reload"
         );
         Check(
-            CombatActionSummary
+            !CombatActionSummary
                 .Create(statusRestore, hero, roster, null)!
-                .Rows.Single(r => r.Label == "Status")
-                .Value == "Behind Cover, Hiding",
-            "Status summary displays cover and hiding"
+                .Rows.Any(r => r.Label == "Status"),
+            "Status row removed from Combatant Summary"
         );
         statusEncounter.SetCoverStatus(1, false, false, roster);
         statusEncounter.ChooseAction(1, "Ranged Attack", roster);
@@ -887,8 +887,8 @@ public static class CombatActionChecks
         Check(!covering.ActionFor(2).BehindCover, "Dive selection does not apply cover early");
         covering.ResolveActions(1, roster);
         Check(
-            !covering.ActionFor(2).BehindCover && !covering.ActionFor(2).Hiding,
-            "Reactions do not change GM-controlled status flags"
+            covering.ActionFor(2).BehindCover && !covering.ActionFor(2).Hiding,
+            "Dive for Cover sets cover automatically"
         );
         var trackerWeapon = new CharacterEquipmentDetails
         {
@@ -906,6 +906,13 @@ public static class CombatActionChecks
                     == "Laser Sights, Holographic Sights, P-HUD, Smart Tracker (Intelligent Weapon)",
             "Corrected weapon option labels and equipped Smart Tracker"
         );
+        void RecordFutureHit(Encounter value)
+        {
+            var snapshot = value.Snapshot();
+            var states = new Dictionary<int, CombatantActionState>(snapshot.Actions ?? []);
+            states[1] = value.ActionFor(1) with { TargetHasBeenHit = true };
+            value.Restore(snapshot with { Actions = states }, roster);
+        }
         var tagged = Fresh();
         tagged.ChooseAction(1, "Aim", roster);
         tagged.SetTarget(1, 2, roster);
@@ -913,6 +920,11 @@ public static class CombatActionChecks
         tagged.ResolveActions(1, roster, trackerLoadout.HasSmartTracker);
         Check(!tagged.ActionFor(1).TargetTagged, "Aim never automatically tags a target");
         tagged.ResetActions(1, roster);
+        Check(
+            !tagged.ActionFor(1).TargetHasBeenHit && !tagged.CanChooseAction(1, "Tag Target", true),
+            "Tag Target waits for a future hit result"
+        );
+        RecordFutureHit(tagged);
         tagged.ChooseAction(1, "Tag Target", roster, smartTracker: true);
         Check(
             CombatActionSummary
@@ -920,20 +932,6 @@ public static class CombatActionChecks
                 .Columns.Sum(c => c.Buttons.Count(b => b.Text == "Tag Target")) == 2,
             "Cast action columns show Tag Target only with Smart Tracker"
         );
-        var unhitRejected = false;
-        try
-        {
-            tagged.ResolveActions(1, roster, true);
-        }
-        catch (ArgumentException)
-        {
-            unhitRejected = true;
-        }
-        Check(
-            unhitRejected && !tagged.ActionFor(1).TargetTagged,
-            "Tagging requires a confirmed hit"
-        );
-        tagged.ConfirmTagTargetHit(1, true, roster);
         tagged.ResolveActions(1, roster, true);
         Check(
             tagged.ActionFor(1).TargetTagged && tagged.ActionFor(1).MinorCount == 1,
@@ -957,6 +955,7 @@ public static class CombatActionChecks
         tagged.SetTarget(1, 2, roster);
         Check(tagged.ActionFor(1).TargetTagged, "Keeping same target preserves tag");
         tagged.SetTarget(1, null, roster);
+        Check(!tagged.ActionFor(1).TargetHasBeenHit, "Changing target clears the hit record");
         Check(!tagged.ActionFor(1).TargetTagged, "Changing or clearing target removes tag");
         trackerWeapon.Equipped = false;
         Check(!trackerLoadout.HasSmartTracker, "Unequipped Smart Tracker does not grant tagging");
@@ -1009,6 +1008,8 @@ public static class CombatActionChecks
             "Ranged Attack never automatically tags a target"
         );
         var noTracker = Fresh();
+        noTracker.SetTarget(1, 2, roster);
+        RecordFutureHit(noTracker);
         Check(
             !noTracker.CanChooseAction(1, "Tag Target")
                 && noTracker.CanChooseAction(1, "Tag Target", true),
@@ -1018,6 +1019,79 @@ public static class CombatActionChecks
             CombatActionChoices.Major[3] == "Reload (slow)"
                 && CombatActionChoices.Major[4] == "Skill Check",
             "Reload actions align on fourth row"
+        );
+        var hiddenMinor = Fresh();
+        hiddenMinor.ChooseAction(1, "Aim", roster);
+        hiddenMinor.SetTarget(1, 2, roster);
+        RecordFutureHit(hiddenMinor);
+        hiddenMinor.ChooseAction(1, "Tag Target", roster, 3, true);
+        hiddenMinor.SetCoverStatus(1, false, true, roster);
+        Check(
+            !hiddenMinor.CanChooseAction(1, "Aim")
+                && !hiddenMinor.CanChooseAction(1, "Tag Target", true),
+            "Hiding disables Aim and Tag Target"
+        );
+        Check(
+            hiddenMinor.ActionFor(1).MinorCount == 0,
+            "Checking Hiding clears already selected Aim and Tag Target"
+        );
+        hiddenMinor.ResolveActions(1, roster);
+        hiddenMinor.ResetActions(1, roster);
+        hiddenMinor.SetCoverStatus(1, false, false, roster);
+        Check(
+            hiddenMinor.CanChooseAction(1, "Aim")
+                && hiddenMinor.CanChooseAction(1, "Tag Target", true),
+            "Unchecking Hiding restores Aim and Tag Target availability"
+        );
+        var priority = Fresh();
+        priority.ChooseAction(1, "Ranged Attack", roster);
+        priority.ChooseAction(1, "Move", roster);
+        Check(
+            priority.ActionFor(1).MajorAction == "Ranged Attack"
+                && priority.ActionFor(1).MoveSelections == 1,
+            "Move starts at one with a major"
+        );
+        priority.ChooseAction(1, "Move", roster);
+        Check(
+            priority.ActionFor(1).MajorAction == "Ranged Attack"
+                && priority.ActionFor(1).MinorCount == 0
+                && priority.MovementRanges(roster).Count == 0,
+            "Second Move click toggles off and keeps major"
+        );
+        priority.ChooseAction(1, "Move", roster);
+        priority.ChooseAction(1, "Aim", roster, 3);
+        Check(
+            priority.ActionFor(1).MajorAction == "Ranged Attack"
+                && priority.ActionFor(1).MinorCount == 1
+                && priority.ActionFor(1).MoveSelections == 0
+                && priority.ActionFor(1).ButtonText("Aim", 3) == "Aim x1",
+            "Aim replaces Move across columns while major stays selected"
+        );
+        priority.ChooseAction(1, "Aim", roster, 3);
+        Check(
+            priority.ActionFor(1).MinorCount == 0
+                && priority.ActionFor(1).MajorAction == "Ranged Attack",
+            "Aim toggles one to zero with major"
+        );
+        priority.ChooseAction(1, "Reload (fast)", roster);
+        priority.ChooseAction(1, "Other", roster, 3);
+        Check(
+            priority.ActionFor(1).MinorCount == 1
+                && priority.ActionFor(1).IsSelected("Other", 3)
+                && !priority.ActionFor(1).IsSelected("Reload (fast)")
+                && priority.ActionFor(1).MajorAction == "Ranged Attack",
+            "Any minor replaces all other minors with a major selected"
+        );
+        var clickCounts = new CombatantActionState(
+            CarriedAimBonus: 3,
+            BeforeMajorActions: ["Aim"],
+            AfterMajorActions: ["Aim", "Aim"]
+        );
+        Check(
+            clickCounts.ButtonText("Aim", 1) == "Aim x1"
+                && clickCounts.ButtonText("Aim", 3) == "Aim x2"
+                && clickCounts.AimBonus == 6,
+            "Aim buttons show only current per-column selections, excluding carry"
         );
         Console.WriteLine(
             "Ordered minor/major columns, Aim-Shoot/Shoot-Aim, sequence persistence, shared counts, cycles and generic Tactics passed."

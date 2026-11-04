@@ -160,6 +160,8 @@ namespace MTU.Core.Data.Migrations
 
                     b.Property<bool>("TargetingSystem").HasColumnType("INTEGER");
 
+                    b.Property<bool>("XRayOutliningAid").HasColumnType("INTEGER");
+
                     b.HasKey("CharacterId", "EquipmentId");
 
                     b.HasIndex("EquipmentId");

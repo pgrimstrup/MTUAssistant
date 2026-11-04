@@ -182,6 +182,7 @@ public class CharacterSkillEntity
 
 public class CharacterEquipmentEntity
 {
+    public bool XRayOutliningAid { get; set; }
     public bool Equipped { get; set; }
     public int Quantity { get; set; } = 1;
     public bool Scope { get; set; }

@@ -14,6 +14,22 @@ public sealed partial class Encounter
         var state = ActionFor(id) with { PendingBehindCover = behindCover, PendingHiding = hiding };
         if (hiding && state.MajorAction is "Melee Attack" or "Ranged Attack")
             state = ReleaseTargetReaction(state with { MajorAction = null });
+        if (hiding)
+            state = state with
+            {
+                BeforeMajorActions = state
+                    .ColumnActions(1)
+                    .Where(a => a is not ("Aim" or "Tag Target"))
+                    .ToArray(),
+                AfterMajorActions = state
+                    .ColumnActions(3)
+                    .Where(a => a is not ("Aim" or "Tag Target"))
+                    .ToArray(),
+                MinorActions = (state.MinorActions ?? [])
+                    .Where(a => a is not ("Aim" or "Tag Target"))
+                    .ToArray(),
+                AimSelections = 0,
+            };
         actions[id] = state;
     }
 
@@ -22,14 +38,5 @@ public sealed partial class Encounter
         RequireActor(id, entries);
         RequireUnresolved(id);
         actions[id] = ActionFor(id) with { PendingElevated = elevated };
-    }
-
-    public void ConfirmTagTargetHit(int id, bool confirmed, IReadOnlyList<SceneCombatant> entries)
-    {
-        RequireActor(id, entries);
-        RequireUnresolved(id);
-        if (!ActionFor(id).IsSelected("Tag Target"))
-            throw new ArgumentException("Select Tag Target first.");
-        actions[id] = ActionFor(id) with { TagTargetHitConfirmed = confirmed };
     }
 }

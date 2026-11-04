@@ -47,15 +47,10 @@ public static class WeaponSkillChecks
                 RequiredSkill = "Vacc Suit 1",
             }
         );
-        db.CharacterEquipment.Add(
-            new CharacterEquipmentEntity
-            {
-                CharacterId = 1,
-                EquipmentId = 1,
-                Equipped = true,
-            }
-        );
         await db.SaveChangesAsync();
+        await db.Database.ExecuteSqlRawAsync(
+            "INSERT INTO CharacterEquipment (CharacterId, EquipmentId, Equipped) VALUES (1, 1, 1)"
+        );
         await migrator.MigrateAsync();
         Check(
             await db.CharacterEquipment.CountAsync() == 1
@@ -64,6 +59,20 @@ public static class WeaponSkillChecks
             "Nullable skill migration preserves loadouts and armour requirements"
         );
         var store = new EquipmentService(db);
+        await store.SaveCharacterDetailsAsync(
+            1,
+            1,
+            new CharacterEquipmentDetails
+            {
+                Equipment = new() { Id = 1 },
+                Equipped = true,
+                XRayOutliningAid = true,
+            }
+        );
+        Check(
+            (await store.ListDetailsForCharacterAsync(1, 1)).Single().XRayOutliningAid,
+            "X-Ray Outlining Aid persists and reloads"
+        );
         var weapon = await db.Equipment.AsNoTracking().SingleAsync(e => e.Id == 1);
         Check(
             string.IsNullOrEmpty(weapon.RequiredSkill),

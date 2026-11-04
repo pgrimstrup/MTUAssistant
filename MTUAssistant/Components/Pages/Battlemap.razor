@@ -45,7 +45,7 @@
                 }
                 <div class="battlemap-host" @ref="host" aria-label="Battlemap image with square grid"></div>
             </div>
-            <div class="action-column"><CombatActionsPanel CampaignId="scene.CampaignId" Actor="SelectedActor" Loadout="SelectedLoadout" Entries="entries" Encounter="encounter" Disabled="@(map is null || busy || !encounter.Active || SelectedActor is null || encounter.IsDead(SelectedActor))" CoverChanged="SetBehindCover" HidingChanged="SetHiding" ElevatedChanged="SetElevated" TagHitConfirmedChanged="ConfirmTagHit" SkillsRequested="OpenSkills" EquipRequested="OpenEquipment" EquipDisabled="@(busy || SelectedActor is null)" ResolveRequested="ResolveActions" ResetRequested="ResetActions" ActionSelected="ChooseAction" TargetReactionChanged="SetTargetReaction" TargetReactionStanceChanged="SetTargetReactionStance" TargetChanged="SetTarget" StanceChanged="SetStance" /></div>
+            <div class="action-column"><CombatActionsPanel CampaignId="scene.CampaignId" Actor="SelectedActor" Loadout="SelectedLoadout" Entries="entries" Encounter="encounter" Disabled="@(map is null || busy || !encounter.Active || SelectedActor is null || encounter.IsDead(SelectedActor))" CoverChanged="SetBehindCover" HidingChanged="SetHiding" ElevatedChanged="SetElevated" SkillsRequested="OpenSkills" EquipRequested="OpenEquipment" EquipDisabled="@(busy || SelectedActor is null)" ResolveRequested="ResolveActions" ResetRequested="ResetActions" ActionSelected="ChooseAction" TargetReactionChanged="SetTargetReaction" TargetReactionStanceChanged="SetTargetReactionStance" TargetChanged="SetTarget" StanceChanged="SetStance" /></div>
         </div>
         @if (editingSkills is { } skilled) { <CombatSkillsDialog @key="skilled.Id" Character="skilled" OnChanged="SkillsChanged" OnClose="() => editingSkills = null" /> }
         @if (equipping is { } equipped) { <CombatEquipmentDialog @key="equipped.Id" Character="equipped" OnChanged="EquipmentChanged" OnClose="() => equipping = null" /> }
@@ -143,15 +143,11 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
     });
     private Task ResolveActions() => SelectedActor is { } actor ? ChangeEncounter(() =>
     {
-        var state = encounter.ActionFor(actor.Id);
-        if (SelectedLoadout?.TargetBand(state, actor, entries.FirstOrDefault(e => e.Id == state.TargetId)) == "Out of Range")
-            throw new ArgumentException("Ranged attack cannot be made: target is out of range.");
-        encounter.ResolveActions(actor.Id, entries, SelectedLoadout?.HasSmartTracker == true);
+        encounter.ResolveActions(actor.Id, entries, SelectedLoadout?.HasSmartTracker == true, AttackModifierCalculator.Calculate(encounter, actor, entries, SelectedLoadout));
     }) : Task.CompletedTask;
     private Task SetBehindCover(bool value) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetCoverStatus(actor.Id, value, encounter.ActionFor(actor.Id).SelectedHiding, entries)) : Task.CompletedTask;
     private Task SetHiding(bool value) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetCoverStatus(actor.Id, encounter.ActionFor(actor.Id).SelectedBehindCover, value, entries)) : Task.CompletedTask;
     private Task SetElevated(bool value) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetElevated(actor.Id, value, entries)) : Task.CompletedTask;
-    private Task ConfirmTagHit(bool value) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.ConfirmTagTargetHit(actor.Id, value, entries)) : Task.CompletedTask;
     private Task ResetActions() => SelectedActor is { } actor ? ChangeEncounter(() => encounter.ResetActions(actor.Id, entries)) : Task.CompletedTask;
     private Task SetTarget(int? target) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetTarget(actor.Id, target, entries)) : Task.CompletedTask;
     private Task SetTargetReaction(string reaction) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetTargetReaction(actor.Id, reaction, entries)) : Task.CompletedTask;

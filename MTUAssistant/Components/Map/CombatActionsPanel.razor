@@ -16,7 +16,7 @@
             <div class="action-columns">
                 @foreach (var group in Groups)
                 {
-                    <section><h3>@group.Title <span>@(group.Column != 2 ? $"{state.MinorCount}/3" : $"{(state.MajorAction is null ? 0 : 1)}/{(state.MinorCount > 1 ? 0 : 1)}")</span></h3>
+                    <section><h3>@group.Title <span>@(group.Column != 2 ? $"{state.MinorCount}/{(state.MajorAction is null ? 3 : 1)}" : $"{(state.MajorAction is null ? 0 : 1)}/{(state.MinorCount > 1 ? 0 : 1)}")</span></h3>
                         @foreach (var action in group.Actions.Where(a => a != "Tag Target" || Loadout?.HasSmartTracker == true))
                         {
                             <button type="button" class="action-button @(state.IsSelected(action, group.Column) ? "chosen" : null)" disabled="@(Disabled || !Encounter.CanChooseAction(actor.Id, action, Loadout?.HasSmartTracker == true))" aria-pressed="@((state.IsSelected(action, group.Column)).ToString().ToLowerInvariant())" @onclick="() => ActionSelected.InvokeAsync((group.Column, action))">@state.ButtonText(action, group.Column)</button>
@@ -58,8 +58,7 @@
                         }
                     }
                 }
-                @if (state.IsSelected("Tag Target"))
-                { <label><input type="checkbox" checked="@state.TagTargetHitConfirmed" disabled="@(Disabled || state.ActionsResolved || state.TargetId is null)" @onchange="e => TagHitConfirmedChanged.InvokeAsync(e.Value is true)" /> Target has been hit</label> }
+
                 @if (state.NeedsStance)
                 {
                     <label>Stance
@@ -70,20 +69,29 @@
                 }
                 @if (state.MovementDiameter.HasValue)
                 { <p class="hint">Movement range: @state.MovementDiameter.Value.ToString("0.#") m diameter.@(!actor.OnMap ? " Place this token to display its range." : "")</p> }
-                <button type="button" class="btn btn-primary resolve-actions" disabled="@(Disabled || state.ActionsResolved || (state.MinorCount == 0 && state.MajorAction is null && !state.HasPendingStatus) || (state.IsSelected("Tag Target") && (!state.TagTargetHitConfirmed || Loadout?.HasSmartTracker != true)))" @onclick="() => ResolveRequested.InvokeAsync()">Resolve Actions</button>
+                @if (AttackModifierCalculator.Calculate(Encounter, actor, Entries, Loadout) is { } modifiers)
+                {
+                    <table class="attack-modifiers" aria-label="Attack modifiers">
+                        <caption>Attack modifiers</caption>
+                        <tbody>@foreach (var modifier in modifiers.Rows) { <tr><td>@modifier.Name</td><td>@modifier.Dm.ToString("+0;-0;0")</td></tr> }</tbody>
+                        <tfoot><tr><th scope="row">Total</th><td>@modifiers.Total.ToString("+0;-0;0")</td></tr></tfoot>
+                    </table>
+                    @if (modifiers.UnavailableReason is { } reason) { <p class="hint">@reason</p> }
+                }
+                <button type="button" class="btn btn-sm btn-primary resolve-actions" disabled="@(Disabled || state.ActionsResolved || (state.MinorCount == 0 && state.MajorAction is null && !state.HasPendingStatus) || (state.IsSelected("Tag Target") && (!state.TargetHasBeenHit || Loadout?.HasSmartTracker != true)) || (state.MajorAction == "Ranged Attack" && AttackModifierCalculator.Calculate(Encounter, actor, Entries, Loadout)?.CanResolve != true))" @onclick="() => ResolveRequested.InvokeAsync()">Resolve Actions</button>
             </div>
         }
         else { <p class="hint">Select a combatant in the tracker or double-click their token.</p> }
     </div>
-    <section class="action-summary" aria-label="Action summary" aria-live="polite">
-        <h2>Action Summary</h2>
+    <section class="action-summary" aria-label="Combatant summary" aria-live="polite">
+        <h2>Combatant Summary</h2>
         @if (CombatActionSummary.Create(Encounter, Actor, Entries, Loadout) is { } summary)
         {
             <dl>
                 @foreach (var row in summary.Rows) { <dt>@row.Label</dt><dd>@row.Value</dd> }
             </dl>
         }
-        else { <p class="hint">Choose an action to see its summary.</p> }
+        else { <p class="hint">Select a combatant to see their summary.</p> }
     </section>
 </aside>
 
@@ -100,7 +108,6 @@
     [Parameter] public EventCallback<bool> CoverChanged { get; set; }
     [Parameter] public EventCallback<bool> HidingChanged { get; set; }
     [Parameter] public EventCallback<bool> ElevatedChanged { get; set; }
-    [Parameter] public EventCallback<bool> TagHitConfirmedChanged { get; set; }
     [Parameter] public EventCallback ResetRequested { get; set; }
     [Parameter] public EventCallback ResolveRequested { get; set; }
     [Parameter] public EventCallback<(int Column, string Action)> ActionSelected { get; set; }
