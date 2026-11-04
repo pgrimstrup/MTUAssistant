@@ -2,6 +2,7 @@
 @implements IAsyncDisposable
 @using MTUAssistant.Components.Map
 @inject MTUAssistant.Services.BattlemapState BattlemapState
+@inject CampaignService Campaigns
 @inject SceneService ScenesStore
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
@@ -12,23 +13,29 @@
     <section class="battlemap-page">
         <header><div><h1>@scene.Name</h1><span class="muted">@scene.GridSize px per square · 1.5 m × 1.5 m</span></div>
             <div class="controls">
+                @if (!encounter.Active)
+                {
                 <label>Grid Size (px)<input class="form-control grid-number" type="number" min="1" step="1" @bind="gridSize" @bind:after="SaveGrid" disabled="@(map is null || busy)" /></label>
                 <label>Grid colour<input class="form-control form-control-color" type="color" @bind="gridColour" @bind:after="SaveGrid" disabled="@(map is null || busy)" /></label>
                 <label>Width (px)<input class="form-control grid-number" type="number" min="0.25" max="@scene.GridSize" step="0.25" @bind="gridWidth" @bind:after="SaveGrid" disabled="@(map is null || busy)" /></label>
                 <label>Opacity (%)<input class="form-control grid-number" type="number" min="0" max="100" @bind="gridOpacity" @bind:after="SaveGrid" disabled="@(map is null || busy)" /></label>
+                }
                 <button class="btn btn-outline-secondary" aria-label="Zoom in" title="Zoom in" @onclick='() => Command("zoomIn")' disabled="@(map is null)">+</button>
                 <button class="btn btn-outline-secondary" aria-label="Zoom out" title="Zoom out" @onclick='() => Command("zoomOut")' disabled="@(map is null)">−</button>
                 <button class="btn btn-outline-secondary" @onclick='() => Command("fit")' disabled="@(map is null)">Fit</button>
                 <a @ref="presentationLink" class="btn btn-outline-secondary present-link" target="_blank" rel="noopener" aria-label="Present battlemap" title="Present battlemap">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h18a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7v-2h7V5H3v3H1V5a2 2 0 0 1 2-2ZM1 18a3 3 0 0 1 3 3H1v-3Zm0-4a7 7 0 0 1 7 7H6a5 5 0 0 0-5-5v-2Zm0-4a11 11 0 0 1 11 11h-2a9 9 0 0 0-9-9v-2Z" /></svg>
                 </a>
+                <button class="btn btn-outline-primary" disabled="@(map is null || busy || encounter.Active)" @onclick="OpenPreEngagement">Begin Encounter</button>
+                @if (encounter.Active) { <button class="btn btn-outline-secondary" disabled="@busy" @onclick="ExitEncounter">Exit Encounter</button> }
+                @if (encounter.Active) { <button class="btn btn-outline-primary" disabled="@busy" @onclick="NextTurn">Next turn</button> }
                 <button class="btn btn-outline-danger" @onclick="Close">Close</button>
             </div>
         </header>
         @if (error is not null) { <p class="error" role="alert">@error</p> }
         <div class="battlemap-workspace">
-            <CombatTracker CampaignId="scene.CampaignId" Entries="entries" Npcs="npcs" Disabled="@(map is null || busy)" PlacingId="placingId"
-                           AddNpc="AddNpc" Place="BeginPlacement" Unplace="Unplace" Remove="RemoveInstance" VisibilityChanged="SetVisibility" NameChanged="RenameInstance" />
+            <CombatTracker CampaignId="scene.CampaignId" Entries="entries" Npcs="npcs" Encounter="encounter" Disabled="@(map is null || busy)" PlacingId="placingId"
+                           AddNpc="AddNpc" AddTravellers="AddTravellers" Place="BeginPlacement" Unplace="Unplace" Remove="RemoveInstance" VisibilityChanged="SetVisibility" NameChanged="RenameInstance" HitPointsChanged="SetHitPoints" SelectedChanged="SelectCombatant" />
             <div class="map-column">
                 <div class="map-instructions" role="status">
                     @if (placingId is not null) { <span>Click a square to place @entries.FirstOrDefault(e => e.Id == placingId)?.Name.</span><button class="btn btn-sm btn-outline-secondary" @onclick="CancelPlacement">Cancel</button> }
@@ -37,11 +44,65 @@
                 <div class="battlemap-host" @ref="host" aria-label="Battlemap image with square grid"></div>
             </div>
         </div>
+        @if (preEngagement)
+        {
+            <div class="encounter-backdrop">
+                <section class="encounter-dialog" role="dialog" aria-modal="true" aria-labelledby="engagement-title">
+                    <h2 id="engagement-title">Pre-engagement</h2>
+                    <label><input type="checkbox" @bind="enemyAware" /> Enemy aware of the Travellers</label>
+                    <label><input type="checkbox" @bind="travellersAware" /> Travellers aware of the Enemy</label>
+                    <label>Traveller Tactics (Military) Effect<input class="form-control" type="number" @bind="travellerTactics" disabled="@(!travellersAware)" /></label>
+                    <p>Enter each Traveller's Initiative (DEX/INT) roll Effect, excluding Tactics and ambush modifiers.</p>
+                    <button type="button" class="btn btn-outline-primary" @onclick="AutoRollTravellers">Auto-Roll Initiative &amp; Tactics</button>
+                    @foreach (var traveller in entries.Where(e => !e.IsNpc))
+                    {
+                        <label>@traveller.Name<input class="form-control" type="number" @bind="travellerRolls[traveller.Id]" /></label>
+                    }
+                    <button class="btn btn-primary" disabled="@busy" @onclick="BeginEncounter">Begin Encounter</button>
+                    <button class="btn btn-outline-secondary" @onclick="() => preEngagement = false">Cancel</button>
+                </section>
+            </div>
+        }
     </section>
 }
 else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
 
 @code {
+    [SupplyParameterFromQuery(Name = "campaign")] public int? ResumeCampaignId { get; set; }
+    [SupplyParameterFromQuery(Name = "scene")] public int? ResumeSceneId { get; set; }
+    private readonly Encounter encounter = new();
+    private bool preEngagement, enemyAware = true, travellersAware = true;
+    private int travellerTactics;
+    private readonly Dictionary<int, int> travellerRolls = [];
+    private void OpenPreEngagement() { foreach (var e in entries.Where(e => !e.IsNpc)) travellerRolls[e.Id] = 0; travellerTactics = 0; preEngagement = true; }
+    private void AutoRollTravellers()
+    {
+        var result = Encounter.RollTravellers(entries, travellersAware);
+        foreach (var roll in result.Initiative) travellerRolls[roll.Key] = roll.Value;
+        travellerTactics = result.Tactics;
+    }
+    private Task ChangeEncounter(Action change) => Run(async scene =>
+    {
+        var previous = encounter.Snapshot();
+        try
+        {
+            change();
+            await ScenesStore.SaveEncounterAsync(scene.CampaignId, scene.Id, encounter.Snapshot());
+        }
+        catch { encounter.Restore(previous, entries); throw; }
+        if (map is not null) await SyncEncounterMap();
+    });
+    private async Task BeginEncounter()
+    {
+        await CancelPlacement();
+        await ChangeEncounter(() => encounter.Begin(entries, enemyAware, travellersAware, travellerTactics, travellerRolls));
+        if (encounter.Active) preEngagement = false;
+    }
+    private Task ExitEncounter() => ChangeEncounter(encounter.Exit);
+    private Task NextTurn() => ChangeEncounter(() => encounter.Next(entries));
+    private Task SelectCombatant(int id) => encounter.Active && entries.Any(e => e.Id == id && encounter.IsDead(e)) ? Task.CompletedTask : ChangeEncounter(() => encounter.SelectedId = id);
+    private Task SetHitPoints((int Id, int Hp) change) => ChangeEncounter(() => encounter.SetHp(change.Id, change.Hp, entries));
+    private Task SyncEncounterMap() => map is null ? Task.CompletedTask : map.InvokeVoidAsync("setEncounterState", encounter.Active, encounter.SelectedId, entries.Where(encounter.IsDead).Select(e => e.Id).ToArray(), encounter.Round, encounter.PlayerTracker(entries), entries.Where(e => e.IsNpc).Select(e => new { e.Id, HealthWidth = encounter.HealthWidth(e), HealthColour = encounter.HealthColour(e) }).ToArray()).AsTask();
     private ElementReference host, presentationLink;
     private IJSObjectReference? module, map;
     private string? loadedKey, error;
@@ -59,18 +120,36 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
     protected override async Task OnInitializedAsync()
     {
         BattlemapState.Changed += Changed;
-        if (BattlemapState.Current is not { } scene) { Navigation.NavigateTo("scenes"); return; }
         try
         {
+            var scene = BattlemapState.Current;
+            if (scene is null && ResumeCampaignId is int campaignId && ResumeSceneId is int sceneId)
+            {
+                var active = (await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive);
+                if (active?.Id == campaignId)
+                {
+                    scene = await ScenesStore.FindAsync(campaignId, sceneId);
+                    if (scene is not null) BattlemapState.Open(scene);
+                }
+            }
+            if (scene is null) { Navigation.NavigateTo("scenes"); return; }
             var current = await ScenesStore.FindAsync(scene.CampaignId, scene.Id);
             if (disposed) return;
             if (current is null) { await Close(); return; }
-            await ScenesStore.SynchronizeTravellersAsync(current.CampaignId, current.Id);
+            await ScenesStore.PruneInactiveTravellersAsync(current.CampaignId, current.Id);
             entries = (await ScenesStore.CombatantsAsync(current.CampaignId, current.Id)).ToList();
+            var savedEncounter = await ScenesStore.LoadEncounterAsync(current.CampaignId, current.Id);
+            if (savedEncounter is not null) encounter.Restore(savedEncounter, entries);
             npcs = await ScenesStore.NpcChoicesAsync(current.CampaignId);
             if (disposed) return;
             tokenScene = current; SetGridFields(current);
             BattlemapState.Update(current); ready = true;
+            if (ResumeCampaignId != current.CampaignId || ResumeSceneId != current.Id)
+                Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+                {
+                    ["campaign"] = current.CampaignId,
+                    ["scene"] = current.Id,
+                }), replace: true);
         }
         catch (Exception) { error = "Unable to load this scene. Return to Scenes and try again."; }
     }
@@ -93,6 +172,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
             callback ??= DotNetObjectReference.Create(this);
             map = await module.InvokeAsync<IJSObjectReference>("createBattlemap", host,
                 $"api/scenes/{scene.CampaignId}/{scene.Id}/image?v={scene.Revision}", scene, key, entries.Where(e => e.OnMap), callback, new { readOnly = false }, presentationLink);
+            await SyncEncounterMap();
             loadedKey = key;
             if (disposed) { await map.InvokeVoidAsync("dispose"); await map.DisposeAsync(); map = null; }
             else { error = null; StateHasChanged(); }
@@ -101,6 +181,13 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         catch (Exception) { loadedKey = key; error = "Unable to display the Battlemap. Return to Scenes and reopen it."; if (!disposed) StateHasChanged(); }
         finally { initializing = false; }
     }
+    [JSInvokable]
+    public Task SelectMapToken(int id) => InvokeAsync(async () =>
+    {
+        if (disposed || !entries.Any(e => e.Id == id && e.OnMap)) return;
+        await SelectCombatant(id);
+        if (!disposed) StateHasChanged();
+    });
     private async Task Command(string action) { if (map is not null) await map.InvokeVoidAsync(action); }
     private async Task BeginPlacement(int id) { if (map is null) return; placingId = id; error = null; await map.InvokeVoidAsync("beginPlacement", id); }
     private async Task CancelPlacement() { placingId = null; if (map is not null) await map.InvokeVoidAsync("cancelPlacement"); }
@@ -112,12 +199,41 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         catch (Exception ex) { error = ex is ArgumentException ? ex.Message : "Unable to save this change. Please try again."; }
         finally { busy = false; }
     }
-    private Task AddNpc(int characterId) => Run(async scene => { var entry = await ScenesStore.AddNpcInstanceAsync(scene.CampaignId, scene.Id, characterId); entries.Add(entry); });
+    private Task AddTravellers() => Run(async scene =>
+    {
+        if (encounter.Active) throw new ArgumentException("Exit the encounter before adding Travellers.");
+        await CancelPlacement();
+        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        await ScenesStore.MoveTravellersHereAsync(scene.CampaignId, scene.Id);
+        var previousTravellers = entries.Where(e => !e.IsNpc).Select(e => e.Id).ToArray();
+        entries = (await ScenesStore.CombatantsAsync(scene.CampaignId, scene.Id)).ToList();
+        var saved = await ScenesStore.LoadEncounterAsync(scene.CampaignId, scene.Id);
+        if (saved is not null) encounter.Restore(saved, entries);
+        if (map is not null)
+        {
+            foreach (var id in previousTravellers.Where(id => !entries.Any(e => e.Id == id))) await map.InvokeVoidAsync("removeToken", id);
+            foreach (var entry in entries.Where(e => !e.IsNpc)) await map.InvokeVoidAsync("updateCombatant", entry);
+        }
+        await SyncEncounterMap();
+    });
+    private Task AddNpc(int characterId) => Run(async scene =>
+    {
+        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        var entry = await ScenesStore.AddCharacterAsync(scene.CampaignId, scene.Id, characterId);
+        if (entry.IsNpc) entries.Add(entry);
+        else
+        {
+            var saved = await ScenesStore.LoadEncounterAsync(scene.CampaignId, scene.Id);
+            entries = (await ScenesStore.CombatantsAsync(scene.CampaignId, scene.Id)).ToList();
+            if (saved is not null) encounter.Restore(saved, entries);
+        }
+        await SyncEncounterMap();
+    });
     private async Task UpdateEntry(SceneCombatant entry)
     {
         var index = entries.FindIndex(e => e.Id == entry.Id);
         if (index >= 0) entries[index] = entry;
-        if (map is not null) await map.InvokeVoidAsync("updateCombatant", entry);
+        if (map is not null) { await map.InvokeVoidAsync("updateCombatant", entry); await SyncEncounterMap(); }
     }
     private Task SetVisibility((int Id, bool Visible) change) => Run(async scene =>
     {
@@ -141,7 +257,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
         await ScenesStore.RemoveNpcInstanceAsync(scene.CampaignId, scene.Id, id);
         entries.RemoveAll(e => e.Id == id);
-        if (map is not null) await map.InvokeVoidAsync("removeToken", id);
+        if (map is not null) { await map.InvokeVoidAsync("removeToken", id); await SyncEncounterMap(); }
     });
     [JSInvokable]
     public async Task<SceneCombatant?> PlaceToken(int id, int column, int row)

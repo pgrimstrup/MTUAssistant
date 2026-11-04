@@ -1,13 +1,17 @@
+import { switchCastView } from './CastWindow.js';
 import { createBattlemap, restoreView } from './Battlemap.js';
 import { connectBattlemapPresentation } from './BattlemapPresentationSync.js';
+import { renderPlayerTracker } from './PlayerCombatTracker.js';
 
-export function createPresentation(host,status,session) {
-    return new PresentedBattlemap(host,status,session);
+export function createPresentation(host,status,session,tracker) {
+    return new PresentedBattlemap(host,status,session,tracker);
 }
 class PresentedBattlemap {
-    constructor(host,status,session) {
-        Object.assign(this,{host,status,disposed:false,busy:false,pending:undefined,map:null,key:null});
-        this.connection = connectBattlemapPresentation({session,readOnly:true,onState:state => {
+    constructor(host,status,session,tracker) {
+        Object.assign(this,{host,status,tracker,disposed:false,busy:false,pending:undefined,map:null,key:null});
+        this.session = session;
+        this.connection = connectBattlemapPresentation({session,readOnly:true,onPointer:point => { this.pointer = point; this.map?.setPresentedPointer(point); },onState:state => {
+            renderPlayerTracker(this.tracker,state);
             this.pending=state; void this.pump();
         }});
     }
@@ -19,7 +23,9 @@ class PresentedBattlemap {
                 const state=this.pending; this.pending=undefined;
                 if (state === null) {
                     await this.map?.dispose(); this.map=null; this.key=null; this.host.replaceChildren();
-                    this.status.textContent='Waiting for a Battlemap…'; continue;
+                    this.status.textContent='Returning to Galaxy Map…';
+                    if (!this.switching) { this.switching = true; switchCastView(this.session,false); }
+                    continue;
                 }
                 const key=`${state.scene.campaignId}.${state.scene.id}.${state.scene.revision}`;
                 if (key !== this.key) {
@@ -35,7 +41,9 @@ class PresentedBattlemap {
                     await Promise.all(state.tokens.map(token => this.map.updateCombatant(token)));
                     this.map.setGrid(state.scene);
                 }
+                this.map.setEncounterState(state.combatMode === true,state.tokens.find(t => t.isCurrent === true)?.id ?? null,state.tokens.filter(t => t.isDead === true).map(t => t.id));
                 this.map.view=restoreView(state.view,this.map.width,this.map.height,this.map.imageWidth,this.map.imageHeight) ?? this.map.view;
+                this.map.setPresentedPointer(this.pointer ?? null);
                 this.map.apply(); this.status.textContent=state.scene.name;
             }
         } catch {
@@ -44,6 +52,7 @@ class PresentedBattlemap {
     }
     async dispose() {
         this.disposed=true; this.connection.close();
+        renderPlayerTracker(this.tracker,null);
         await this.map?.dispose(); this.map=null;
     }
 }

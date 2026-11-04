@@ -1,5 +1,6 @@
+import { attachCastWindow } from './CastWindow.js';
 import { presentationSession } from './PresentationSync.js';
-import { connectBattlemapPresentation, playerTokens } from './BattlemapPresentationSync.js';
+import { connectBattlemapPresentation, playerTokens, playerCombatants } from './BattlemapPresentationSync.js';
 export function fitView(width, height, imageWidth, imageHeight) {
     const scale = Math.min(width / imageWidth, height / imageHeight);
     return { x: (width - imageWidth * scale) / 2, y: (height - imageHeight * scale) / 2, scale };
@@ -78,6 +79,13 @@ export class Battlemap {
         this.app.canvas.draggable = false;
         this.app.canvas.setAttribute('aria-label', this.scene.name + ' battlemap');
         this.host.replaceChildren(this.app.canvas);
+        if (this.readOnly) {
+            this.presentationPointer = document.createElement('div');
+            this.presentationPointer.className = 'presentation-pointer';
+            this.presentationPointer.setAttribute('aria-hidden','true');
+            this.presentationPointer.hidden = true;
+            this.host.appendChild(this.presentationPointer);
+        }
         this.world = new PIXI.Container();
         this.background = new PIXI.Container();
         this.tokens = new PIXI.Container();
@@ -101,9 +109,18 @@ export class Battlemap {
         this.view = restoreView(saved, this.width, this.height, this.imageWidth, this.imageHeight)
             ?? fitView(this.width, this.height, this.imageWidth, this.imageHeight);
         this.apply();
+        this.pulseTime = 0;
+        this.animateTurn = ticker => {
+            this.pulseTime += ticker.deltaMS;
+            this.advancePan(ticker.deltaMS);
+            const token = this.characterTokens.get(this.selectedId);
+            if (token && this.combatMode && !token.isDead) this.drawTurnRing(token);
+        };
+        this.app.ticker.add(this.animateTurn);
         this.down = event => {
             if (this.readOnly || event.button !== 0 || this.dragging) return;
             event.preventDefault();
+            this.cancelPan();
             const point = this.pointerWorld(event);
             if (this.placement) {
                 if (point.x < 0 || point.y < 0 || point.x >= this.imageWidth || point.y >= this.imageHeight) return;
@@ -126,6 +143,8 @@ export class Battlemap {
         };
         this.move = event => {
             if (this.readOnly) return;
+            this.pointerPosition = {clientX:event.clientX,clientY:event.clientY};
+            this.publishPresentationPointer();
             const point = this.pointerWorld(event);
             if (!this.dragging) {
                 const token = this.hitToken(point);
@@ -168,9 +187,18 @@ export class Battlemap {
             event.preventDefault(); if (this.readOnly) return; const bounds = this.host.getBoundingClientRect();
             this.zoom(Math.exp(-event.deltaY * .0015), { x:event.clientX-bounds.left, y:event.clientY-bounds.top });
         };
+        this.pointerLeave = () => { this.pointerPosition = null; this.publishPresentationPointer(); };
+        this.visibilityChange = () => { if (document.hidden) this.pointerLeave(); };
+        this.host.addEventListener('pointerleave',this.pointerLeave);
+        this.host.addEventListener('pointercancel',this.pointerLeave);
+        globalThis.addEventListener('blur',this.pointerLeave);
+        globalThis.addEventListener('pagehide',this.pointerLeave);
+        document.addEventListener('visibilitychange',this.visibilityChange);
         this.preventDrag = event => event.preventDefault();
         this.host.addEventListener('dragstart',this.preventDrag);
         this.host.addEventListener('selectstart',this.preventDrag);
+        this.doubleClick = event => { void this.selectTokenAt(event); };
+        this.host.addEventListener('dblclick', this.doubleClick);
         this.host.addEventListener('pointerdown', this.down);
         this.host.addEventListener('pointermove', this.move);
         this.host.addEventListener('pointerup', this.up);
@@ -180,6 +208,7 @@ export class Battlemap {
         this.resizeObserver = new ResizeObserver(() => {
             const width = this.host.clientWidth, height = this.host.clientHeight;
             if (!width || !height || this.disposed) return;
+            this.cancelPan();
             this.view.x += (width - this.width) / 2; this.view.y += (height - this.height) / 2;
             this.width = width; this.height = height; this.app.renderer.resize(width,height); this.apply();
         });
@@ -189,6 +218,16 @@ export class Battlemap {
         const rect = this.host.getBoundingClientRect();
         return { x:(event.clientX-rect.left-this.host.clientLeft-this.view.x)/this.view.scale,
             y:(event.clientY-rect.top-this.host.clientTop-this.view.y)/this.view.scale };
+    }
+    async selectTokenAt(event) {
+        if (this.readOnly || this.disposed || this.placement || !this.callback || event.button !== 0) return;
+        const token = this.hitToken(this.pointerWorld(event));
+        if (!token) return;
+        event.preventDefault();
+        try {
+            await this.flushTokenMoves();
+            if (!this.disposed) await this.callback.invokeMethodAsync('SelectMapToken',token.id);
+        } catch (error) { if (!this.disposed) console.warn('Unable to select the battlemap token.',error); }
     }
     hitToken(point) {
         return [...this.characterTokens.values()].reverse().find(token =>
@@ -229,12 +268,20 @@ export class Battlemap {
         const size = this.scene.gridSize;
         const container = new PIXI.Container();
         const token = {...data, container};
+        token.halo = new PIXI.Graphics(); container.addChild(token.halo);
+        token.turnRing = new PIXI.Graphics(); container.addChild(token.turnRing);
+        token.label = new PIXI.Container();
+        token.labelBackground = new PIXI.Graphics();
+        token.labelText = new PIXI.Text({text:data.name,style:{fontFamily:'Arial',fontSize:14,fill:data.isNpc ? 0xffb3b3 : 0xb3ffb3}});
+        token.label.addChild(token.labelBackground,token.labelText);
+        container.addChild(token.label);
+        token.healthBar = new PIXI.Graphics(); container.addChild(token.healthBar);
         this.characterTokens.set(data.id, token);
         this.tokens.addChild(container);
         this.positionToken(token, data.column, data.row);
         this.refreshFallback(token);
         const fallback = token.fallback;
-        container.addChild(fallback);
+        container.addChildAt(fallback,1);
         this.tokenAppearance(token); this.publishPresentation();
         if (!data.hasTokenImage) return;
         const image = new Image();
@@ -251,12 +298,13 @@ export class Battlemap {
             const scale = displaySize/Math.max(image.naturalWidth,image.naturalHeight);
             sprite.width = image.naturalWidth*scale; sprite.height = image.naturalHeight*scale;
             sprite.position.set((displaySize-sprite.width)/2,(displaySize-sprite.height)/2);
-            fallback.visible = false; container.addChild(sprite);
+            fallback.visible = false; container.addChildAt(sprite,2); this.tokenAppearance(token);
         } catch { /* Keep the initials marker if the character image cannot be decoded. */ }
     }
     removeToken(id, publish = true) {
         const token = this.characterTokens.get(id);
         if (!token) return;
+        if (id === this.selectedId) this.cancelPan();
         if (this.dragging?.token === token) {
             const pointerId = this.dragging.id; this.dragging = null;
             if (this.host.hasPointerCapture(pointerId)) this.host.releasePointerCapture(pointerId);
@@ -265,12 +313,104 @@ export class Battlemap {
         this.characterTokens.delete(id);
         if (publish) this.publishPresentation();
     }
+    setCombatMode(active) {
+        this.setEncounterState(active,this.selectedId,[...(this.deadIds ?? [])],this.combatRound,this.playerTracker ?? [],[...(this.tokenHealth?.values() ?? [])]);
+    }
+    setEncounterState(active,selectedId,deadIds = [],round = 0,tracker = [],health = tracker) {
+        const turnChanged = active === true && (!this.combatMode || selectedId !== this.selectedId || round !== this.combatRound);
+        this.combatRound = round;
+        this.playerTracker = playerCombatants(tracker);
+        this.tokenHealth = new Map(health.map(e => [e.id,e]));
+        this.combatMode = active === true;
+        this.selectedId = selectedId;
+        this.deadIds = new Set(deadIds);
+        for (const token of this.characterTokens.values()) this.tokenAppearance(token);
+        if (!this.combatMode || turnChanged) this.cancelPan();
+        if (turnChanged && !this.readOnly) this.panToToken(selectedId);
+        this.publishPresentation();
+    }
+    panToToken(id) {
+        const token = this.characterTokens.get(id);
+        if (this.disposed || !this.view || !token || token.isDead ||
+            ![token.column,token.row,this.width,this.height].every(Number.isFinite)) return;
+        const size = this.scene.gridSize, scale = this.view.scale;
+        const x = this.width/2-(token.column+.5)*size*scale;
+        const y = this.height/2-(token.row+.5)*size*scale;
+        this.panAnimation = {fromX:this.view.x,fromY:this.view.y,x,y,scale,elapsed:0,duration:550};
+    }
+    advancePan(deltaMs) {
+        const pan = this.panAnimation;
+        if (!pan || this.disposed) return;
+        pan.elapsed = Math.min(pan.duration,pan.elapsed+Math.max(0,deltaMs));
+        const progress = pan.elapsed/pan.duration;
+        const eased = progress*progress*(3-2*progress);
+        this.view = {x:pan.fromX+(pan.x-pan.fromX)*eased,y:pan.fromY+(pan.y-pan.fromY)*eased,scale:pan.scale};
+        if (progress === 1) this.panAnimation = null;
+        // Publish the animated camera frames so the cast view follows the same pan.
+        this.apply();
+    }
+    cancelPan() { this.panAnimation = null; }
+    drawTurnRing(token) {
+        if (!token.turnRing) return;
+        token.turnRing.clear();
+        if (!this.combatMode || token.id !== this.selectedId || token.isDead) return;
+        const size = this.scene.gridSize;
+        const wave = (Math.sin((this.pulseTime ?? 0)*Math.PI/700)+1)/2;
+        token.turnRing.circle(size/2,size/2,size*(.61+.07*wave))
+            .stroke({color:token.isNpc ? 0xff0000 : 0x00ff00,alpha:.5+.5*wave,width:Math.max(size*.035,2/this.view.scale)});
+    }
+    drawEnemyHealth(token) {
+        const bar = token.healthBar;
+        if (!bar) return;
+        bar.clear();
+        const health = this.tokenHealth?.get(token.id) ?? token;
+        if (token.isNpc && Number.isFinite(health.healthWidth)) {
+            token.healthWidth = health.healthWidth; token.healthColour = health.healthColour;
+        }
+        bar.visible = this.combatMode === true && token.isNpc === true && Number.isFinite(token.healthWidth);
+        if (!bar.visible) return;
+        const scale = this.view.scale, width = this.scene.gridSize*.8;
+        const x = this.scene.gridSize*.1, y = -10/scale, height = 5/scale;
+        bar.rect(x,y,width,height).fill({color:0x000000,alpha:.75});
+        const colour = {red:0xff0000,orange:0xffa500,green:0x008000}[token.healthColour] ?? 0xff0000;
+        bar.rect(x,y,width*Math.max(0,Math.min(100,token.healthWidth))/100,height).fill({color:colour});
+        bar.rect(x,y,width,height).stroke({color:0xffffff,alpha:.6,width:1/scale});
+    }
+    decorateToken(token) {
+        const size = this.scene.gridSize;
+        token.isDead = this.deadIds?.has(token.id) ?? false;
+        token.isCurrent = token.id === this.selectedId && !token.isDead;
+        this.drawTurnRing(token);
+        this.drawEnemyHealth(token);
+        token.halo.clear();
+        if (this.combatMode) token.halo.circle(size/2,size/2,size*.57).fill({color:token.isNpc ? 0xff0000 : 0x00ff00,alpha:.25});
+        token.labelText.text = token.name;
+        token.labelText.style.fill = token.isNpc ? 0xffb3b3 : 0xb3ffb3;
+        token.label.scale.set(1/this.view.scale);
+        const width = token.labelText.width + 10, height = token.labelText.height + 4;
+        token.label.position.set(size/2-width/(2*this.view.scale),size+4/this.view.scale);
+        token.labelText.position.set(5,2);
+        token.labelBackground.clear().rect(0,0,width,height).fill({color:0x000000,alpha:.5});
+    }
     tokenAppearance(token) {
+        this.decorateToken(token);
         token.container.alpha = token.isVisible === false ? .4 : 1;
-        if (token.isVisible === false) {
+        if (token.isDead || token.isVisible === false) {
             token.filter ??= new PIXI.ColorMatrixFilter();
-            token.filter.desaturate(); token.container.filters = [token.filter];
-        } else token.container.filters = [];
+            if (token.isDead) {
+                // Keep image detail and transparency while washing the portrait in red.
+                token.filter.matrix = [
+                    .5,.45,.15,0,.12,
+                    .08,.10,.02,0,0,
+                    .08,.10,.02,0,0,
+                    0,0,0,1,0
+                ];
+            } else token.filter.desaturate();
+        }
+        // Filter portraits only, keeping faction markers and labels legible.
+        token.container.filters = [];
+        for (const portrait of [token.fallback,token.imageSprite])
+            if (portrait) portrait.filters = token.isDead || token.isVisible === false ? [token.filter] : [];
     }
     refreshFallback(token) {
         const key = `${token.isNpc}:${tokenInitials(token.name)}`;
@@ -312,19 +452,44 @@ export class Battlemap {
     }
     attachPresentation(link) {
         const session = presentationSession();
-        link.href = new URL(`battlemap-presentation?session=${encodeURIComponent(session)}`, document.baseURI).href;
+        this.detachCastWindow = attachCastWindow(link,session,true);
         this.presentation = connectBattlemapPresentation({session, readOnly:false});
         this.publishPresentation();
     }
     publishPresentation() {
         if (!this.presentation || this.disposed || this.readOnly || this.presentationCleared) return;
-        this.presentation.publish({scene:this.scene, tokens:playerTokens([...this.characterTokens.values()]),
+        this.presentation.publish({combatMode:this.combatMode === true,round:this.combatRound ?? 0,tracker:this.playerTracker ?? [],scene:this.scene, tokens:playerTokens([...this.characterTokens.values()]),
             view:{...this.view, width:this.width,height:this.height,imageWidth:this.imageWidth,imageHeight:this.imageHeight}});
     }
-    closePresentation() { this.presentationCleared = true; this.presentation?.publish(null); }
+    publishPresentationPointer() {
+        if (this.disposed || this.presentationCleared || this.readOnly || !this.presentation?.publishPointer || !this.view) return;
+        let point = null;
+        if (this.pointerPosition) {
+            const bounds = this.host.getBoundingClientRect();
+            const x = this.pointerPosition.clientX-bounds.left-this.host.clientLeft;
+            const y = this.pointerPosition.clientY-bounds.top-this.host.clientTop;
+            if (x >= 0 && y >= 0 && x <= this.width && y <= this.height)
+                point = {x:(x-this.view.x)/this.view.scale,y:(y-this.view.y)/this.view.scale};
+        }
+        const key = JSON.stringify(point);
+        if (key === this.publishedPointerKey) return;
+        this.publishedPointerKey = key;
+        this.presentation.publishPointer(point);
+    }
+    setPresentedPointer(point) { this.presentedPointer = point; this.drawPresentationPointer(); }
+    drawPresentationPointer() {
+        const marker = this.presentationPointer, point = this.presentedPointer;
+        if (!marker) return;
+        if (!point || !this.view) { marker.hidden = true; return; }
+        const x = this.view.x+point.x*this.view.scale, y = this.view.y+point.y*this.view.scale;
+        marker.hidden = x < 0 || y < 0 || x > this.width || y > this.height;
+        marker.style.left = `${x}px`; marker.style.top = `${y}px`;
+    }
+    closePresentation() { this.pointerLeave?.(); this.presentationCleared = true; this.presentation?.publish(null); }
     draw() {
         const {x,y,scale} = this.view;
         this.world.position.set(x,y); this.world.scale.set(scale);
+        for (const token of this.characterTokens.values()) this.decorateToken(token);
         this.tokens?.position.set(x,y); this.tokens?.scale.set(scale);
         this.fog?.position.set(x,y); this.fog?.scale.set(scale);
         const left=Math.max(0,-x/scale), top=Math.max(0,-y/scale);
@@ -367,27 +532,41 @@ export class Battlemap {
         if (this.disposed || !this.view) return;
         if (this.world) this.draw();
         this.publishPresentation();
+        this.publishPresentationPointer();
+        this.drawPresentationPointer();
         if (this.readOnly) return;
         try { sessionStorage.setItem(this.key, JSON.stringify({ ...this.view, width:this.width, height:this.height,
             imageWidth:this.imageWidth, imageHeight:this.imageHeight })); } catch { }
     }
     zoom(factor, point = { x:this.width/2, y:this.height/2 }) {
+        this.cancelPan();
         const fit = Math.min(this.width/this.imageWidth, this.height/this.imageHeight);
         this.view = zoomView(this.view, factor, point, fit/8, Math.max(8, fit*8)); this.apply();
     }
     zoomIn() { this.zoom(2); }
     zoomOut() { this.zoom(.5); }
-    fit() { this.view = fitView(this.width, this.height, this.imageWidth, this.imageHeight); this.apply(); }
+    fit() { this.cancelPan(); this.view = fitView(this.width, this.height, this.imageWidth, this.imageHeight); this.apply(); }
     async dispose() {
         if (this.disposed) return;
+        this.cancelPan();
+        if (this.animateTurn) this.app?.ticker.remove(this.animateTurn);
         this.apply(); this.disposed = true; this.resizeObserver?.disconnect();
-        for (const [name, handler] of [['pointerdown',this.down],['pointermove',this.move],['pointerup',this.up],['pointercancel',this.up],['lostpointercapture',this.up],['wheel',this.wheel]])
+        for (const [name, handler] of [['dblclick',this.doubleClick],['pointerdown',this.down],['pointermove',this.move],['pointerup',this.up],['pointercancel',this.up],['lostpointercapture',this.up],['wheel',this.wheel]])
             if (handler) this.host.removeEventListener(name, handler);
         if(this.dragging && this.host.hasPointerCapture(this.dragging.id)) this.host.releasePointerCapture(this.dragging.id);
         this.dragging=null;
         for (const token of this.characterTokens.values()) { token.texture?.destroy(true); token.fallbackTexture?.destroy(true); token.filter?.destroy(); }
         this.characterTokens.clear();
         this.presentation?.close();
+        this.detachCastWindow?.();
+        this.presentationPointer?.remove();
+        if (this.pointerLeave) {
+            this.host.removeEventListener('pointerleave',this.pointerLeave);
+            this.host.removeEventListener('pointercancel',this.pointerLeave);
+            globalThis.removeEventListener('blur',this.pointerLeave);
+            globalThis.removeEventListener('pagehide',this.pointerLeave);
+        }
+        if (this.visibilityChange) document.removeEventListener('visibilitychange',this.visibilityChange);
         if(this.initialized) this.app.destroy(true,{children:true});
         for(const tile of this.tiles?.values() ?? []) tile.texture.destroy(true);
         this.tiles?.clear(); this.overviewTexture?.destroy(true); this.image=null;
@@ -399,4 +578,3 @@ export class Battlemap {
         await Promise.allSettled([...this.pendingSaves]);
     }
 }
-

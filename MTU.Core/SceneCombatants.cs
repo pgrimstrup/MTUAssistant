@@ -12,13 +12,21 @@ public sealed record SceneCombatant(
     bool HasTokenImage,
     bool IsVisible,
     int? Column,
-    int? Row
+    int? Row,
+    string Upp = "",
+    int? MilitaryTactics = null
 )
 {
     public bool OnMap => Column.HasValue && Row.HasValue;
 }
 
-public sealed record SceneNpcChoice(int CharacterId, string Name, string Race, string Occupation);
+public sealed record SceneNpcChoice(
+    int CharacterId,
+    string Name,
+    string Race,
+    string Occupation,
+    bool IsNpc = true
+);
 
 public sealed partial class SceneService
 {
@@ -28,7 +36,7 @@ public sealed partial class SceneService
         var db = scope.ServiceProvider.GetRequiredService<MtuDbContext>();
         return await db
             .Characters.AsNoTracking()
-            .Where(c => c.CampaignId == campaignId && c.IsNpc)
+            .Where(c => c.CampaignId == campaignId && (c.IsNpc || !c.Inactive))
             .OrderBy(c => c.Name)
             .ThenBy(c => c.Id)
             .Select(c => new SceneNpcChoice(
@@ -36,7 +44,8 @@ public sealed partial class SceneService
                 c.Name,
                 c.Race,
                 db.NPCs.Where(n => n.CharacterId == c.Id).Select(n => n.Occupation).FirstOrDefault()
-                    ?? ""
+                    ?? "",
+                c.IsNpc
             ))
             .ToArrayAsync();
     }
@@ -56,13 +65,19 @@ public sealed partial class SceneService
                 t.Character.TokenImage != null,
                 t.IsVisible,
                 t.Column,
-                t.Row
+                t.Row,
+                t.Character.Upp,
+                db.CharacterSkills.Where(s =>
+                        s.CharacterId == t.CharacterId && s.Name == "Tactics (Military)"
+                    )
+                    .Select(s => (int?)s.Level)
+                    .Max()
             ))
             .ToArrayAsync();
     }
 
-    // The roster exists before placement. Returning to a scene reconciles active players.
-    public async Task SynchronizeTravellersAsync(int campaignId, int sceneId)
+    // Opening a scene only removes invalid assignments; adding Travellers is explicit.
+    public async Task PruneInactiveTravellersAsync(int campaignId, int sceneId)
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<MtuDbContext>();
@@ -74,12 +89,6 @@ public sealed partial class SceneService
         db.SceneTokens.RemoveRange(
             existing.Where(t => t.Character.Inactive || t.Character.CampaignId != campaignId)
         );
-        var activeIds = await db
-            .Characters.Where(c => c.CampaignId == campaignId && !c.IsNpc && !c.Inactive)
-            .Select(c => c.Id)
-            .ToArrayAsync();
-        foreach (var id in activeIds.Except(existing.Select(t => t.CharacterId)))
-            db.SceneTokens.Add(new SceneTokenEntity { SceneId = sceneId, CharacterId = id });
         await db.SaveChangesAsync();
     }
 
@@ -123,7 +132,14 @@ public sealed partial class SceneService
             character.TokenImage != null,
             true,
             null,
-            null
+            null,
+            character.Upp,
+            await db
+                .CharacterSkills.Where(s =>
+                    s.CharacterId == characterId && s.Name == "Tactics (Military)"
+                )
+                .Select(s => (int?)s.Level)
+                .MaxAsync()
         );
     }
 
@@ -213,7 +229,14 @@ public sealed partial class SceneService
             token.Character.TokenImage != null,
             token.IsVisible,
             token.Column,
-            token.Row
+            token.Row,
+            token.Character.Upp,
+            await db
+                .CharacterSkills.Where(s =>
+                    s.CharacterId == token.CharacterId && s.Name == "Tactics (Military)"
+                )
+                .Select(s => (int?)s.Level)
+                .MaxAsync()
         );
     }
 

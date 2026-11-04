@@ -4,12 +4,15 @@
 @inject IJSRuntime JS
 
 <PageTitle>Battlemap Presentation</PageTitle>
-<div class="presented-battlemap" @ref="host" aria-label="Player Battlemap"></div>
+<div class="presentation-workspace">
+    <aside class="player-combat-tracker" @ref="tracker" aria-label="Combat Tracker" hidden></aside>
+    <div class="presented-battlemap" @ref="host" aria-label="Player Battlemap"></div>
+</div>
 <div class="presentation-status" @ref="status" role="status">@(error ?? (ValidSession ? "Waiting for a Battlemap…" : "Open this window using the Battlemap’s Present battlemap link."))</div>
 
 @code {
     [SupplyParameterFromQuery(Name = "session")] public string? Session { get; set; }
-    private ElementReference host, status;
+    private ElementReference host, status, tracker;
     private IJSObjectReference? module, presentation;
     private bool disposed;
     private string? error;
@@ -20,7 +23,7 @@
         try
         {
             module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/BattlemapPresentation.js");
-            presentation = await module.InvokeAsync<IJSObjectReference>("createPresentation", host, status, Session);
+            presentation = await module.InvokeAsync<IJSObjectReference>("createPresentation", host, status, Session, tracker);
             if (disposed) { await presentation.InvokeVoidAsync("dispose"); await presentation.DisposeAsync(); presentation = null; }
         }
         catch (JSDisconnectedException) { }

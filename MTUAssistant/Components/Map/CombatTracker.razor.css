@@ -22,3 +22,17 @@ li:hover { background:#ffffff08; } li.placing { outline:1px solid #70c9ff; backg
 .entry-actions { display:flex; flex-shrink:0; } .entry-actions button { display:flex; align-items:center; justify-content:center; width:22px; height:26px; padding:3px; background:none; border:0; color:var(--app-muted); border-radius:.2rem; font-size:1rem; }
 .entry-actions button:hover, .entry-actions button:focus-visible { background:#ffffff15; color:white; } .entry-actions .on-map { color:#8cbaff; }
 svg { width:14px; height:14px; fill:currentColor; } .empty { color:var(--app-muted); font-size:.8rem; padding:.5rem; }
+li { flex-wrap:wrap; } li.selected { background:#70c9ff22; outline:1px solid #70c9ff; }
+.health { order:10; flex:0 0 100%; display:flex; align-items:center; gap:.4rem; }
+.health-track { flex:1; height:6px; background:#0008; border-radius:3px; overflow:hidden; } .health-track div { height:100%; }
+.health label { margin:0; } .health input { width:3.5rem; background:#0003; border:1px solid var(--app-border); color:inherit; font-size:.7rem; }
+li.dead-combatant .portrait, li.dead-combatant .traveller-name, li.dead-combatant .instance-name,
+li.dead-combatant > span[title="Initiative"] { filter:grayscale(1); opacity:.4; }
+li.dead-combatant { background:#8888880a; }
+.portrait-frame { display:flex; align-items:center; justify-content:center; width:30px; height:30px; flex-shrink:0; border-radius:50%; }
+.portrait-frame.friend { background:rgba(0,255,0,.25); }
+.portrait-frame.foe { background:rgba(255,0,0,.25); }
+.npc-picker-heading { display:flex; align-items:center; justify-content:space-between; gap:.4rem; margin-bottom:.25rem; }
+.npc-picker-heading label { margin:0; }
+.add-travellers { font-size:.7rem; padding:.15rem .35rem; color:var(--app-text,#e4e9f2); background:#ffffff0a; border:1px solid var(--app-border); border-radius:.25rem; }
+.add-travellers:disabled { opacity:.45; }

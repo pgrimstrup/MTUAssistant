@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import { scrollCurrentRow } from '../../wwwroot/js/CombatTrackerScroll.js';
+const moves=[];
+let item={top:250,bottom:300};
+const panel={clientTop:2,clientHeight:200,getBoundingClientRect:()=>({top:50,bottom:254}),querySelector:s=>s==='[data-combatant-id="7"]'?{getBoundingClientRect:()=>item}:null,scrollBy:options=>moves.push(options)};
+scrollCurrentRow(panel,7);
+assert.deepEqual(moves.pop(),{top:48,behavior:'smooth'},'rows below view scroll just far enough');
+item={top:20,bottom:70}; scrollCurrentRow(panel,7);
+assert.deepEqual(moves.pop(),{top:-32,behavior:'smooth'},'rows above view scroll up');
+item={top:80,bottom:120};scrollCurrentRow(panel,7);assert.equal(moves.length,0,'already visible rows do not move');
+scrollCurrentRow(panel,99);scrollCurrentRow(panel,null);scrollCurrentRow(null,7);
+assert.equal(moves.length,0,'missing/hidden rows and empty selections do not scroll');
+console.log('Shared Admin/cast tracker scrolling, panel bounds and no-op cases passed.');
+const stickyPanel={...panel,querySelector:selector=>selector==='[data-tracker-heading]'?{getBoundingClientRect:()=>({bottom:100})}:panel.querySelector(selector)};
+item={top:80,bottom:120};scrollCurrentRow(stickyPanel,7);
+assert.deepEqual(moves.pop(),{top:-20,behavior:'smooth'},'rows remain below the sticky round heading');

@@ -32,7 +32,7 @@ export function validPointer(point) {
 
 export function connectPresentation({ session, readOnly, onState, onPointer,
     storage, createChannel = name => new BroadcastChannel(name) }) {
-    if (!validSession(session)) throw new Error("Open the presentation from the Home map's Present map link.");
+    if (!validSession(session)) throw new Error("Open the presentation from the Galaxy Map's Present map link.");
     const key = PREFIX + session;
     const channel = createChannel(key);
     let latest = null;

@@ -1,3 +1,4 @@
+import { attachCastWindow } from "../../js/CastWindow.js";
 import { observeClicks } from "../../js/WorldSelection.js";
 import { presentationSession, connectPresentation } from "../../js/PresentationSync.js";
 import { HEX_X, SECTOR_WIDTH, SECTOR_HEIGHT, MAP_PADDING, DETAIL_LEVELS,
@@ -237,7 +238,7 @@ export class DynamicMap {
         this.statusEl.textContent = this.sectors.length === 0 ? "No sector data — import world data to populate the map."
             : `${DETAIL_LEVELS[level].name} · ${zoom.toFixed(1)} px/pc · ${worlds.length.toLocaleString()} worlds`
                 + (level >= 1 && failed ? ` · ${failed} sectors unavailable; retrying` : level >= 1 && pending ? " · loading sector data…" : "");
-        if (this.readOnly && !this.presentationState) this.statusEl.textContent = "Waiting for the Home map…";
+        if (this.readOnly && !this.presentationState) this.statusEl.textContent = "Waiting for the Galaxy Map…";
     }
 
     ensureDetails(sectors) {
@@ -631,17 +632,8 @@ export class DynamicMap {
     startPresentation() {
         if (!this.readOnly) {
             this.session = presentationSession();
-            if (this.presentationLink) {
-                const url = new URL("presentation", document.baseURI);
-                url.searchParams.set("session", this.session);
-                this.presentationLink.href = url.href;
-                this.presentationLink.target = "mtu-presentation-" + this.session;
-                this.openPresentation = event => {
-                    const window = globalThis.open(url.href, this.presentationLink.target, "popup,width=1280,height=800");
-                    if (window) { window.opener = null; event.preventDefault(); }
-                };
-                this.presentationLink.addEventListener("click", this.openPresentation);
-            }
+            if (this.presentationLink)
+                this.detachCastWindow = attachCastWindow(this.presentationLink,this.session,false);
         }
         this.presentation = connectPresentation({ session: this.session, readOnly: this.readOnly,
             onState: state => this.applyPresentation(state),
@@ -745,7 +737,7 @@ export class DynamicMap {
         this.disposed = true;
         this.saveView();
         this.presentation?.close();
-        this.presentationLink?.removeEventListener("click", this.openPresentation);
+        this.detachCastWindow?.();
         this.abort.abort();
         this.removeClickObserver?.();
         if (this.app?.canvas) {

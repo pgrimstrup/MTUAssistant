@@ -34,3 +34,26 @@ const count=received.length; player.publish(state); assert.equal(received.length
 admin.publish(null); assert.equal(received.at(-1),null,'closing the scene clears the player view');
 player.close(); admin.close(); isolated.close();
 console.log('Battlemap public filtering, read-only sync, late join, visibility, close and session isolation checks passed.');
+
+const statusTokens=playerTokens([{...visible,isCurrent:true,isDead:true,currentHp:-2},{...hidden,isCurrent:true,isDead:true}]);
+assert.equal(statusTokens.length,1);
+assert.equal(statusTokens[0].isCurrent,true); assert.equal(statusTokens[0].isDead,true);
+assert.equal(statusTokens[0].currentHp,undefined,'casting shares only visual status, not HP totals');
+assert.equal(playerTokens([{...hidden,isCurrent:true}]).length,0,'hidden current turns are never disclosed');
+console.log('Casting shares turn/death indicators only for visible tokens.');
+
+const pointerAdmin=connectBattlemapPresentation({session,readOnly:false,storage,createChannel});
+let pointer;
+const pointerPlayer=connectBattlemapPresentation({session,readOnly:true,storage,createChannel,onPointer:p=>pointer=p});
+pointerAdmin.publishPointer({x:100,y:200});assert.deepEqual(pointer,{x:100,y:200});
+pointerPlayer.publishPointer({x:1,y:2});assert.deepEqual(pointer,{x:100,y:200},'players cannot publish the pointer');
+pointerAdmin.publishPointer({x:Infinity,y:0});assert.deepEqual(pointer,{x:100,y:200},'invalid pointer coordinates are ignored');
+let latePointer;
+const pointerLate=connectBattlemapPresentation({session,readOnly:true,storage,createChannel,onPointer:p=>latePointer=p});
+assert.deepEqual(latePointer,{x:100,y:200},'late casts receive the live pointer');
+pointerAdmin.publish(state);
+assert.equal(JSON.parse(storage.getItem('mtu.battlemap.presentation.'+session)).pointer,undefined,'pointer positions are never stored in map snapshots');
+pointerAdmin.publishPointer(null);assert.equal(pointer,null,'leaving the canvas hides the pointer');
+pointerAdmin.publishPointer({x:10,y:20});pointerAdmin.close();assert.equal(pointer,null,'disposing the Admin renderer clears the pointer');
+pointerPlayer.close();pointerLate.close();
+console.log('Battlemap live pointer, read-only protection, late join, storage and cleanup passed.');

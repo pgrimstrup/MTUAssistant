@@ -1,10 +1,14 @@
 @using MTU.Core
+@implements IAsyncDisposable
+@inject IJSRuntime JS
 
 <aside class="combat-tracker" aria-label="Combat Tracker">
-    <header><h2>Combat Tracker</h2><span class="count">@Entries.Count</span></header>
+    <header><h2>Combat Tracker@(Encounter.Active ? $" - Round {Encounter.Round}" : "")</h2><span class="count">@Entries.Count</span></header>
     <div class="npc-picker">
-        <label for="combat-npc-search">Add NPC</label>
-        <input id="combat-npc-search" class="form-control" placeholder="Search name, occupation or race…" autocomplete="off"
+        <div class="npc-picker-heading"><label for="combat-npc-search">Add NPC</label>
+            <button type="button" class="add-travellers" disabled="@(Disabled || Encounter.Active)" title="Add missing active Travellers here unplaced; preserve existing Travellers and their positions" @onclick="() => AddTravellers.InvokeAsync()">Add Travellers</button>
+        </div>
+        <input id="combat-npc-search" class="form-control" placeholder="Search NPC or Traveller…" autocomplete="off"
                role="combobox" aria-autocomplete="list" aria-controls="combat-npc-results" aria-expanded="@searchOpen.ToString().ToLowerInvariant()"
                @bind="search" @bind:event="oninput" @onfocus="() => searchOpen = true" @onkeydown="SearchKey" />
         @if (searchOpen)
@@ -12,8 +16,8 @@
             <div class="npc-results" id="combat-npc-results" role="listbox" aria-label="Matching NPCs">
                 @foreach (var npc in Matches.Take(25))
                 {
-                    <button type="button" role="option" aria-selected="false" disabled="@Disabled" @onclick="() => AddNpc.InvokeAsync(npc.CharacterId)">
-                        <span>@npc.Name</span><small>@string.Join(" · ", new[] { npc.Occupation, npc.Race }.Where(s => !string.IsNullOrWhiteSpace(s)))</small><span class="add-mark" aria-hidden="true">+</span>
+                    <button type="button" role="option" aria-selected="false" disabled="@(Disabled || Encounter.Active)" @onclick="() => AddNpc.InvokeAsync(npc.CharacterId)">
+                        <span>@npc.Name</span><small>@string.Join(" · ", new[] { npc.IsNpc ? npc.Occupation : "Traveller", npc.Race }.Where(s => !string.IsNullOrWhiteSpace(s)))</small><span class="add-mark" aria-hidden="true">+</span>
                     </button>
                 }
                 @if (!Matches.Any()) { <p>No matching NPCs.</p> }
@@ -22,30 +26,37 @@
             </div>
         }
     </div>
-    <div class="tracker-entries">
-        @foreach (var group in Entries.GroupBy(e => e.IsNpc).OrderBy(g => g.Key))
+    <div class="tracker-entries" @ref="trackerEntries">
+        @foreach (var group in (Encounter.Active ? new[] { Encounter.Order(Entries) } : Entries.GroupBy(e => e.IsNpc).OrderBy(g => g.Key).Select(g => g.AsEnumerable())))
         {
-            <h3>@(group.Key ? "NPCs" : "Travellers")</h3>
+            <h3>@(Encounter.Active ? "Initiative order" : group.First().IsNpc ? "NPCs" : "Travellers")</h3>
             <ol>
                 @foreach (var entry in group)
                 {
-                    <li @key="entry.Id" class="@(!entry.IsVisible ? "hidden-combatant" : null) @(PlacingId == entry.Id ? "placing" : null)">
-                        <input @key="(entry.Id, editVersions.GetValueOrDefault(entry.Id))" class="visibility" type="checkbox" checked="@entry.IsVisible" aria-label="@($"Show {entry.Name} to players")" title="Visible to players" disabled="@Disabled"
+                    <li data-combatant-id="@entry.Id" @key="entry.Id" @onclick="() => Select(entry.Id)" class="@(Encounter.IsDead(entry) ? "dead-combatant" : null) @(Encounter.SelectedId == entry.Id ? "selected" : null) @(!entry.IsVisible ? "hidden-combatant" : null) @(PlacingId == entry.Id ? "placing" : null)">
+                        <input @key="(entry.Id, editVersions.GetValueOrDefault(entry.Id))" class="visibility" type="checkbox" @onclick:stopPropagation="true" checked="@entry.IsVisible" aria-label="@($"Show {entry.Name} to players")" title="Visible to players" disabled="@Disabled"
                                @onchange="e => ChangeVisibility(entry.Id, e)" />
+                        <span class="portrait-frame @(Encounter.Active ? (entry.IsNpc ? "foe" : "friend") : null)" aria-hidden="true">
                         @if (entry.HasTokenImage) { <img class="portrait" src="@($"api/characters/{CampaignId}/{entry.CharacterId}/token")" alt="" /> }
                         else { <span class="portrait initials" aria-hidden="true">@Initials(entry.Name)</span> }
+                        </span>
                         @if (entry.IsNpc)
                         {
                             <input @key="(entry.Id, editVersions.GetValueOrDefault(entry.Id), entry.Name)" class="instance-name" aria-label="@($"Name for {entry.Name}")" title="Edit instance name" maxlength="160" value="@entry.Name" disabled="@Disabled"
                                    @onchange="e => ChangeName(entry.Id, e)" />
                         }
                         else { <span class="traveller-name" title="@entry.Name">@entry.Name</span> }
+                        @if (Encounter.Active) { <span title="Initiative">@Encounter.Initiative.GetValueOrDefault(entry.Id)</span> }
+                        <div class="health" title="@($"HP {Encounter.Hp(entry)} / {Encounter.MaximumHp(entry)} · STR {Encounter.Health(entry).Strength} DEX {Encounter.Health(entry).Dexterity} END {Encounter.Health(entry).Endurance}")">
+                            <div class="health-track"><div style="@($"width:{Encounter.HealthWidth(entry).ToString(System.Globalization.CultureInfo.InvariantCulture)}%;background:{Encounter.HealthColour(entry)}")"></div></div>
+                            <label>HP <input type="number" min="0" max="@Encounter.MaximumHp(entry)" @key="(entry.Id, editVersions.GetValueOrDefault(entry.Id), 1)" disabled="@Disabled" @onclick:stopPropagation="true" value="@Encounter.Hp(entry)" aria-label="@($"Current HP for {entry.Name}")" @onchange="e => SetHp(entry.Id, e)" /></label>
+                        </div>
                         <div class="entry-actions">
                             <button type="button" class="@(entry.OnMap ? "on-map" : null)" aria-label="@($"Place {entry.Name} on map")" title="@(entry.OnMap ? "Reposition token" : "Place token")" disabled="@Disabled" @onclick="() => Place.InvokeAsync(entry.Id)">
                                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 10a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z" /></svg>
                             </button>
                             @if (entry.OnMap) { <button type="button" aria-label="@($"Unplace {entry.Name}")" title="Remove token from map" disabled="@Disabled" @onclick="() => Unplace.InvokeAsync(entry.Id)">−</button> }
-                            @if (entry.IsNpc) { <button type="button" aria-label="@($"Remove {entry.Name} from tracker")" title="Remove instance from encounter" disabled="@Disabled" @onclick="() => Remove.InvokeAsync(entry.Id)">×</button> }
+                            @if (entry.IsNpc) { <button type="button" aria-label="@($"Remove {entry.Name} from tracker")" title="Remove instance from encounter" disabled="@(Disabled || Encounter.Active)" @onclick="() => Remove.InvokeAsync(entry.Id)">×</button> }
                         </div>
                     </li>
                 }
@@ -56,17 +67,46 @@
 </aside>
 
 @code {
+    [Parameter] public Encounter Encounter { get; set; } = new();
+    [Parameter] public EventCallback<(int Id, int Hp)> HitPointsChanged { get; set; }
+    [Parameter] public EventCallback<int> SelectedChanged { get; set; }
+    private Task Select(int id) => Disabled ? Task.CompletedTask : SelectedChanged.InvokeAsync(id);
+    private async Task SetHp(int id, ChangeEventArgs e) { if (!Disabled && int.TryParse(e.Value?.ToString(), out var hp)) { await HitPointsChanged.InvokeAsync((id, hp)); editVersions[id] = editVersions.GetValueOrDefault(id) + 1; } }
     [Parameter] public int CampaignId { get; set; }
     [Parameter] public IReadOnlyList<SceneCombatant> Entries { get; set; } = [];
     [Parameter] public IReadOnlyList<SceneNpcChoice> Npcs { get; set; } = [];
     [Parameter] public bool Disabled { get; set; }
     [Parameter] public int? PlacingId { get; set; }
+    [Parameter] public EventCallback AddTravellers { get; set; }
     [Parameter] public EventCallback<int> AddNpc { get; set; }
     [Parameter] public EventCallback<int> Place { get; set; }
     [Parameter] public EventCallback<int> Unplace { get; set; }
     [Parameter] public EventCallback<int> Remove { get; set; }
     [Parameter] public EventCallback<(int Id, bool Visible)> VisibilityChanged { get; set; }
     [Parameter] public EventCallback<(int Id, string Name)> NameChanged { get; set; }
+    private ElementReference trackerEntries;
+    private IJSObjectReference? scrollModule;
+    private string? lastScrollTurn;
+    private bool disposed;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var turn = Encounter.SelectedId is int id ? $"{Encounter.Active}.{Encounter.Round}.{id}" : null;
+        if (turn == lastScrollTurn || disposed) return;
+        lastScrollTurn = turn;
+        if (turn is null) return;
+        try
+        {
+            scrollModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/CombatTrackerScroll.js");
+            if (!disposed) await scrollModule.InvokeVoidAsync("scrollCurrentRow", trackerEntries, Encounter.SelectedId);
+        }
+        catch (JSDisconnectedException) { }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        try { if (scrollModule is not null) await scrollModule.DisposeAsync(); }
+        catch (JSDisconnectedException) { }
+    }
     private string search = "";
     private bool searchOpen;
     private readonly Dictionary<int, int> editVersions = [];
@@ -77,4 +117,3 @@
     private void SearchKey(KeyboardEventArgs e) { if (e.Key == "Escape") searchOpen = false; else if (e.Key == "ArrowDown") searchOpen = true; }
     private static string Initials(string name) => string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(s => s[0])).ToUpperInvariant();
 }
-

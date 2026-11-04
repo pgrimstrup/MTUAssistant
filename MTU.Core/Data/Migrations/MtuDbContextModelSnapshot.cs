@@ -267,6 +267,8 @@ namespace MTU.Core.Data.Migrations
 
                     b.Property<string>("ContentType").IsRequired().HasColumnType("TEXT");
 
+                    b.Property<string>("EncounterState").HasColumnType("TEXT");
+
                     b.Property<string>("GridColour").IsRequired().HasColumnType("TEXT");
 
                     b.Property<int>("GridOpacity").HasColumnType("INTEGER");

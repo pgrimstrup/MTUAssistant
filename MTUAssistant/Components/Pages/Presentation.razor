@@ -1,12 +1,14 @@
 @page "/presentation"
 @layout MTUAssistant.Components.Layout.PresentationLayout
 @using MTUAssistant.Components.Map
+@implements IAsyncDisposable
+@inject IJSRuntime JS
 
-<PageTitle>Map Presentation</PageTitle>
+<PageTitle>Galaxy Map Presentation</PageTitle>
 
-@if (string.IsNullOrWhiteSpace(Session))
+@if (!ValidSession)
 {
-    <p class="m-4">Open this window using the Home map’s “Present map” link.</p>
+    <p class="m-4">Open this window using the Galaxy Map’s “Present map” link.</p>
 }
 else
 {
@@ -18,6 +20,30 @@ else
 
 @code {
     [SupplyParameterFromQuery(Name = "session")] public string? Session { get; set; }
+    private bool ValidSession => Session is not null && System.Text.RegularExpressions.Regex.IsMatch(Session, "^[a-zA-Z0-9-]{16,80}$");
+    private IJSObjectReference? castModule, castWatcher;
+    private bool disposed;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !ValidSession) return;
+        try
+        {
+            castModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/CastWindow.js");
+            castWatcher = await castModule.InvokeAsync<IJSObjectReference>("watchBattlemap", Session);
+            if (disposed) await castWatcher.InvokeVoidAsync("close");
+        }
+        catch (JSDisconnectedException) { }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        try
+        {
+            if (castWatcher is not null) { await castWatcher.InvokeVoidAsync("close"); await castWatcher.DisposeAsync(); }
+            if (castModule is not null) await castModule.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { }
+    }
     private SelectedWorld? selectedWorld;
     private void SelectWorld(SelectedWorld? world) => selectedWorld = world;
 }

@@ -16,3 +16,6 @@ h1 { font-size:1.4rem; margin:0; } .muted { color:var(--app-muted); font-size:.7
 .error { color:#ffaaaa; margin:.25rem 0; font-size:.8rem; }
 @media(max-width:1000px) { .battlemap-workspace { grid-template-columns:14rem minmax(0,1fr); height:calc(100dvh - 13rem); } }
 @media(max-width:600px) { .battlemap-workspace { grid-template-columns:12rem minmax(0,1fr); } }
+.encounter-backdrop { position:fixed; inset:0; z-index:1000; background:#0009; display:flex; align-items:center; justify-content:center; }
+.encounter-dialog { background:var(--app-panel,#171c25); padding:1.5rem; border:1px solid var(--app-border); border-radius:.6rem; width:min(32rem,95vw); max-height:90vh; overflow:auto; }
+.encounter-dialog h2 { font-size:1.3rem; } .encounter-dialog label { display:block; margin:.6rem 0; } .encounter-dialog p { font-size:.85rem; } .encounter-dialog .btn { margin:.5rem .3rem 0 0; }
