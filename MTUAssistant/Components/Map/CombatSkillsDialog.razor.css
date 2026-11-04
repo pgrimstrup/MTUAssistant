@@ -1,0 +1,3 @@
+.combat-skills-dialog { width:min(48rem,calc(100vw - 2rem)); max-height:90dvh; overflow:auto; padding:0; border:1px solid var(--app-border); border-radius:var(--app-radius); color:var(--app-text); background:var(--app-surface); }
+.combat-skills-dialog::backdrop { background:rgba(0,0,0,.65); }
+.combat-skills-dialog ::deep .skills-panel { margin:0; border:0; }

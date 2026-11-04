@@ -1,0 +1,34 @@
+@using MTU.Core
+@using MTUAssistant.Components.Pages
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<dialog @ref="dialog" class="combat-skills-dialog" aria-label="@($"Skills for {Character.Name}")">
+    <CharacterSkills Character="Character" OnChanged="OnChanged" OnClose="OnClose" />
+</dialog>
+
+@code {
+    [Parameter, EditorRequired] public Character Character { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    private ElementReference dialog;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<CombatSkillsDialog>? reference;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/EquipmentDialog.js");
+        reference = DotNetObjectReference.Create(this);
+        await module.InvokeVoidAsync("open", dialog, reference);
+    }
+    [JSInvokable] public Task Cancel() => OnClose.InvokeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        if (module is not null)
+        {
+            try { await module.InvokeVoidAsync("close", dialog); await module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+        reference?.Dispose();
+    }
+}

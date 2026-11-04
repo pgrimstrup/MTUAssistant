@@ -24,3 +24,5 @@ h3 { font-size:1rem; margin:0 0 .6rem; }
 .equipped-checkbox:disabled { cursor:default; }
 .traveller-identity { display:flex; align-items:center; gap:1rem; min-width:0; }
 .header-token { width:5.5rem; height:5.5rem; flex:0 0 auto; object-fit:cover; border-radius:50%; border:1px solid var(--app-border); background:var(--app-surface); }
+.equipment-table .skill-warning { color:#ff6b6b; }
+.equipment-table .skill-basic { color:#ffa94d; }

@@ -86,6 +86,74 @@ public static class SkillChecks
             "Generator records generic zero with trained specialization"
         );
 
+        var armour = new EquipmentItem
+        {
+            Kind = EquipmentKind.Armour,
+            RequiredSkill = "Vacc Suit 2",
+        };
+        Check(
+            !EquipmentSkillRules.MeetsArmourRequirement([Skill("Vacc Suit", 1)], armour),
+            "Insufficient armour skill rank"
+        );
+        Check(
+            EquipmentSkillRules.MeetsArmourRequirement([Skill("Vacc Suit", 2)], armour),
+            "Exact armour skill requirement"
+        );
+        Check(
+            !EquipmentSkillRules.MeetsArmourRequirement([Skill("Jack-of-All-Trades", 3)], armour),
+            "Jack does not meet an armour requirement"
+        );
+        Check(
+            EquipmentSkillRules.MeetsArmourRequirement([], withNoRequirement()),
+            "Armour without requirements is usable"
+        );
+        EquipmentItem withNoRequirement() =>
+            new() { Kind = EquipmentKind.Armour, RequiredSkill = "None" };
+        var ranged = new CharacterEquipmentDetails
+        {
+            Equipped = true,
+            Equipment = new()
+            {
+                Kind = EquipmentKind.Weapon,
+                Range = 100,
+                RequiredSkill = "Gun Combat (Slug)",
+            },
+        };
+        var melee = new CharacterEquipmentDetails
+        {
+            Equipped = true,
+            Equipment = new()
+            {
+                Kind = EquipmentKind.Weapon,
+                Range = 0,
+                RequiredSkill = "Melee",
+            },
+        };
+        Check(
+            EquipmentSkillRules.LacksEquippedWeaponSkill([], ranged)
+                && EquipmentSkillRules.LacksEquippedWeaponSkill([], melee),
+            "Equipped weapons flag absent training"
+        );
+        Check(
+            !EquipmentSkillRules.LacksEquippedWeaponSkill(
+                [Skill("Gun Combat (Energy)", 2)],
+                ranged
+            ),
+            "Any Gun Combat specialization grants basic weapon knowledge"
+        );
+        Check(
+            !EquipmentSkillRules.LacksEquippedWeaponSkill([Skill("Melee", 0)], melee),
+            "Generic Melee zero meets weapon training"
+        );
+        Check(
+            EquipmentSkillRules.LacksEquippedWeaponSkill([Skill("Jack-of-All-Trades", 3)], ranged),
+            "Jack alone still lacks weapon training"
+        );
+        ranged.Equipped = false;
+        Check(
+            !EquipmentSkillRules.LacksEquippedWeaponSkill([], ranged),
+            "Unequipped weapons have no skill warning"
+        );
         using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
         var services = new ServiceCollection();

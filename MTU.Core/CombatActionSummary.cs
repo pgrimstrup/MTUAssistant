@@ -56,6 +56,16 @@ public sealed record CombatActionSummary(
         rows.Add(
             new("Stance", state.SelectedStance == "Prone" ? "Prone (-1)" : state.SelectedStance)
         );
+        var statuses = new List<string>();
+        if (state.SelectedBehindCover)
+            statuses.Add("Behind Cover");
+        if (state.SelectedHiding)
+            statuses.Add("Hiding");
+        if (state.SelectedElevated)
+            statuses.Add("Elevated");
+        if (state.TargetTagged && (!player || target is not null))
+            statuses.Add("Target Tagged");
+        rows.Add(new("Status", statuses.Count == 0 ? "None" : string.Join(", ", statuses)));
         rows.Add(
             new(
                 "Reactions Made",
@@ -112,7 +122,8 @@ public sealed record CombatActionSummary(
         }
             .Select(g => new CombatActionColumn(
                 g.Item2,
-                g.Item3.Select(a => new CombatActionButton(
+                g.Item3.Where(a => a != "Tag Target" || loadout?.HasSmartTracker == true)
+                    .Select(a => new CombatActionButton(
                         state.ButtonText(a, g.Item1),
                         state.IsSelected(a, g.Item1)
                     ))

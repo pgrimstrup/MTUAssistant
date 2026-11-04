@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace MTU.Core;
 
 public static class CombatantLoadouts
@@ -95,23 +93,13 @@ public static class CombatantLoadouts
         return index < 0 ? preferred.Length : index;
     }
 
-    private static bool CanWear(Character npc, EquipmentItem armour)
-    {
-        var required = armour.RequiredSkill.Trim();
-        if (
-            required.Length == 0
-            || required.Equals("None", StringComparison.OrdinalIgnoreCase)
-            || required == "-"
-        )
-            return true;
-        var match = Regex.Match(required, @"^(.*?)(?:\s+(\d+))?$", RegexOptions.CultureInvariant);
-        var skill = match.Groups[1].Value.Trim();
-        var rank = match.Groups[2].Success ? int.Parse(match.Groups[2].Value) : 0;
-        return SkillRules.Rank(npc.Skills ?? [], skill) is int known && known >= rank;
-    }
+    private static bool CanWear(Character npc, EquipmentItem armour) =>
+        EquipmentSkillRules.MeetsArmourRequirement(npc.Skills ?? [], armour);
 
     private static int WeaponSkill(Character npc, EquipmentItem weapon)
     {
+        if (!string.IsNullOrWhiteSpace(weapon.RequiredSkill))
+            return CharacterService.SkillDm(npc, weapon.RequiredSkill);
         var name = weapon.Name;
         var speciality =
             new[] { "laser", "plasma", "fusion", "stunner" }.Any(s =>

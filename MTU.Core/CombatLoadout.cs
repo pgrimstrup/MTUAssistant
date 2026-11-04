@@ -21,6 +21,7 @@ public sealed record CombatWeaponRange(double Range, bool Scope, int AimBonus)
 public sealed class CombatLoadout(IReadOnlyList<CharacterEquipmentDetails> equipment)
 {
     private IEnumerable<CharacterEquipmentDetails> Equipped => equipment.Where(e => e.Equipped);
+    public bool HasSmartTracker => Equipped.Any(e => e.SupportsAttachments && e.SmartTracker);
     public string Armour =>
         string.Join(
             ", ",

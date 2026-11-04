@@ -2,7 +2,7 @@
 
 <aside class="combat-actions" aria-label="Combat actions">
     <div class="action-top">
-        <h2>Combat Actions</h2>
+        <div class="actions-heading"><h2>Combat Actions</h2><span class="character-tools"><button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(EquipDisabled || Actor is null)" @onclick="() => SkillsRequested.InvokeAsync()">Skills</button><button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(EquipDisabled || Actor is null)" @onclick="() => EquipRequested.InvokeAsync()">Equip</button></span></div>
         @if (Actor is { } actor)
         {
             var state = Encounter.ActionFor(actor.Id);
@@ -17,17 +17,21 @@
                 @foreach (var group in Groups)
                 {
                     <section><h3>@group.Title <span>@(group.Column != 2 ? $"{state.MinorCount}/3" : $"{(state.MajorAction is null ? 0 : 1)}/{(state.MinorCount > 1 ? 0 : 1)}")</span></h3>
-                        @foreach (var action in group.Actions)
+                        @foreach (var action in group.Actions.Where(a => a != "Tag Target" || Loadout?.HasSmartTracker == true))
                         {
-                            <button type="button" class="action-button @(state.IsSelected(action, group.Column) ? "chosen" : null)" disabled="@(Disabled || !Encounter.CanChooseAction(actor.Id, action))" aria-pressed="@((state.IsSelected(action, group.Column)).ToString().ToLowerInvariant())" @onclick="() => ActionSelected.InvokeAsync((group.Column, action))">@state.ButtonText(action, group.Column)</button>
+                            <button type="button" class="action-button @(state.IsSelected(action, group.Column) ? "chosen" : null)" disabled="@(Disabled || !Encounter.CanChooseAction(actor.Id, action, Loadout?.HasSmartTracker == true))" aria-pressed="@((state.IsSelected(action, group.Column)).ToString().ToLowerInvariant())" @onclick="() => ActionSelected.InvokeAsync((group.Column, action))">@state.ButtonText(action, group.Column)</button>
                         }
                         @if (group.Column == 2) { <button type="button" class="action-button reset-actions" disabled="@Disabled" @onclick="() => ResetRequested.InvokeAsync()">Reset</button> }
-                        @if (group.Column != 2 && state.ColumnActions(group.Column).Count > 0) { <p class="column-sequence">@string.Join(" → ", state.ColumnActions(group.Column))</p> }
                     </section>
                 }
             </div>
             @if (!Encounter.Active) { <p class="hint">Begin an encounter to choose an action.</p> }
             <div class="action-options">
+                <fieldset class="combat-status-options" aria-label="Combatant statuses">
+                    <label><input type="checkbox" checked="@state.SelectedBehindCover" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => CoverChanged.InvokeAsync(e.Value is true)" /> Behind Cover</label>
+                    <label><input type="checkbox" checked="@state.SelectedHiding" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => HidingChanged.InvokeAsync(e.Value is true)" /> Hiding</label>
+                    <label><input type="checkbox" checked="@state.SelectedElevated" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => ElevatedChanged.InvokeAsync(e.Value is true)" /> Elevated</label>
+                </fieldset>
                 @if (state.NeedsTarget)
                 {
                     <label>Target
@@ -54,6 +58,8 @@
                         }
                     }
                 }
+                @if (state.IsSelected("Tag Target"))
+                { <label><input type="checkbox" checked="@state.TagTargetHitConfirmed" disabled="@(Disabled || state.ActionsResolved || state.TargetId is null)" @onchange="e => TagHitConfirmedChanged.InvokeAsync(e.Value is true)" /> Target has been hit</label> }
                 @if (state.NeedsStance)
                 {
                     <label>Stance
@@ -64,7 +70,7 @@
                 }
                 @if (state.MovementDiameter.HasValue)
                 { <p class="hint">Movement range: @state.MovementDiameter.Value.ToString("0.#") m diameter.@(!actor.OnMap ? " Place this token to display its range." : "")</p> }
-                <button type="button" class="btn btn-primary resolve-actions" disabled="@(Disabled || state.ActionsResolved || (state.MinorCount == 0 && state.MajorAction is null))" @onclick="() => ResolveRequested.InvokeAsync()">Resolve Actions</button>
+                <button type="button" class="btn btn-primary resolve-actions" disabled="@(Disabled || state.ActionsResolved || (state.MinorCount == 0 && state.MajorAction is null && !state.HasPendingStatus) || (state.IsSelected("Tag Target") && (!state.TagTargetHitConfirmed || Loadout?.HasSmartTracker != true)))" @onclick="() => ResolveRequested.InvokeAsync()">Resolve Actions</button>
             </div>
         }
         else { <p class="hint">Select a combatant in the tracker or double-click their token.</p> }
@@ -88,6 +94,13 @@
     [Parameter] public Encounter Encounter { get; set; } = new();
     [Parameter] public IReadOnlyList<SceneCombatant> Entries { get; set; } = [];
     [Parameter] public bool Disabled { get; set; }
+    [Parameter] public bool EquipDisabled { get; set; }
+    [Parameter] public EventCallback EquipRequested { get; set; }
+    [Parameter] public EventCallback SkillsRequested { get; set; }
+    [Parameter] public EventCallback<bool> CoverChanged { get; set; }
+    [Parameter] public EventCallback<bool> HidingChanged { get; set; }
+    [Parameter] public EventCallback<bool> ElevatedChanged { get; set; }
+    [Parameter] public EventCallback<bool> TagHitConfirmedChanged { get; set; }
     [Parameter] public EventCallback ResetRequested { get; set; }
     [Parameter] public EventCallback ResolveRequested { get; set; }
     [Parameter] public EventCallback<(int Column, string Action)> ActionSelected { get; set; }

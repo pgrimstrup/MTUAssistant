@@ -40,6 +40,7 @@
                 {
                     <label>Magazine <input class="form-control" @bind="model.Magazine" maxlength="120" disabled="@busy" /></label>
                     <label>Mag Cost (Cr) <input class="form-control" type="number" min="0" step="any" @bind="model.MagCost" disabled="@busy" /></label>
+                    <label>Required Skill <select class="form-select" @bind="model.RequiredSkill" disabled="@busy"><option value="">None selected</option>@foreach (var skill in EquipmentService.WeaponRequiredSkills) { <option value="@skill">@skill</option> }</select></label>
                     <label class="wide">Traits <input class="form-control" @bind="model.Traits" maxlength="1000" disabled="@busy" /></label>
                 }
                 <label class="wide">Notes <textarea class="form-control" rows="3" @bind="model.Notes" maxlength="4000" disabled="@busy"></textarea></label>

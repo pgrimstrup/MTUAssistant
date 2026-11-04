@@ -547,7 +547,7 @@ namespace MTU.Core.Data.Migrations
 
                     b.Property<double>("Range").HasColumnType("REAL");
 
-                    b.Property<string>("RequiredSkill").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("RequiredSkill").HasColumnType("TEXT");
 
                     b.Property<int>("Tl").HasColumnType("INTEGER");
 

@@ -28,13 +28,13 @@
                 <div class="table-wrap"><table class="table equipment-table">
                     <thead><tr><th>Name</th>
                         @if (kind == EquipmentKind.Armour) { <th>Protection</th><th>TL</th><th>Rad</th><th>Kg</th><th>Cost</th><th class="wrap-cell">Required Skill</th> }
-                        else { <th>TL</th><th>Range</th><th>Damage</th><th>Kg</th><th>Cost</th><th>Magazine</th><th>Mag Cost</th><th class="wrap-cell traits-cell">Traits</th> }
+                        else { <th>TL</th><th>Range</th><th>Damage</th><th>Kg</th><th>Cost</th><th>Magazine</th><th>Mag Cost</th><th class="wrap-cell">Required Skill</th><th class="wrap-cell traits-cell">Traits</th> }
                         <th class="wrap-cell">Notes</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
                     <tbody>@foreach (var item in visibleItems)
                     {
                         <tr @key="item.Id"><th scope="row">@item.Name</th>
                             @if (kind == EquipmentKind.Armour) { <td>@item.FormatProtection()</td><td>@item.Tl</td><td>@item.Rad</td><td>@item.Kg.ToString("0.##")</td><td>Cr @item.Cost.ToString("N0")</td><td class="wrap-cell">@item.RequiredSkill</td> }
-                            else { <td>@item.Tl</td><td>@(item.Range == 0 ? "Melee" : $"{item.Range} m")</td><td>@item.Damage</td><td>@item.Kg.ToString("0.##")</td><td>Cr @item.Cost.ToString("N0")</td><td>@item.Magazine</td><td>Cr @item.MagCost.ToString("N0")</td><td class="wrap-cell traits-cell">@item.Traits</td> }
+                            else { <td>@item.Tl</td><td>@(item.Range == 0 ? "Melee" : $"{item.Range} m")</td><td>@item.Damage</td><td>@item.Kg.ToString("0.##")</td><td>Cr @item.Cost.ToString("N0")</td><td>@item.Magazine</td><td>Cr @item.MagCost.ToString("N0")</td><td class="wrap-cell">@item.RequiredSkill</td><td class="wrap-cell traits-cell">@item.Traits</td> }
                             <td class="notes">@item.Notes</td><td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(item)">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(item)">Delete</button></td>
                         </tr>
                     }</tbody>
@@ -57,7 +57,7 @@
         return items.Where(e => e.Kind == kind && (text.Length == 0
             || e.Name.Contains(text, StringComparison.OrdinalIgnoreCase)
             || (kind == EquipmentKind.Armour
-                ? e.RequiredSkill.Contains(text, StringComparison.OrdinalIgnoreCase)
+                ? (e.RequiredSkill?.Contains(text, StringComparison.OrdinalIgnoreCase) == true)
                 : e.Traits.Contains(text, StringComparison.OrdinalIgnoreCase) || e.Notes.Contains(text, StringComparison.OrdinalIgnoreCase))));
     }
     private EquipmentItem? editing;

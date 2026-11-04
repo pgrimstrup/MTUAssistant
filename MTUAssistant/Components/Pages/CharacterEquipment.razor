@@ -1,4 +1,5 @@
 @inject EquipmentService EquipmentStore
+@inject CharacterService CharacterStore
 
 <section class="equipment-panel" aria-labelledby="traveller-equipment-heading">
     <div class="equipment-heading"><div class="traveller-identity">
@@ -21,15 +22,17 @@
                     <div class="equipment-list"><table class="table equipment-table" aria-label="@(kind == EquipmentKind.Armour ? "Character armour" : "Character weapons")">
                         <thead><tr><th scope="col" class="equipped-cell"><span class="visually-hidden">Worn or equipped</span></th><th scope="col">Name</th><th scope="col">Quantity</th>
                             @if (kind == EquipmentKind.Armour) { <th scope="col" class="wrap-cell">Protection</th><th scope="col">TL</th><th scope="col">Rad</th><th scope="col">Kg</th><th scope="col">Cost</th><th scope="col" class="wrap-cell">Required Skill</th> }
-                            else { <th scope="col">TL</th><th scope="col">Range</th><th scope="col">Damage</th><th scope="col">Kg</th><th scope="col">Cost</th><th scope="col">Magazine</th><th scope="col">Mag Cost</th><th scope="col" class="wrap-cell traits-cell">Traits</th> }
+                            else { <th scope="col">TL</th><th scope="col">Range</th><th scope="col">Damage</th><th scope="col">Kg</th><th scope="col">Cost</th><th scope="col">Magazine</th><th scope="col">Mag Cost</th><th scope="col" class="wrap-cell">Required Skill</th><th scope="col" class="wrap-cell traits-cell">Traits</th> }
                             <th scope="col"><span class="visually-hidden">Actions</span></th>
                         </tr></thead>
                         <tbody>@foreach (var entry in equipment.Where(e => e.Equipment.Kind == kind))
                         {
                             var item = entry.Equipment;
-                            <tr @key="item.Id"><td class="equipped-cell"><input class="equipped-checkbox" type="checkbox" @bind:get="entry.Equipped" @bind:set="value => SetEquipped(entry, value)" disabled="@busy" aria-label="@($"{(kind == EquipmentKind.Armour ? "Wear" : "Equip")} {item.Name}")" title="@(kind == EquipmentKind.Armour ? "Worn" : "Equipped")" /></td><th scope="row">@item.Name</th><td>@entry.Quantity</td>
-                                @if (kind == EquipmentKind.Armour) { <td class="wrap-cell">@item.FormatProtection()</td><td>@item.Tl</td><td>@item.Rad</td><td>@item.Kg.ToString("0.##")</td><td>Cr @item.Cost.ToString("N0")</td><td class="wrap-cell">@item.RequiredSkill</td> }
-                                else { <td>@item.Tl</td><td>@(item.Range == 0 ? "Melee" : $"{item.Range} m")</td><td>@item.Damage</td><td>@item.Kg.ToString("0.##")</td><td>Cr @item.Cost.ToString("N0")</td><td>@item.Magazine</td><td>Cr @item.MagCost.ToString("N0")</td><td class="wrap-cell traits-cell">@item.Traits@if (!string.IsNullOrEmpty(entry.AttachmentSummary)) { <span class="attachment-summary">@entry.AttachmentSummary</span> }</td> }
+                            var missingArmourSkill = item.Kind == EquipmentKind.Armour && !EquipmentSkillRules.MeetsArmourRequirement(skills, item);
+                            var weaponColour = item.Kind == EquipmentKind.Weapon ? EquipmentSkillRules.WeaponTraining(skills, item) switch { WeaponSkillMatch.Basic => "skill-basic", WeaponSkillMatch.Unskilled => "skill-warning", _ => null } : null;
+                            <tr @key="item.Id"><td class="equipped-cell"><input class="equipped-checkbox" type="checkbox" @bind:get="entry.Equipped" @bind:set="value => SetEquipped(entry, value)" disabled="@busy" aria-label="@($"{(kind == EquipmentKind.Armour ? "Wear" : "Equip")} {item.Name}")" title="@(kind == EquipmentKind.Armour ? "Worn" : "Equipped")" /></td><th scope="row" class="@(missingArmourSkill ? "skill-warning" : weaponColour)">@item.Name</th><td>@entry.Quantity</td>
+                                @if (kind == EquipmentKind.Armour) { <td class="wrap-cell">@item.FormatProtection()</td><td>@item.Tl</td><td>@item.Rad</td><td>@item.Kg.ToString("0.##")</td><td>Cr @item.Cost.ToString("N0")</td><td class="wrap-cell @(missingArmourSkill ? "skill-warning" : null)">@item.RequiredSkill</td> }
+                                else { <td>@item.Tl</td><td>@(item.Range == 0 ? "Melee" : $"{item.Range} m")</td><td>@item.Damage</td><td>@item.Kg.ToString("0.##")</td><td>Cr @item.Cost.ToString("N0")</td><td>@item.Magazine</td><td>Cr @item.MagCost.ToString("N0")</td><td class="wrap-cell @weaponColour">@item.RequiredSkill</td><td class="wrap-cell traits-cell">@item.Traits@if (!string.IsNullOrEmpty(entry.AttachmentSummary)) { <span class="attachment-summary">@entry.AttachmentSummary</span> }</td> }
                                 <td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Options(entry)" disabled="@busy">Options</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(item)" disabled="@busy">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => Remove(item)" disabled="@busy">Remove</button></td>
                             </tr>
                         }</tbody>
@@ -62,6 +65,7 @@
     [Parameter, EditorRequired] public Character Character { get; set; } = default!;
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
+    private IReadOnlyList<CharacterSkill> skills = [];
     private IReadOnlyList<EquipmentItem> catalogue = [];
     private IReadOnlyList<CharacterEquipmentDetails> equipment = [];
     private CharacterEquipmentDetails? detailsEditing;
@@ -76,6 +80,7 @@
         loading = true;
         try
         {
+            skills = await CharacterStore.ListSkillsAsync(Character.CampaignId, Character.Id);
             catalogue = await EquipmentStore.ListAsync();
             equipment = await EquipmentStore.ListDetailsForCharacterAsync(Character.CampaignId, Character.Id);
             error = null;

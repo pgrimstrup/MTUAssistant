@@ -4,7 +4,7 @@ import { validSession, validPointer } from './PresentationSync.js';
 export function playerTokens(tokens) {
     return tokens.filter(t => t.isVisible === true && t.column != null && t.row != null)
         .map(t => ({id:t.id,characterId:t.characterId,name:t.name,isNpc:t.isNpc,hasTokenImage:t.hasTokenImage,
-            isVisible:true,column:t.column,row:t.row,...(t.isNpc && Number.isFinite(t.healthWidth) && ['green','orange','red'].includes(t.healthColour) ? {healthWidth:t.healthWidth,healthColour:t.healthColour} : {}),...(t.isCurrent === true ? {isCurrent:true} : {}),...(t.isDead === true ? {isDead:true} : {})}));
+            isVisible:true,column:t.column,row:t.row,...(Number.isFinite(t.healthWidth) && ['green','orange','red'].includes(t.healthColour) ? {healthWidth:t.healthWidth,healthColour:t.healthColour} : {}),...(t.isCurrent === true ? {isCurrent:true} : {}),...(t.isDead === true ? {isDead:true} : {})}));
 }
 // Tracker rows can include visible, unplaced combatants. NPC HP totals stay private.
 export function playerCombatants(entries) {

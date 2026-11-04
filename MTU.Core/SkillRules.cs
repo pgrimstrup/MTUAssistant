@@ -14,6 +14,21 @@ public static class SkillRules
     public static int MaximumRank(string name) =>
         Split(name).Base.Equals("Jack-of-All-Trades", StringComparison.OrdinalIgnoreCase) ? 3 : 5;
 
+    public static bool HasExactSkill(IEnumerable<CharacterSkill> skills, string requiredSkill)
+    {
+        var required = Split(requiredSkill);
+        return skills.Any(s =>
+        {
+            var known = Split(s.Name);
+            return known.Base.Equals(required.Base, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(
+                    known.Speciality,
+                    required.Speciality,
+                    StringComparison.OrdinalIgnoreCase
+                );
+        });
+    }
+
     /// <summary>Null means unskilled; zero means basic knowledge, never an unrelated speciality's rank.</summary>
     public static int? Rank(IEnumerable<CharacterSkill> skills, string requiredSkill)
     {

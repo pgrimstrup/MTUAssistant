@@ -453,15 +453,15 @@ export class Battlemap {
         token.turnRing.circle(size/2,size/2,size*(.61+.07*wave))
             .stroke({color:token.isNpc ? 0xff0000 : 0x00ff00,alpha:.5+.5*wave,width:Math.max(size*.035,2/this.view.scale)});
     }
-    drawEnemyHealth(token) {
+    drawTokenHealth(token) {
         const bar = token.healthBar;
         if (!bar) return;
         bar.clear();
         const health = this.tokenHealth?.get(token.id) ?? token;
-        if (token.isNpc && Number.isFinite(health.healthWidth)) {
+        if (Number.isFinite(health.healthWidth)) {
             token.healthWidth = health.healthWidth; token.healthColour = health.healthColour;
         }
-        bar.visible = this.combatMode === true && token.isNpc === true && Number.isFinite(token.healthWidth);
+        bar.visible = this.combatMode === true && Number.isFinite(token.healthWidth);
         if (!bar.visible) return;
         const scale = this.view.scale, width = this.scene.gridSize*.8;
         const x = this.scene.gridSize*.1, y = -10/scale, height = 5/scale;
@@ -475,7 +475,7 @@ export class Battlemap {
         token.isDead = this.deadIds?.has(token.id) ?? false;
         token.isCurrent = token.id === this.selectedId && !token.isDead;
         this.drawTurnRing(token);
-        this.drawEnemyHealth(token);
+        this.drawTokenHealth(token);
         token.halo.clear();
         if (this.combatMode) token.halo.circle(size/2,size/2,size*.57).fill({color:token.isNpc ? 0xff0000 : 0x00ff00,alpha:.25});
         token.labelText.text = token.name;

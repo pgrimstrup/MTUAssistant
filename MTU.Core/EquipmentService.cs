@@ -24,7 +24,7 @@ public sealed class EquipmentItem
     public int Rad { get; set; }
     public decimal Kg { get; set; }
     public decimal Cost { get; set; }
-    public string RequiredSkill { get; set; } = "";
+    public string? RequiredSkill { get; set; }
     public double Range { get; set; }
     public string Damage { get; set; } = "";
     public string Magazine { get; set; } = "";
@@ -67,6 +67,13 @@ public sealed class EquipmentItem
 
 public sealed class EquipmentService(MtuDbContext db)
 {
+    public static IReadOnlyList<string> WeaponRequiredSkills { get; } =
+        CharacterSkillCatalogue
+            .Find("Gun Combat")!
+            .Specialities.Select(s => $"Gun Combat ({s})")
+            .Append("Melee")
+            .ToArray();
+
     public async Task<IReadOnlyList<EquipmentItem>> ListAsync() =>
         await db
             .Equipment.AsNoTracking()
@@ -80,7 +87,9 @@ public sealed class EquipmentService(MtuDbContext db)
     {
         var value = item.Copy();
         value.Name = value.Name.Trim();
-        value.RequiredSkill = value.RequiredSkill.Trim();
+        value.RequiredSkill = string.IsNullOrWhiteSpace(value.RequiredSkill)
+            ? null
+            : value.RequiredSkill.Trim();
         value.Damage = value.Damage.Trim();
         value.Magazine = value.Magazine.Trim();
         value.Traits = value.Traits.Trim();
@@ -90,7 +99,7 @@ public sealed class EquipmentService(MtuDbContext db)
         if (value.Name.Length is 0 or > 120)
             throw new ArgumentException("Enter a name of up to 120 characters.");
         if (
-            value.RequiredSkill.Length > 240
+            value.RequiredSkill?.Length > 240
             || value.Damage.Length > 120
             || value.Magazine.Length > 120
             || value.Traits.Length > 1000
@@ -122,7 +131,13 @@ public sealed class EquipmentService(MtuDbContext db)
         {
             value.Protection = value.Rad = 0;
             value.ProtectionL = value.ProtectionE = value.ProtectionP = value.ProtectionK = null;
-            value.RequiredSkill = "";
+            if (
+                value.RequiredSkill is not null
+                && !WeaponRequiredSkills.Contains(value.RequiredSkill)
+            )
+                throw new ArgumentException(
+                    "Choose a Gun Combat specialization or Melee, or leave Required Skill blank."
+                );
         }
         if (
             await db.Equipment.AnyAsync(e =>

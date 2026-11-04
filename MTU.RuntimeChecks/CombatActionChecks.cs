@@ -312,7 +312,9 @@ public static class CombatActionChecks
         e.ChooseAction(1, "Move", roster, 3);
         Check(
             e.ActionFor(1).MinorCount == 4
-                && CombatActionChoices.Minor.All(a => e.CanChooseAction(1, a)),
+                && CombatActionChoices
+                    .Minor.Where(a => a != "Tag Target")
+                    .All(a => e.CanChooseAction(1, a)),
             "GM can manage the overall minor allowance without blocked cycles or errors"
         );
         var originCheck = Fresh();
@@ -397,6 +399,7 @@ public static class CombatActionChecks
                         "Armour",
                         "Weapon",
                         "Stance",
+                        "Status",
                         "Reactions Made",
                         "Target",
                         "Target Reaction",
@@ -808,6 +811,213 @@ public static class CombatActionChecks
             resolvedReload.ActionFor(103).ReactionCount == 1
                 && resolvedReload.ActionFor(103).Stance == "Prone",
             "Reset does not undo resolved target effects"
+        );
+        var statusEncounter = Fresh();
+        statusEncounter.SetCoverStatus(1, true, true, roster);
+        Check(
+            !statusEncounter.ActionFor(1).Hiding && statusEncounter.ActionFor(1).SelectedHiding,
+            "Hiding is pending until resolved"
+        );
+        statusEncounter.ResetActions(1, roster);
+        Check(
+            !statusEncounter.ActionFor(1).SelectedHiding,
+            "Reset discards uncommitted cover status"
+        );
+        statusEncounter.SetCoverStatus(1, true, true, roster);
+        statusEncounter.ResolveActions(1, roster);
+        Check(
+            statusEncounter.ActionFor(1).BehindCover && statusEncounter.ActionFor(1).Hiding,
+            "GM-selected cover and hiding can resolve without other actions"
+        );
+        statusEncounter.ResetActions(1, roster);
+        Check(
+            !statusEncounter.CanChooseAction(1, "Ranged Attack")
+                && !statusEncounter.CanChooseAction(1, "Melee Attack"),
+            "Hiding disables both attack choices"
+        );
+        var hiddenAttackRejected = false;
+        try
+        {
+            statusEncounter.ChooseAction(1, "Ranged Attack", roster);
+        }
+        catch (ArgumentException)
+        {
+            hiddenAttackRejected = true;
+        }
+        Check(
+            hiddenAttackRejected && statusEncounter.CanChooseAction(1, "Leadership"),
+            "Core blocks hidden attacks but allows nonattacks"
+        );
+        statusEncounter.Next(roster);
+        statusEncounter.Next(roster);
+        Check(
+            statusEncounter.Round == 2 && statusEncounter.ActionFor(1).Hiding,
+            "Hiding persists across turns and rounds until breaking cover"
+        );
+        var statusRestore = new Encounter();
+        statusRestore.Restore(
+            JsonSerializer.Deserialize<EncounterSnapshot>(
+                JsonSerializer.Serialize(statusEncounter.Snapshot())
+            )!,
+            roster
+        );
+        Check(
+            statusRestore.ActionFor(1).Hiding && statusRestore.ActionFor(1).BehindCover,
+            "Cover and hiding survive reload"
+        );
+        Check(
+            CombatActionSummary
+                .Create(statusRestore, hero, roster, null)!
+                .Rows.Single(r => r.Label == "Status")
+                .Value == "Behind Cover, Hiding",
+            "Status summary displays cover and hiding"
+        );
+        statusEncounter.SetCoverStatus(1, false, false, roster);
+        statusEncounter.ChooseAction(1, "Ranged Attack", roster);
+        statusEncounter.SetTarget(1, 2, roster);
+        statusEncounter.ResolveActions(1, roster);
+        Check(
+            !statusEncounter.ActionFor(1).Hiding && !statusEncounter.ActionFor(1).BehindCover,
+            "Breaking cover commits before attacking"
+        );
+        var covering = Fresh();
+        covering.ChooseAction(1, "Ranged Attack", roster);
+        covering.SetTarget(1, 2, roster);
+        covering.SetTargetReaction(1, "Dive for Cover", roster);
+        Check(!covering.ActionFor(2).BehindCover, "Dive selection does not apply cover early");
+        covering.ResolveActions(1, roster);
+        Check(
+            !covering.ActionFor(2).BehindCover && !covering.ActionFor(2).Hiding,
+            "Reactions do not change GM-controlled status flags"
+        );
+        var trackerWeapon = new CharacterEquipmentDetails
+        {
+            Equipped = true,
+            SmartTracker = true,
+            LaserSight = true,
+            HolographicSight = true,
+            Phud = true,
+            Equipment = new() { Kind = EquipmentKind.Weapon, Range = 100 },
+        };
+        var trackerLoadout = new CombatLoadout([trackerWeapon]);
+        Check(
+            trackerLoadout.HasSmartTracker
+                && trackerWeapon.AttachmentSummary
+                    == "Laser Sights, Holographic Sights, P-HUD, Smart Tracker (Intelligent Weapon)",
+            "Corrected weapon option labels and equipped Smart Tracker"
+        );
+        var tagged = Fresh();
+        tagged.ChooseAction(1, "Aim", roster);
+        tagged.SetTarget(1, 2, roster);
+        Check(!tagged.ActionFor(1).TargetTagged, "Tag not applied during selection");
+        tagged.ResolveActions(1, roster, trackerLoadout.HasSmartTracker);
+        Check(!tagged.ActionFor(1).TargetTagged, "Aim never automatically tags a target");
+        tagged.ResetActions(1, roster);
+        tagged.ChooseAction(1, "Tag Target", roster, smartTracker: true);
+        Check(
+            CombatActionSummary
+                .Create(tagged, hero, roster, trackerLoadout, true)!
+                .Columns.Sum(c => c.Buttons.Count(b => b.Text == "Tag Target")) == 2,
+            "Cast action columns show Tag Target only with Smart Tracker"
+        );
+        var unhitRejected = false;
+        try
+        {
+            tagged.ResolveActions(1, roster, true);
+        }
+        catch (ArgumentException)
+        {
+            unhitRejected = true;
+        }
+        Check(
+            unhitRejected && !tagged.ActionFor(1).TargetTagged,
+            "Tagging requires a confirmed hit"
+        );
+        tagged.ConfirmTagTargetHit(1, true, roster);
+        tagged.ResolveActions(1, roster, true);
+        Check(
+            tagged.ActionFor(1).TargetTagged && tagged.ActionFor(1).MinorCount == 1,
+            "Explicit confirmed Tag Target costs one minor action"
+        );
+        var taggedRestore = new Encounter();
+        taggedRestore.Restore(
+            JsonSerializer.Deserialize<EncounterSnapshot>(
+                JsonSerializer.Serialize(tagged.Snapshot())
+            )!,
+            roster
+        );
+        Check(taggedRestore.ActionFor(1).TargetTagged, "Target tag survives reload");
+        taggedRestore.ResetActions(1, roster);
+        taggedRestore.SetTarget(1, 3, [hero, enemy, enemy with { Id = 3 }]);
+        Check(
+            !taggedRestore.ActionFor(1).TargetTagged,
+            "Selecting a different target clears the old tag"
+        );
+        tagged.ResetActions(1, roster);
+        tagged.SetTarget(1, 2, roster);
+        Check(tagged.ActionFor(1).TargetTagged, "Keeping same target preserves tag");
+        tagged.SetTarget(1, null, roster);
+        Check(!tagged.ActionFor(1).TargetTagged, "Changing or clearing target removes tag");
+        trackerWeapon.Equipped = false;
+        Check(!trackerLoadout.HasSmartTracker, "Unequipped Smart Tracker does not grant tagging");
+        Check(
+            !CombatActionSummary
+                .Create(tagged, hero, roster, trackerLoadout, true)!
+                .Columns.Any(c => c.Buttons.Any(b => b.Text == "Tag Target")),
+            "Cast hides Tag Target without equipped Smart Tracker"
+        );
+        tagged.ChooseAction(1, "Ranged Attack", roster);
+        tagged.SetTarget(1, 2, roster);
+        tagged.ResolveActions(1, roster, trackerLoadout.HasSmartTracker);
+        Check(!tagged.ActionFor(1).TargetTagged, "Ordinary weapons cannot tag targets");
+        var manual = Fresh();
+        manual.SetCoverStatus(1, false, true, roster);
+        manual.SetElevated(1, true, roster);
+        manual.ResolveActions(1, roster);
+        Check(
+            !manual.ActionFor(1).BehindCover
+                && manual.ActionFor(1).Hiding
+                && manual.ActionFor(1).Elevated,
+            "Hiding and Elevated are independent GM flags"
+        );
+        manual.ResetActions(1, roster);
+        manual.SetCoverStatus(1, true, false, roster);
+        manual.ResolveActions(1, roster);
+        Check(
+            manual.ActionFor(1).BehindCover
+                && !manual.ActionFor(1).Hiding
+                && manual.ActionFor(1).Elevated,
+            "Unchecking Hiding leaves other flags unchanged"
+        );
+        var flagsReload = new Encounter();
+        flagsReload.Restore(
+            JsonSerializer.Deserialize<EncounterSnapshot>(
+                JsonSerializer.Serialize(manual.Snapshot())
+            )!,
+            roster
+        );
+        Check(
+            flagsReload.ActionFor(1).Elevated && flagsReload.ActionFor(1).BehindCover,
+            "Elevated and independent statuses persist"
+        );
+        var shotOnly = Fresh();
+        shotOnly.ChooseAction(1, "Ranged Attack", roster);
+        shotOnly.SetTarget(1, 2, roster);
+        shotOnly.ResolveActions(1, roster, true);
+        Check(
+            !shotOnly.ActionFor(1).TargetTagged,
+            "Ranged Attack never automatically tags a target"
+        );
+        var noTracker = Fresh();
+        Check(
+            !noTracker.CanChooseAction(1, "Tag Target")
+                && noTracker.CanChooseAction(1, "Tag Target", true),
+            "Tag Target availability requires Smart Tracker"
+        );
+        Check(
+            CombatActionChoices.Major[3] == "Reload (slow)"
+                && CombatActionChoices.Major[4] == "Skill Check",
+            "Reload actions align on fourth row"
         );
         Console.WriteLine(
             "Ordered minor/major columns, Aim-Shoot/Shoot-Aim, sequence persistence, shared counts, cycles and generic Tactics passed."

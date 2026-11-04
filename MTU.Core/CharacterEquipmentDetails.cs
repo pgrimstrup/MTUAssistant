@@ -31,10 +31,10 @@ public sealed class CharacterEquipmentDetails
                 {
                     (Scope, "Scope"),
                     (TargetingSystem, "Targeting System"),
-                    (LaserSight, "Laser Sight"),
-                    (HolographicSight, "Holographic Sight"),
+                    (LaserSight, "Laser Sights"),
+                    (HolographicSight, "Holographic Sights"),
                     (Fof, "FOF"),
-                    (Phud, "PHUD"),
+                    (Phud, "P-HUD"),
                     (SmartTracker, "Smart Tracker (Intelligent Weapon)"),
                 }
                     .Where(option => option.Item1)

@@ -7,6 +7,7 @@ using MTU.Core;
 using MTU.Core.Data;
 using MTU.Core.Models;
 
+await WeaponSkillChecks.RunAsync();
 await SkillChecks.RunAsync();
 await NpcGenerationChecks.RunAsync();
 await SceneChecks.RunAsync();
@@ -2093,7 +2094,7 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
         );
         Check(
             restored.AttachmentSummary
-                == "Scope, Targeting System, Laser Sight, Holographic Sight, FOF, PHUD, Smart Tracker (Intelligent Weapon)"
+                == "Scope, Targeting System, Laser Sights, Holographic Sights, FOF, P-HUD, Smart Tracker (Intelligent Weapon)"
                 && restored.Equipment.Traits == "Auto 2",
             "Attachment summary is brief and preserves catalogue traits"
         );

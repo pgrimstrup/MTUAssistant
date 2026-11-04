@@ -246,13 +246,13 @@ const barRects=[],barFills=[];
 const makeBar=()=>({clear(){barRects.length=0;barFills.length=0;return this;},rect(x,y,width,height){barRects.push({x,y,width,height});return this;},fill(style){barFills.push(style);return this;},stroke(){return this;}});
 const enemyMarker={id:1,characterId:10,name:'Enemy',isNpc:true,isVisible:true,column:1,row:2,healthBar:makeBar()};
 healthBarMap.tokenHealth=new Map([[1,{id:1,healthWidth:35,healthColour:'green'}]]);
-healthBarMap.drawEnemyHealth(enemyMarker);assert.equal(enemyMarker.healthBar.visible,false,'enemy health bars are hidden outside combat');
-healthBarMap.combatMode=true;healthBarMap.drawEnemyHealth(enemyMarker);
+healthBarMap.drawTokenHealth(enemyMarker);assert.equal(enemyMarker.healthBar.visible,false,'enemy health bars are hidden outside combat');
+healthBarMap.combatMode=true;healthBarMap.drawTokenHealth(enemyMarker);
 assert.equal(enemyMarker.healthBar.visible,true);assert.equal(barRects[1].width,28,'bar width matches tracker health percentage');
 assert.equal(barRects[1].height*healthBarMap.view.scale,5,'small health bar stays legible across zoom levels');
 assert.ok(barRects[1].y<0,'bar is above the token');assert.equal(barFills[1].color,0x008000);
 for(const [healthColour,colour] of [['orange',0xffa500],['red',0xff0000]]) {
-    healthBarMap.tokenHealth.set(1,{id:1,healthWidth:100,healthColour});healthBarMap.drawEnemyHealth(enemyMarker);
+    healthBarMap.tokenHealth.set(1,{id:1,healthWidth:100,healthColour});healthBarMap.drawTokenHealth(enemyMarker);
     assert.equal(barFills[1].color,colour);assert.equal(barRects[1].width,80);
 }
 const {playerTokens:healthPlayerTokens}=await import('../../wwwroot/js/BattlemapPresentationSync.js');
@@ -260,10 +260,20 @@ const healthSnapshot=healthPlayerTokens([enemyMarker,{...enemyMarker,id:2,isVisi
 assert.equal(healthSnapshot.length,1);assert.equal(healthSnapshot[0].healthWidth,100);assert.equal(healthSnapshot[0].healthColour,'red');
 assert.equal(healthSnapshot[0].currentHp,undefined,'token health bars share no exact enemy HP totals');
 const castEnemy={...healthSnapshot[0],healthBar:makeBar()};healthBarMap.tokenHealth=new Map();
-healthBarMap.drawEnemyHealth(castEnemy);assert.equal(castEnemy.healthBar.visible,true);assert.equal(barFills[1].color,0xff0000);
-healthBarMap.combatMode=false;healthBarMap.drawEnemyHealth(castEnemy);assert.equal(castEnemy.healthBar.visible,false,'cast token bars disappear after combat');
-healthBarMap.combatMode=true;healthBarMap.drawEnemyHealth({...castEnemy,isNpc:false});assert.equal(castEnemy.healthBar.visible,false,'Traveller tokens do not show enemy bars');
-console.log('Combat-only enemy token health bars, tracker colours/widths, cast mirroring and HP privacy passed.');
+healthBarMap.drawTokenHealth(castEnemy);assert.equal(castEnemy.healthBar.visible,true);assert.equal(barFills[1].color,0xff0000);
+healthBarMap.combatMode=false;healthBarMap.drawTokenHealth(castEnemy);assert.equal(castEnemy.healthBar.visible,false,'cast token bars disappear after combat');
+healthBarMap.combatMode=true;
+const travellerMarker={id:3,characterId:30,name:'Traveller',isNpc:false,isVisible:true,column:2,row:3,healthBar:makeBar()};
+healthBarMap.tokenHealth=new Map([[3,{id:3,healthWidth:50,healthColour:'orange'}]]);
+healthBarMap.drawTokenHealth(travellerMarker);
+assert.equal(travellerMarker.healthBar.visible,true,'Traveller tokens show health during combat');
+assert.equal(barRects[1].width,40);assert.equal(barFills[1].color,0xffa500);
+const travellerSnapshot=healthPlayerTokens([travellerMarker,{...travellerMarker,id:4,isVisible:false}]);
+assert.equal(travellerSnapshot.length,1);assert.equal(travellerSnapshot[0].healthWidth,50);
+const castTraveller={...travellerSnapshot[0],healthBar:makeBar()};healthBarMap.tokenHealth=new Map();
+healthBarMap.drawTokenHealth(castTraveller);assert.equal(castTraveller.healthBar.visible,true);assert.equal(barRects[1].width,40);
+healthBarMap.combatMode=false;healthBarMap.drawTokenHealth(castTraveller);assert.equal(castTraveller.healthBar.visible,false,'Traveller bars hide outside combat');
+console.log('Combat-only Traveller and enemy token health bars, tracker colours/widths, cast mirroring and HP privacy passed.');
 
 const selectingMap=new Battlemap({style:{},clientLeft:0,clientTop:0,getBoundingClientRect:()=>({left:10,top:20})},{gridSize:100},'double-select');
 selectingMap.view={x:-100,y:0,scale:2};

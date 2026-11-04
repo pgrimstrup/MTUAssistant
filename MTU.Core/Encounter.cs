@@ -289,6 +289,10 @@ public sealed partial class Encounter
                 {
                     TargetId =
                         pair.Value.TargetId is int target && ids.Contains(target) ? target : null,
+                    TargetTagged =
+                        pair.Value.TargetTagged
+                        && pair.Value.TargetId is int taggedTarget
+                        && ids.Contains(taggedTarget),
                 };
         Initiative.Clear();
         attributes.Clear();

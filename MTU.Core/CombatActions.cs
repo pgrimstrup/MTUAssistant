@@ -26,7 +26,15 @@ public sealed record CombatantActionState(
     string? PendingStance = null,
     string? TargetReactionStance = null,
     bool ActionsResolved = false,
-    int? ResolvedAimBonus = null
+    int? ResolvedAimBonus = null,
+    bool BehindCover = false,
+    bool Hiding = false,
+    bool TargetTagged = false,
+    bool? PendingBehindCover = null,
+    bool? PendingHiding = null,
+    bool Elevated = false,
+    bool? PendingElevated = null,
+    bool TagTargetHitConfirmed = false
 )
 {
     public IReadOnlyList<string> ColumnActions(int column) =>
@@ -80,7 +88,9 @@ public sealed record CombatantActionState(
 
     [JsonIgnore]
     public bool NeedsTarget =>
-        IsSelected("Aim") || MajorAction is "Melee Attack" or "Ranged Attack";
+        IsSelected("Aim")
+        || IsSelected("Tag Target")
+        || MajorAction is "Melee Attack" or "Ranged Attack";
 
     [JsonIgnore]
     public bool NeedsStance => IsSelected("Change Stance");
@@ -93,6 +103,19 @@ public sealed record CombatantActionState(
 
     [JsonIgnore]
     public string SelectedStance => PendingStance ?? Stance;
+
+    [JsonIgnore]
+    public bool SelectedBehindCover => PendingBehindCover ?? BehindCover;
+
+    [JsonIgnore]
+    public bool SelectedHiding => PendingHiding ?? Hiding;
+
+    [JsonIgnore]
+    public bool HasPendingStatus =>
+        PendingBehindCover.HasValue || PendingHiding.HasValue || PendingElevated.HasValue;
+
+    [JsonIgnore]
+    public bool SelectedElevated => PendingElevated ?? Elevated;
 
     [JsonIgnore]
     public string MinorSummary => string.Join(" → ", ColumnActions(1).Concat(ColumnActions(3)));
@@ -126,14 +149,15 @@ public static class CombatActionChoices
         "Reload (fast)",
         "Move",
         "Other",
+        "Tag Target",
     ];
     public static readonly string[] Major =
     [
         "Melee Attack",
         "Ranged Attack",
         "Leadership",
-        "Skill Check",
         "Reload (slow)",
+        "Skill Check",
     ];
     public static readonly string[] Stances = ["Standing", "Crouching", "Prone"];
 }
@@ -209,7 +233,11 @@ public sealed partial class Encounter
             CarriedAimBonus: state.ResolvedAimBonus ?? state.CarriedAimBonus,
             TurnOriginColumn: state.TurnOriginColumn,
             TurnOriginRow: state.TurnOriginRow,
-            ReactionCount: state.ReactionCount
+            ReactionCount: state.ReactionCount,
+            BehindCover: state.BehindCover,
+            Hiding: state.Hiding,
+            TargetTagged: state.TargetTagged,
+            Elevated: state.Elevated
         );
     }
 
@@ -226,10 +254,14 @@ public sealed partial class Encounter
         return actor;
     }
 
-    public bool CanChooseAction(int id, string action)
+    public bool CanChooseAction(int id, string action, bool smartTracker = false)
     {
         var state = ActionFor(id);
         if (state.ActionsResolved)
+            return false;
+        if (action == "Tag Target" && !smartTracker)
+            return false;
+        if (state.SelectedHiding && action is "Melee Attack" or "Ranged Attack")
             return false;
         if (CombatActionChoices.Major.Contains(action))
             return state.MinorCount < 2;
@@ -240,7 +272,8 @@ public sealed partial class Encounter
         int id,
         string action,
         IReadOnlyList<SceneCombatant> entries,
-        int column = 1
+        int column = 1,
+        bool smartTracker = false
     )
     {
         var actor = RequireActor(id, entries);
@@ -248,7 +281,11 @@ public sealed partial class Encounter
         EnsureTurnOrigin(id, entries);
         if (!CombatActionChoices.Minor.Concat(CombatActionChoices.Major).Contains(action))
             throw new ArgumentException("Choose an available action.");
-        if (!CanChooseAction(id, action))
+        if (action == "Tag Target" && !smartTracker)
+            throw new ArgumentException("Equip a weapon with Smart Tracker to use Tag Target.");
+        if (ActionFor(id).SelectedHiding && action is "Melee Attack" or "Ranged Attack")
+            throw new ArgumentException("Break from cover before making an attack.");
+        if (!CanChooseAction(id, action, smartTracker))
             throw new ArgumentException(
                 "Major Actions are unavailable while two or more Minor Actions are selected."
             );
@@ -318,7 +355,12 @@ public sealed partial class Encounter
         var state = ActionFor(id);
         if (state.TargetId != targetId)
             state = ReleaseTargetReaction(state);
-        actions[id] = state with { TargetId = targetId };
+        actions[id] = state with
+        {
+            TargetId = targetId,
+            TargetTagged = state.TargetId == targetId && state.TargetTagged,
+            TagTargetHitConfirmed = state.TargetId == targetId && state.TagTargetHitConfirmed,
+        };
     }
 
     public void SetStance(int id, string stance, IReadOnlyList<SceneCombatant> entries)
@@ -411,6 +453,10 @@ public sealed partial class Encounter
             TargetReactionStance = null,
             ActionsResolved = false,
             ResolvedAimBonus = null,
+            PendingBehindCover = null,
+            PendingHiding = null,
+            PendingElevated = null,
+            TagTargetHitConfirmed = false,
         };
 
     private void ClearMovement(int? id)

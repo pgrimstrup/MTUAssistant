@@ -5,6 +5,7 @@
 @inject CampaignService Campaigns
 @inject SceneService ScenesStore
 @inject EquipmentService EquipmentStore
+@inject CharacterService CharactersStore
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 
@@ -38,14 +39,16 @@
             <CombatTracker CampaignId="scene.CampaignId" Entries="entries" Npcs="npcs" Encounter="encounter" Disabled="@(map is null || busy)" PlacingId="placingId"
                            AddNpc="AddNpc" AddTravellers="AddTravellers" Place="BeginPlacement" Unplace="Unplace" Remove="RemoveInstance" VisibilityChanged="SetVisibility" NameChanged="RenameInstance" HitPointsChanged="SetHitPoints" SelectedChanged="SelectCombatant" />
             <div class="map-column">
-                <div class="map-instructions" role="status">
-                    @if (placingId is not null) { <span>Click a square to place @entries.FirstOrDefault(e => e.Id == placingId)?.Name.</span><button class="btn btn-sm btn-outline-secondary" @onclick="CancelPlacement">Cancel</button> }
-                    else { <span>Drag tokens to move · Drag background to pan</span> }
-                </div>
+                @if (placingId is not null)
+                {
+                    <div class="map-instructions" role="status"><span>Click a square to place @entries.FirstOrDefault(e => e.Id == placingId)?.Name.</span><button class="btn btn-sm btn-outline-secondary" @onclick="CancelPlacement">Cancel</button></div>
+                }
                 <div class="battlemap-host" @ref="host" aria-label="Battlemap image with square grid"></div>
             </div>
-            <div class="action-column"><CombatActionsPanel CampaignId="scene.CampaignId" Actor="SelectedActor" Loadout="SelectedLoadout" Entries="entries" Encounter="encounter" Disabled="@(map is null || busy || !encounter.Active || SelectedActor is null || encounter.IsDead(SelectedActor))" ResolveRequested="ResolveActions" ResetRequested="ResetActions" ActionSelected="ChooseAction" TargetReactionChanged="SetTargetReaction" TargetReactionStanceChanged="SetTargetReactionStance" TargetChanged="SetTarget" StanceChanged="SetStance" /></div>
+            <div class="action-column"><CombatActionsPanel CampaignId="scene.CampaignId" Actor="SelectedActor" Loadout="SelectedLoadout" Entries="entries" Encounter="encounter" Disabled="@(map is null || busy || !encounter.Active || SelectedActor is null || encounter.IsDead(SelectedActor))" CoverChanged="SetBehindCover" HidingChanged="SetHiding" ElevatedChanged="SetElevated" TagHitConfirmedChanged="ConfirmTagHit" SkillsRequested="OpenSkills" EquipRequested="OpenEquipment" EquipDisabled="@(busy || SelectedActor is null)" ResolveRequested="ResolveActions" ResetRequested="ResetActions" ActionSelected="ChooseAction" TargetReactionChanged="SetTargetReaction" TargetReactionStanceChanged="SetTargetReactionStance" TargetChanged="SetTarget" StanceChanged="SetStance" /></div>
         </div>
+        @if (editingSkills is { } skilled) { <CombatSkillsDialog @key="skilled.Id" Character="skilled" OnChanged="SkillsChanged" OnClose="() => editingSkills = null" /> }
+        @if (equipping is { } equipped) { <CombatEquipmentDialog @key="equipped.Id" Character="equipped" OnChanged="EquipmentChanged" OnClose="() => equipping = null" /> }
         @if (preEngagement)
         {
             <div class="encounter-backdrop">
@@ -107,14 +110,48 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
     private Task NextTurn() => ChangeEncounter(() => encounter.Next(entries));
     private Task SelectCombatant(int id) => encounter.Active && entries.Any(e => e.Id == id && encounter.IsDead(e)) ? Task.CompletedTask : ChangeEncounter(() => encounter.SelectCombatant(id, entries));
     private SceneCombatant? SelectedActor => entries.FirstOrDefault(e => e.Id == encounter.SelectedId);
-    private Task ChooseAction((int Column, string Action) choice) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.ChooseAction(actor.Id, choice.Action, entries, choice.Column)) : Task.CompletedTask;
+    private Task ChooseAction((int Column, string Action) choice) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.ChooseAction(actor.Id, choice.Action, entries, choice.Column, SelectedLoadout?.HasSmartTracker == true)) : Task.CompletedTask;
+    private Character? editingSkills;
+    private Character? equipping;
+    private Task OpenEquipment() => Run(async scene =>
+    {
+        if (SelectedActor is not { } actor) return;
+        var character = (await CharactersStore.ListAsync(scene.CampaignId, npcs: actor.IsNpc)).FirstOrDefault(c => c.Id == actor.CharacterId)
+            ?? throw new ArgumentException("This combatant is no longer in the campaign.");
+        editingSkills = null;
+        equipping = character with { Name = actor.Name };
+    });
+    private Task OpenSkills() => Run(async scene =>
+    {
+        if (SelectedActor is not { } actor) return;
+        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        var character = (await CharactersStore.ListAsync(scene.CampaignId, npcs: actor.IsNpc)).FirstOrDefault(c => c.Id == actor.CharacterId)
+            ?? throw new ArgumentException("This combatant is no longer in the campaign.");
+        equipping = null;
+        editingSkills = character with { Name = actor.Name };
+    });
+    private Task SkillsChanged() => Run(async scene =>
+    {
+        entries = (await ScenesStore.CombatantsAsync(scene.CampaignId, scene.Id)).ToList();
+        await SyncEncounterMap();
+    });
+    private Task EquipmentChanged() => Run(async scene =>
+    {
+        if (equipping is not { } character) return;
+        loadouts[character.Id] = new CombatLoadout(await EquipmentStore.ListDetailsForCharacterAsync(scene.CampaignId, character.Id));
+        await SyncEncounterMap();
+    });
     private Task ResolveActions() => SelectedActor is { } actor ? ChangeEncounter(() =>
     {
         var state = encounter.ActionFor(actor.Id);
         if (SelectedLoadout?.TargetBand(state, actor, entries.FirstOrDefault(e => e.Id == state.TargetId)) == "Out of Range")
             throw new ArgumentException("Ranged attack cannot be made: target is out of range.");
-        encounter.ResolveActions(actor.Id, entries);
+        encounter.ResolveActions(actor.Id, entries, SelectedLoadout?.HasSmartTracker == true);
     }) : Task.CompletedTask;
+    private Task SetBehindCover(bool value) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetCoverStatus(actor.Id, value, encounter.ActionFor(actor.Id).SelectedHiding, entries)) : Task.CompletedTask;
+    private Task SetHiding(bool value) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetCoverStatus(actor.Id, encounter.ActionFor(actor.Id).SelectedBehindCover, value, entries)) : Task.CompletedTask;
+    private Task SetElevated(bool value) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetElevated(actor.Id, value, entries)) : Task.CompletedTask;
+    private Task ConfirmTagHit(bool value) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.ConfirmTagTargetHit(actor.Id, value, entries)) : Task.CompletedTask;
     private Task ResetActions() => SelectedActor is { } actor ? ChangeEncounter(() => encounter.ResetActions(actor.Id, entries)) : Task.CompletedTask;
     private Task SetTarget(int? target) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetTarget(actor.Id, target, entries)) : Task.CompletedTask;
     private Task SetTargetReaction(string reaction) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetTargetReaction(actor.Id, reaction, entries)) : Task.CompletedTask;
@@ -129,7 +166,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         foreach (var id in entries.Select(e => e.CharacterId).Distinct().Where(id => !loadouts.ContainsKey(id)))
             loadouts[id] = new CombatLoadout(await EquipmentStore.ListDetailsForCharacterAsync(scene.CampaignId, id));
         if (map is null) return;
-        await map.InvokeVoidAsync("setEncounterState", encounter.Active, encounter.SelectedId, entries.Where(encounter.IsDead).Select(e => e.Id).ToArray(), encounter.Round, encounter.PlayerTracker(entries), entries.Where(e => e.IsNpc).Select(e => new { e.Id, HealthWidth = encounter.HealthWidth(e), HealthColour = encounter.HealthColour(e) }).ToArray(), encounter.MovementRanges(entries), encounter.SelectedId is int selected ? encounter.ActionFor(selected).TargetId : null, SelectedActor is { } actor && encounter.ActionFor(actor.Id).MajorAction == "Ranged Attack" ? SelectedLoadout?.RangeFor(encounter.ActionFor(actor.Id)) : null, CombatActionSummary.Create(encounter, SelectedActor, entries, SelectedLoadout, player: true));
+        await map.InvokeVoidAsync("setEncounterState", encounter.Active, encounter.SelectedId, entries.Where(encounter.IsDead).Select(e => e.Id).ToArray(), encounter.Round, encounter.PlayerTracker(entries), entries.Select(e => new { e.Id, HealthWidth = encounter.HealthWidth(e), HealthColour = encounter.HealthColour(e) }).ToArray(), encounter.MovementRanges(entries), encounter.SelectedId is int selected ? encounter.ActionFor(selected).TargetId : null, SelectedActor is { } actor && encounter.ActionFor(actor.Id).MajorAction == "Ranged Attack" ? SelectedLoadout?.RangeFor(encounter.ActionFor(actor.Id)) : null, CombatActionSummary.Create(encounter, SelectedActor, entries, SelectedLoadout, player: true));
     }
     private ElementReference host, presentationLink;
     private IJSObjectReference? module, map;
