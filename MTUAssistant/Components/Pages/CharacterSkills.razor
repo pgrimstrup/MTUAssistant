@@ -30,7 +30,7 @@
             </select></label>
             @if (speciality == Custom) { <label>Custom Specialty <input class="form-control" maxlength="120" @bind="customSpeciality" disabled="@busy" /></label> }
         }
-        <label>Level <input class="form-control skill-level" type="number" min="0" @bind="level" disabled="@busy" /></label>
+        <label>Level <input class="form-control skill-level" type="number" min="0" max="@(SkillRules.MaximumRank(selectedSkill == Custom ? customSkill : selectedSkill))" @bind="level" disabled="@busy" /></label>
         <button type="button" class="btn btn-primary" @onclick="Save" disabled="@busy">@(editingId == 0 ? "Add Skill" : "Save Skill")</button>
         @if (editingId != 0) { <button type="button" class="btn btn-outline-secondary" @onclick="CancelEdit" disabled="@busy">Cancel</button> }
     </div>

@@ -293,12 +293,12 @@ public static class CombatActionChecks
         );
         var generic = hero with { Tactics = 2 };
         Check(
-            Encounter.TravellerTacticsLevel(generic) == 2
+            Encounter.TravellerTacticsLevel(generic) == 0
                 && Encounter.TravellerTacticsLevel(hero) is null,
             "Generic Tactics qualifies and missing skill remains untrained"
         );
         Check(
-            Encounter.RollTravellers(new[] { generic, enemy }, true, () => 7).Tactics == 1,
+            Encounter.RollTravellers(new[] { generic, enemy }, true, () => 7).Tactics == -1,
             "Auto-initiative rolls generic Tactics as well as Military Tactics"
         );
         Check(

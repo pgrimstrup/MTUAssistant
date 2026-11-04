@@ -57,7 +57,7 @@ public sealed partial class SceneService
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<MtuDbContext>();
-        return await Combatants(db, campaignId, sceneId)
+        var result = await Combatants(db, campaignId, sceneId)
             .OrderBy(t => t.Character.IsNpc)
             .ThenBy(t => t.Id)
             .Select(t => new SceneCombatant(
@@ -85,6 +85,7 @@ public sealed partial class SceneService
                     .Max()
             ))
             .ToArrayAsync();
+        return await WithSkillChecks(db, result);
     }
 
     // Opening a scene only removes invalid assignments; adding Travellers is explicit.
@@ -135,7 +136,7 @@ public sealed partial class SceneService
         };
         db.SceneTokens.Add(token);
         await db.SaveChangesAsync();
-        return new(
+        var entry = new SceneCombatant(
             token.Id,
             characterId,
             token.Name,
@@ -162,6 +163,7 @@ public sealed partial class SceneService
                 .Select(s => (int?)s.Level)
                 .MaxAsync()
         );
+        return (await WithSkillChecks(db, [entry]))[0];
     }
 
     public async Task<SceneCombatant> PositionCombatantAsync(
@@ -242,7 +244,7 @@ public sealed partial class SceneService
             ?? throw new ArgumentException("This combatant is no longer in this scene.");
         edit(token);
         await db.SaveChangesAsync();
-        return new(
+        var entry = new SceneCombatant(
             token.Id,
             token.CharacterId,
             token.Character.IsNpc ? token.Name : token.Character.Name,
@@ -271,6 +273,33 @@ public sealed partial class SceneService
                 .Select(s => (int?)s.Level)
                 .MaxAsync()
         );
+        return (await WithSkillChecks(db, [entry]))[0];
+    }
+
+    private static async Task<SceneCombatant[]> WithSkillChecks(
+        MtuDbContext db,
+        IReadOnlyList<SceneCombatant> entries
+    )
+    {
+        var ids = entries.Select(e => e.CharacterId).Distinct().ToArray();
+        var skills = await db
+            .CharacterSkills.AsNoTracking()
+            .Where(s => ids.Contains(s.CharacterId))
+            .Select(s => new CharacterSkill(s.Id, s.CharacterId, s.Name, s.Level))
+            .ToArrayAsync();
+        var byCharacter = skills.ToLookup(s => s.CharacterId);
+        return entries
+            .Select(e =>
+                e with
+                {
+                    MilitaryTactics = SkillRules.Rank(
+                        byCharacter[e.CharacterId],
+                        "Tactics (Military)"
+                    ),
+                    Tactics = SkillRules.Rank(byCharacter[e.CharacterId], "Tactics"),
+                }
+            )
+            .ToArray();
     }
 
     private static IQueryable<SceneTokenEntity> Combatants(

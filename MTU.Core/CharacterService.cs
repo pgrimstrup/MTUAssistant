@@ -113,22 +113,8 @@ public sealed class CharacterService(MtuDbContext db)
 
     public static int? IntelligenceDm(string? upp) => CharacteristicDm(upp, 3);
 
-    public static int SkillDm(Character character, string requiredSkill)
-    {
-        var skills = character.Skills ?? [];
-        var trained = skills
-            .Where(s => s.Name.Equals(requiredSkill, StringComparison.OrdinalIgnoreCase))
-            .Select(s => (int?)s.Level)
-            .Max();
-        if (trained.HasValue)
-            return trained.Value;
-        var jackOfAllTrades = skills
-            .Where(s => s.Name.Equals("Jack-of-All-Trades", StringComparison.OrdinalIgnoreCase))
-            .Select(s => s.Level)
-            .DefaultIfEmpty(0)
-            .Max();
-        return -3 + Math.Clamp(jackOfAllTrades, 0, 3);
-    }
+    public static int SkillDm(Character character, string requiredSkill) =>
+        SkillRules.Dm(character.Skills ?? [], requiredSkill);
 
     public static int? EducationDm(string? upp) => CharacteristicDm(upp, 4);
 
@@ -255,8 +241,7 @@ public sealed class CharacterService(MtuDbContext db)
         var name = skill.Name?.Trim() ?? "";
         if (name.Length is 0 or > 120)
             throw new ArgumentException("Enter a skill name of up to 120 characters.");
-        if (skill.Level < 0)
-            throw new ArgumentException("Skill level must be zero or greater.");
+        name = SkillRules.Validate(name, skill.Level);
         if (
             !await db.Characters.AnyAsync(t =>
                 t.Id == skill.CharacterId && t.CampaignId == campaignId

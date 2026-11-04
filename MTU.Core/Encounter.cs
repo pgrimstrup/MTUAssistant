@@ -123,7 +123,9 @@ public sealed partial class Encounter
             .ThenBy(e => e.Id);
 
     public static int? TravellerTacticsLevel(SceneCombatant entry) =>
-        new[] { entry.MilitaryTactics, entry.Tactics }.Max();
+        entry.MilitaryTactics is int military ? Math.Clamp(military, 0, 5)
+        : entry.Tactics.HasValue ? 0
+        : null;
 
     public static (IReadOnlyDictionary<int, int> Initiative, int Tactics) RollTravellers(
         IEnumerable<SceneCombatant> entries,
@@ -167,13 +169,13 @@ public sealed partial class Encounter
         ambush.Clear();
         ResetTurnActions();
         var leader = entries
-            .Where(e => e.IsNpc && e.MilitaryTactics.HasValue)
-            .OrderByDescending(e => e.MilitaryTactics + Dm(Math.Max(Stat(e, 3), Stat(e, 4))))
+            .Where(e => e.IsNpc && TravellerTacticsLevel(e).HasValue)
+            .OrderByDescending(e => TravellerTacticsLevel(e) + Dm(Math.Max(Stat(e, 3), Stat(e, 4))))
             .FirstOrDefault();
         EnemyTactics =
             enemyAware && leader is not null
                 ? dice()
-                    + leader.MilitaryTactics!.Value
+                    + TravellerTacticsLevel(leader)!.Value
                     + Dm(Math.Max(Stat(leader, 3), Stat(leader, 4)))
                     - 8
                 : 0;

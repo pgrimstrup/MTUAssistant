@@ -315,13 +315,13 @@ public static class SceneChecks
             {
                 CharacterId = 101,
                 Name = "Tactics",
-                Level = 1,
+                Level = 0,
             }
         );
         await db.SaveChangesAsync();
         Check(
             (await store.CombatantsAsync(1, saved.Id)).Single(t => t.CharacterId == 101).Tactics
-                == 1,
+                == 0,
             "Scene roster loads generic Tactics for pre-engagement training details"
         );
         var traveller = roster.Single(t => t.CharacterId == 101);

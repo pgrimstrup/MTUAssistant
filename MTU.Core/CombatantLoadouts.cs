@@ -107,9 +107,7 @@ public static class CombatantLoadouts
         var match = Regex.Match(required, @"^(.*?)(?:\s+(\d+))?$", RegexOptions.CultureInvariant);
         var skill = match.Groups[1].Value.Trim();
         var rank = match.Groups[2].Success ? int.Parse(match.Groups[2].Value) : 0;
-        return (npc.Skills ?? []).Any(s =>
-            s.Name.Equals(skill, StringComparison.OrdinalIgnoreCase) && s.Level >= rank
-        );
+        return SkillRules.Rank(npc.Skills ?? [], skill) is int known && known >= rank;
     }
 
     private static int WeaponSkill(Character npc, EquipmentItem weapon)
@@ -122,12 +120,6 @@ public static class CombatantLoadouts
                 ? "Energy"
             : name.Contains("bow", StringComparison.OrdinalIgnoreCase) ? "Archaic"
             : "Slug";
-        var exact = (npc.Skills ?? [])
-            .Where(s =>
-                s.Name.Equals($"Gun Combat ({speciality})", StringComparison.OrdinalIgnoreCase)
-            )
-            .Select(s => (int?)s.Level)
-            .Max();
-        return exact ?? CharacterService.SkillDm(npc, "Gun Combat");
+        return CharacterService.SkillDm(npc, $"Gun Combat ({speciality})");
     }
 }

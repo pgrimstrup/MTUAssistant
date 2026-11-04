@@ -7,6 +7,7 @@ using MTU.Core;
 using MTU.Core.Data;
 using MTU.Core.Models;
 
+await SkillChecks.RunAsync();
 await NpcGenerationChecks.RunAsync();
 await SceneChecks.RunAsync();
 
