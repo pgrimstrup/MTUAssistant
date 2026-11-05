@@ -1,14 +1,16 @@
 ﻿@inherits LayoutComponentBase
-@implements IDisposable
+@implements IAsyncDisposable
+@inject IJSRuntime JS
 @inject MTUAssistant.Services.MapPointerLocation PointerLocation
 
-<div class="page">
-    <div class="sidebar">
+<div class="page" @ref="page">
+    <div class="sidebar" id="main-navigation" @ref="sidebar">
         <NavMenu />
     </div>
 
     <main>
         <div class="top-row px-4">
+            <button type="button" class="nav-panel-toggle" @ref="navToggle" aria-controls="main-navigation" aria-expanded="true" aria-label="Collapse navigation" title="Collapse navigation"><span aria-hidden="true">☰</span></button>
             <div class="map-location" aria-label="Map pointer location">
                 @if (PointerLocation.Sector is { } sector)
                 {
@@ -40,5 +42,19 @@
 @code {
     protected override void OnInitialized() => PointerLocation.Changed += OnLocationChanged;
     private void OnLocationChanged() => _ = InvokeAsync(StateHasChanged);
-    public void Dispose() => PointerLocation.Changed -= OnLocationChanged;
+    private ElementReference page, sidebar, navToggle;
+    private IJSObjectReference? navigationModule;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        navigationModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/NavigationPanel.js");
+        await navigationModule.InvokeVoidAsync("initialize", page, sidebar, navToggle);
+    }
+    public async ValueTask DisposeAsync()
+    {
+        PointerLocation.Changed -= OnLocationChanged;
+        if (navigationModule is null) return;
+        try { await navigationModule.InvokeVoidAsync("dispose", page); await navigationModule.DisposeAsync(); }
+        catch (JSDisconnectedException) { }
+    }
 }
