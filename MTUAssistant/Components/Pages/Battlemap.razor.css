@@ -7,9 +7,7 @@ h1 { font-size:1.4rem; margin:0; } .muted { color:var(--app-muted); font-size:.7
 .controls .btn { min-height:34px; padding:.3rem .6rem; font-size:.8rem; }
 .present-link { display:flex; align-items:center; justify-content:center; } .present-link svg { width:20px; height:20px; fill:currentColor; }
 .battlemap-workspace { display:grid; grid-template-columns:17.5rem minmax(0,1fr) 24rem; gap:.6rem; height:calc(100dvh - 10rem); min-height:360px; }
-.map-column { display:flex; flex-direction:column; min-width:0; min-height:0; }
-.map-instructions { min-height:1.9rem; display:flex; align-items:center; justify-content:space-between; gap:.4rem; padding:0 .1rem .3rem; color:var(--app-muted); font-size:.75rem; }
-.map-instructions .btn { padding:.1rem .4rem; font-size:.7rem; }
+.map-column { position:relative; display:flex; flex-direction:column; min-width:0; min-height:0; }
 .battlemap-host { flex:1; min-height:0; position:relative; overflow:hidden; background:#080c14; border:1px solid var(--app-border); border-radius:.5rem; touch-action:none; cursor:grab; }
 .battlemap-host:active { cursor:grabbing; }
 .battlemap-host ::deep canvas { display:block; user-select:none; -webkit-user-drag:none; touch-action:none; }
@@ -23,3 +21,5 @@ h1 { font-size:1.4rem; margin:0; } .muted { color:var(--app-muted); font-size:.7
 .action-column { min-width:0; min-height:0; }
 .encounter-dialog .tactics-skills { margin-top:-.25rem; color:var(--app-muted); font-size:.75rem; }
 .encounter-dialog .auto-initiative { font-size:.75rem; padding:.2rem .4rem; }
+
+.cancel-placement { position:absolute; top:.5rem; right:.5rem; z-index:2; }

@@ -18,12 +18,30 @@ public sealed record CombatWeaponRange(double Range, bool Scope, int AimBonus)
     }
 }
 
+public sealed record ProtectionContribution(int Value, string? Label = null)
+{
+    public string Description => $"DR +{Value}" + (Label is null ? "" : $" {Label}");
+}
+
 public sealed class CombatLoadout(IReadOnlyList<CharacterEquipmentDetails> equipment)
 {
     private IEnumerable<CharacterEquipmentDetails> Equipped => equipment.Where(e => e.Equipped);
+    public int AutoScore => AutoFire.Score(RangedWeapon?.Equipment.Traits);
     public bool HasSmartTracker => Equipped.Any(e => e.SupportsAttachments && e.SmartTracker);
     public CharacterEquipmentDetails? RangedWeapon => StrongestWeapon(true);
-    public CharacterEquipmentDetails? MeleeWeapon => StrongestWeapon(false);
+    public CharacterEquipmentDetails MeleeWeapon => StrongestWeapon(false) ?? UnarmedWeapon;
+    public static CharacterEquipmentDetails UnarmedWeapon =>
+        new()
+        {
+            Equipped = true,
+            Equipment = new()
+            {
+                Kind = EquipmentKind.Weapon,
+                Name = "Unarmed",
+                RequiredSkill = "Melee (Unarmed)",
+                Damage = "1D",
+            },
+        };
 
     private CharacterEquipmentDetails? StrongestWeapon(bool ranged) =>
         Equipped
@@ -88,7 +106,13 @@ public sealed class CombatLoadout(IReadOnlyList<CharacterEquipmentDetails> equip
             .Where(e => e.Equipment.Kind == EquipmentKind.Armour)
             .Sum(e => e.Equipment.Protection);
 
-    public int ArmourProtectionFor(EquipmentItem weapon, bool melee)
+    public int ArmourProtectionFor(EquipmentItem weapon, bool melee) =>
+        ArmourProtectionPartsFor(weapon, melee).Sum(part => part.Value);
+
+    public IReadOnlyList<ProtectionContribution> ArmourProtectionPartsFor(
+        EquipmentItem weapon,
+        bool melee
+    )
     {
         var laser = Regex.IsMatch(weapon.Name, @"\bLaser\b", RegexOptions.IgnoreCase);
         var energy = string.Equals(
@@ -103,19 +127,22 @@ public sealed class CombatLoadout(IReadOnlyList<CharacterEquipmentDetails> equip
         );
         return Equipped
             .Where(e => e.Equipment.Kind == EquipmentKind.Armour)
-            .Sum(e =>
+            .Select(e =>
             {
                 var armour = e.Equipment;
                 if (melee)
-                    return armour.ProtectionK ?? armour.Protection;
-                if (laser && armour.ProtectionL.HasValue)
-                    return armour.ProtectionL.Value;
-                if (energy)
-                    return armour.ProtectionE ?? armour.Protection;
-                if (slug)
-                    return armour.ProtectionK ?? armour.Protection;
-                return armour.Protection;
-            });
+                    return armour.ProtectionK is int meleeKinetic
+                        ? new ProtectionContribution(meleeKinetic, "vs Kinetic")
+                        : new(armour.Protection);
+                if (laser && armour.ProtectionL is int laserProtection)
+                    return new(laserProtection, "vs Lasers");
+                if (energy && armour.ProtectionE is int energyProtection)
+                    return new(energyProtection, "vs Energy");
+                if (slug && armour.ProtectionK is int kineticProtection)
+                    return new(kineticProtection, "vs Kinetic");
+                return new ProtectionContribution(armour.Protection);
+            })
+            .ToArray();
     }
 
     public string Armour =>
@@ -138,11 +165,14 @@ public sealed class CombatLoadout(IReadOnlyList<CharacterEquipmentDetails> equip
             ? null
             : new(
                 weapon.Equipment.Range,
-                weapon.Scope
-                    || Regex.IsMatch(
-                        weapon.Equipment.Traits,
-                        @"\bScope\b",
-                        RegexOptions.IgnoreCase
+                !state.AutomaticFire
+                    && (
+                        weapon.Scope
+                        || Regex.IsMatch(
+                            weapon.Equipment.Traits,
+                            @"\bScope\b",
+                            RegexOptions.IgnoreCase
+                        )
                     ),
                 state.MajorAction == "Ranged Attack" ? state.RangedAimBonus : state.AimBonus
             );

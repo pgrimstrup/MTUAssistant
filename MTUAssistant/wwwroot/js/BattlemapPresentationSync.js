@@ -50,8 +50,9 @@ function validMovementTrail(t) {
         && [t.fromColumn,t.fromRow,t.toColumn,t.toRow].every(v => Number.isInteger(v) && v >= 0);
 }
 export function playerTargetSelection(actorId,targetId,tokens,rangeProfile = null) {
-    return actorId !== targetId && tokens.some(t => t.id === actorId && t.isVisible === true) && tokens.some(t => t.id === targetId && t.isVisible === true)
-        ? {actorId,targetId,...(rangeProfile ? {rangeProfile:{range:rangeProfile.range,scope:rangeProfile.scope,aimBonus:rangeProfile.aimBonus}} : {})} : null;
+    const ids = [...new Set(Array.isArray(targetId) ? targetId : [targetId])].filter(id => id !== actorId && tokens.some(t => t.id === id && t.isVisible === true));
+    return ids.length && tokens.some(t => t.id === actorId && t.isVisible === true)
+        ? {actorId,targetId:ids[0],...(ids.length > 1 ? {targetIds:ids} : {}),...(rangeProfile ? {rangeProfile:{range:rangeProfile.range,scope:rangeProfile.scope,aimBonus:rangeProfile.aimBonus}} : {})} : null;
 }
 function validAttackModifiers(modifiers,isNpc) {
     return modifiers == null || (!isNpc && Array.isArray(modifiers.rows)
@@ -62,7 +63,7 @@ function validAttackModifiers(modifiers,isNpc) {
 export function validBattlemapSnapshot(state) {
     if (state === null) return true;
     const scene = state?.scene, view = state?.view;
-    return (state.actionSummary == null || (state.combatMode === true && state.tracker?.some(e => e.id === state.actionSummary.id && e.isVisible === true) && validAttackModifiers(state.actionSummary.attackModifiers,state.actionSummary.isNpc) && Array.isArray(state.actionSummary.columns) && state.actionSummary.columns.every(c => typeof c.title === "string" && Array.isArray(c.buttons) && c.buttons.every(b => typeof b.text === "string" && typeof b.selected === "boolean")) && Array.isArray(state.actionSummary.rows) && state.actionSummary.rows.every(r => typeof r.label === "string" && typeof r.value === "string" && (!state.actionSummary.isNpc || !["Armour","Weapon"].includes(r.label)))))
+    return (state.actionSummary == null || (state.combatMode === true && state.tracker?.some(e => e.id === state.actionSummary.id && e.isVisible === true) && validAttackModifiers(state.actionSummary.attackModifiers,state.actionSummary.isNpc) && (state.actionSummary.targetAttackModifiers == null || (Array.isArray(state.actionSummary.targetAttackModifiers) && state.actionSummary.targetAttackModifiers.every(t => typeof t.name === "string" && state.tracker?.some(e => e.id === t.targetId && e.isVisible === true) && validAttackModifiers(t.modifiers,state.actionSummary.isNpc)))) && Array.isArray(state.actionSummary.columns) && state.actionSummary.columns.every(c => typeof c.title === "string" && Array.isArray(c.buttons) && c.buttons.every(b => typeof b.text === "string" && typeof b.selected === "boolean")) && Array.isArray(state.actionSummary.rows) && state.actionSummary.rows.every(r => typeof r.label === "string" && typeof r.value === "string" && (!state.actionSummary.isNpc || !["Armour","Weapon"].includes(r.label)))))
         && (state.round === undefined || (Number.isInteger(state.round) && state.round >= 0))
         && (state.movementTrails === undefined || (Array.isArray(state.movementTrails) && state.movementTrails.every(validMovementTrail)))
         && (state.movementRanges === undefined || (Array.isArray(state.movementRanges) && state.movementRanges.every(validMovementRange)))
@@ -75,6 +76,7 @@ export function validBattlemapSnapshot(state) {
         && Array.isArray(state.tokens)
         && (state.targetSelection == null || (Number.isInteger(state.targetSelection.actorId) && Number.isInteger(state.targetSelection.targetId)
             && (state.targetSelection.rangeProfile == null || (Number.isFinite(state.targetSelection.rangeProfile.range) && state.targetSelection.rangeProfile.range > 0 && typeof state.targetSelection.rangeProfile.scope === "boolean" && Number.isInteger(state.targetSelection.rangeProfile.aimBonus) && state.targetSelection.rangeProfile.aimBonus >= 0 && state.targetSelection.rangeProfile.aimBonus <= 6))
+            && (state.targetSelection.targetIds == null || (Array.isArray(state.targetSelection.targetIds) && state.targetSelection.targetIds[0] === state.targetSelection.targetId && new Set(state.targetSelection.targetIds).size === state.targetSelection.targetIds.length && state.targetSelection.targetIds.every(id => Number.isInteger(id) && id !== state.targetSelection.actorId && state.tokens.some(t => t.id === id && t.isVisible === true))))
             && state.targetSelection.actorId !== state.targetSelection.targetId
             && state.tokens.some(t => t.id === state.targetSelection.actorId && t.isVisible === true)
             && state.tokens.some(t => t.id === state.targetSelection.targetId && t.isVisible === true)))

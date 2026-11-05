@@ -3,11 +3,11 @@
 @inject IJSRuntime JS
 
 <dialog @ref="dialog" class="attack-dialog" aria-labelledby="attack-dialog-title">
-    <header><h2 id="attack-dialog-title">Resolve Attack</h2><button type="button" class="btn btn-sm btn-outline-primary auto-roll" disabled="@Busy" @onclick="AutoRoll">Auto Roll</button></header>
+    <header><h2 id="attack-dialog-title">Resolve Attack@(TargetCount > 1 ? $" ({TargetNumber}/{TargetCount})" : "")</h2><button type="button" class="btn btn-sm btn-outline-primary auto-roll" disabled="@Busy" @onclick="AutoRoll">Auto Roll</button></header>
     <p class="combatants"><strong>@Resolution.ActorName</strong> → <strong>@Resolution.TargetName</strong></p>
     <p class="weapon">@Resolution.Weapon.Name · @Resolution.Weapon.Damage damage</p>
     <div class="roll-fields">
-        <label><span>Attack Roll (2D6)</span><input class="form-control form-control-sm" type="number" min="2" max="12" value="@Resolution.AttackRoll" disabled="@Busy" @onchange="ChangeAttack" /></label>
+        <label><span>Attack Roll (2D)</span><input class="form-control form-control-sm" type="number" min="2" max="12" value="@Resolution.AttackRoll" disabled="@Busy" @onchange="ChangeAttack" /></label>
         <label><span>Damage Roll (@Resolution.Weapon.Damage)</span><input class="form-control form-control-sm" type="number" min="0" max="1000000" value="@Resolution.DamageRoll" disabled="@(Busy || Resolution.Outcome?.Hit != true)" @onchange="ChangeDamage" /></label>
     </div>
     <table class="modifiers"><caption>Attack modifiers</caption><tbody>
@@ -15,7 +15,13 @@
     </tbody><tfoot><tr><th scope="row">Total DM</th><td>@Resolution.Modifiers.Total.ToString("+0;-0;0")</td></tr></tfoot></table>
     <dl>
         <dt>Total Damage</dt><dd>@(Resolution.Outcome is { } result && (!result.Hit || Resolution.DamageRoll.HasValue) ? result.TotalDamage.ToString() : "Pending")</dd>
-        <dt>Overall Protection</dt><dd>@Resolution.OverallProtection</dd>
+        <dt>
+            Overall Protection
+            @if (!string.IsNullOrEmpty(Resolution.ProtectionBreakdown))
+            {
+                <small class="protection-breakdown">@Resolution.ProtectionBreakdown</small>
+            }
+        </dt><dd>@Resolution.OverallProtection</dd>
         <dt>Weapon AP</dt><dd>@Resolution.ArmourPiercing</dd>
         <dt>Remaining Protection</dt><dd>@Math.Max(0, Resolution.OverallProtection - Resolution.ArmourPiercing)</dd>
         @if (Resolution.ApplicableInjuryTolerance != InjuryTolerance.None)
@@ -30,12 +36,14 @@
     <label class="injury-field"><span>Actual Injury</span><input class="form-control form-control-sm" type="number" min="0" max="1000000" value="@Resolution.Injury" disabled="@(Busy || Resolution.Outcome?.Hit != true || !Resolution.DamageRoll.HasValue)" @onchange="ChangeInjury" /></label>
     @if (Resolution.RollError is { } rollError) { <p role="alert">@rollError</p> }
     @if (!string.IsNullOrWhiteSpace(validation ?? Error)) { <p role="alert" class="error">@(validation ?? Error)</p> }
-    <footer><button class="btn btn-primary" disabled="@(Busy || !Resolution.Ready || validation is not null)" @onclick="() => OnApply.InvokeAsync()">Apply Damage</button>
+    <footer><button class="btn btn-primary" disabled="@(Busy || !Resolution.Ready || validation is not null)" @onclick="() => OnApply.InvokeAsync()">@(TargetNumber < TargetCount ? "Confirm & Next" : "Apply Damage")</button>
     <button class="btn btn-outline-secondary" disabled="@Busy" @onclick="Cancel">Cancel</button></footer>
 </dialog>
 
 @code {
     [Parameter, EditorRequired] public AttackResolution Resolution { get; set; } = default!;
+    [Parameter] public int TargetNumber { get; set; } = 1;
+    [Parameter] public int TargetCount { get; set; } = 1;
     [Parameter] public bool Busy { get; set; }
     [Parameter] public string? Error { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }

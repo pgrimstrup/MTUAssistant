@@ -71,6 +71,7 @@ public sealed class EquipmentService(MtuDbContext db)
         CharacterSkillCatalogue
             .Find("Gun Combat")!
             .Specialities.Select(s => $"Gun Combat ({s})")
+            .Append("Athletics (Dexterity)")
             .Concat(
                 CharacterSkillCatalogue
                     .Find("Melee")!
@@ -141,7 +142,7 @@ public sealed class EquipmentService(MtuDbContext db)
                 && !WeaponRequiredSkills.Contains(value.RequiredSkill)
             )
                 throw new ArgumentException(
-                    "Choose a Gun Combat or Melee specialization (except Natural), or leave Required Skill blank."
+                    "Choose Gun Combat, Athletics (Dexterity), or a Melee specialization (except Natural), or leave Required Skill blank."
                 );
         }
         if (

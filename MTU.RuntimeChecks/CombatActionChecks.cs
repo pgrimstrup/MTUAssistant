@@ -595,6 +595,8 @@ public static class CombatActionChecks
         );
         var origin = movement.ActionFor(hero.Id).TurnOriginColumn;
         movement.SetTarget(hero.Id, enemy.Id, roster);
+        movement.SetTarget(hero.Id, enemy.Id, roster);
+        movement.SetTarget(hero.Id, enemy.Id, roster);
         movement.ResolveActions(hero.Id, roster);
         movement.ResetActions(hero.Id, roster);
         var reset = movement.ActionFor(hero.Id);
@@ -612,6 +614,7 @@ public static class CombatActionChecks
             "Reset retains stance, target and turn origin"
         );
         movement.ChooseAction(hero.Id, "Ranged Attack", roster);
+        movement.SetTarget(hero.Id, enemy.Id, roster);
         movement.ResolveActions(hero.Id, roster);
         movement.ResetActions(hero.Id, roster);
         Check(movement.ActionFor(hero.Id).MajorAction is null, "Reset clears selected major");
@@ -815,6 +818,7 @@ public static class CombatActionChecks
             "Reset removes pending reaction and circle"
         );
         reactions.ChooseAction(101, "Melee Attack", reactionRoster);
+        reactions.SetTarget(101, 103, reactionRoster);
         reactions.SetTargetReaction(101, "Dodge", reactionRoster);
         reactions.ChooseAction(101, "Leadership", reactionRoster);
         Check(
@@ -980,7 +984,7 @@ public static class CombatActionChecks
         {
             var snapshot = value.Snapshot();
             var states = new Dictionary<int, CombatantActionState>(snapshot.Actions ?? []);
-            states[1] = value.ActionFor(1) with { TargetHasBeenHit = true };
+            states[1] = value.ActionFor(1) with { TargetId = 2, TargetHasBeenHit = true };
             value.Restore(snapshot with { Actions = states }, roster);
         }
         var tagged = Fresh();
@@ -1023,7 +1027,7 @@ public static class CombatActionChecks
         );
         tagged.ResetActions(1, roster);
         tagged.SetTarget(1, 2, roster);
-        Check(tagged.ActionFor(1).TargetTagged, "Keeping same target preserves tag");
+        Check(tagged.ActionFor(1).TargetTagged, "Reset retains the current target tag");
         tagged.SetTarget(1, null, roster);
         Check(!tagged.ActionFor(1).TargetHasBeenHit, "Changing target clears the hit record");
         Check(!tagged.ActionFor(1).TargetTagged, "Changing or clearing target removes tag");
@@ -1110,8 +1114,8 @@ public static class CombatActionChecks
         hiddenMinor.SetCoverStatus(1, false, false, roster);
         Check(
             hiddenMinor.CanChooseAction(1, "Aim")
-                && hiddenMinor.CanChooseAction(1, "Tag Target", true),
-            "Unchecking Hiding restores Aim and Tag Target availability"
+                && !hiddenMinor.CanChooseAction(1, "Tag Target", true),
+            "Unchecking Hiding restores Aim but cleared targets must be hit again before tagging"
         );
         var priority = Fresh();
         priority.ChooseAction(1, "Ranged Attack", roster);

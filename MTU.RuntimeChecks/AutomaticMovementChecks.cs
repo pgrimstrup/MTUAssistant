@@ -197,6 +197,35 @@ public static class AutomaticMovementChecks
                 && resetState.TurnOriginRow == 0,
             "Reset returns token to saved turn origin and persists cleared actions atomically"
         );
+        var committed = Fresh();
+        Move(committed, 9, 0);
+        var movedRoster = roster
+            .Select(e => e.Id == 1 ? e with { Column = 9, Row = 0 } : e)
+            .ToArray();
+        committed.ResolveActions(1, movedRoster);
+        Check(
+            committed.ActionFor(1).ActionsResolved
+                && committed.ActionFor(1).MovementDiameter is null
+                && committed.MovementRanges(movedRoster).Count == 0
+                && committed.AutomaticMoveFor(movedRoster) is null,
+            "Resolving Move 3 clears movement circles and automatic movement previews"
+        );
+        Check(
+            committed.ActionFor(1).TurnOriginColumn == 9
+                && committed.ActionFor(1).TurnOriginRow == 0,
+            "Resolution commits the current token position as the turn origin"
+        );
+        var resumed = new Encounter();
+        resumed.Restore(committed.Snapshot(), movedRoster);
+        Check(
+            resumed.MovementRanges(movedRoster).Count == 0,
+            "Committed movement circles stay cleared after restore"
+        );
+        resumed.ResetActions(1, movedRoster);
+        Check(
+            resumed.ActionFor(1).TurnOriginColumn == 9 && resumed.ActionFor(1).TurnOriginRow == 0,
+            "Reset after resolution retains the committed destination rather than the old origin"
+        );
         Console.WriteLine(
             "Automatic Move distance/tolerance, reduction, origin persistence, action guards and atomic drag saves passed."
         );

@@ -2,6 +2,32 @@ namespace MTU.Core;
 
 public sealed partial class Encounter
 {
+    private void CommitTargetReaction(CombatantActionState state, SceneCombatant target)
+    {
+        if (state.TargetReaction == "None")
+            return;
+        var defence = ActionFor(target.Id);
+        var stance =
+            state.TargetReaction == "Dive for Prone" ? "Prone"
+            : state.TargetReaction is "Dive for Cover" or "Dive to Hide"
+                ? state.TargetReactionStance ?? defence.Stance
+            : defence.Stance;
+        defence = defence with
+        {
+            ReactionCount = defence.ReactionCount + 1,
+            Stance = stance,
+            BehindCover = defence.BehindCover || state.TargetReaction == "Dive for Cover",
+            Hiding = defence.Hiding || state.TargetReaction == "Dive to Hide",
+            CoverProtection =
+                state.TargetReaction == "Dive to Hide"
+                    ? state.TargetReactionCover
+                    : defence.CoverProtection,
+        };
+        if (state.TargetReaction == "Dive to Hide")
+            defence = ClearTargets(defence);
+        actions[target.Id] = defence with { MovementDiameter = MovementDiameterFor(defence) };
+    }
+
     private void RequireUnresolved(int id)
     {
         if (ActionFor(id).ActionsResolved)
@@ -48,27 +74,18 @@ public sealed partial class Encounter
             throw new ArgumentException(
                 "Tag Target requires an equipped Smart Tracker and a target that has been hit."
             );
-        if (target is not null && state.TargetReaction != "None")
-        {
-            var defence = ActionFor(target.Id);
-            var stance =
-                state.TargetReaction == "Dive for Prone" ? "Prone"
-                : state.TargetReaction == "Dive for Cover"
-                    ? state.TargetReactionStance ?? defence.Stance
-                : defence.Stance;
-            defence = defence with
-            {
-                ReactionCount = defence.ReactionCount + 1,
-                Stance = stance,
-                BehindCover = defence.BehindCover || state.TargetReaction == "Dive for Cover",
-            };
-            actions[target.Id] = defence with { MovementDiameter = MovementDiameterFor(defence) };
-        }
+        if (target is not null)
+            CommitTargetReaction(state, target);
         state = state with
         {
             Stance = state.SelectedStance,
             PendingStance = null,
             ActionsResolved = true,
+            AutomaticMove = false,
+            RangeColumn = null,
+            RangeRow = null,
+            TurnOriginColumn = actor.Column,
+            TurnOriginRow = actor.Row,
             ResolvedAimBonus = state.AimBonus,
             BehindCover = state.SelectedBehindCover,
             Hiding = state.SelectedHiding,

@@ -30,7 +30,7 @@ public sealed partial class Encounter
                     .ToArray(),
                 AimSelections = 0,
             };
-        actions[id] = state;
+        actions[id] = hiding ? ClearTargets(state) : state;
     }
 
     public void SetCoverProtection(
@@ -70,6 +70,8 @@ public sealed partial class Encounter
             Stance = unconscious ? "Prone" : state.Stance,
             PendingStance = unconscious ? null : state.PendingStance,
         };
+        if (unconscious)
+            state = ClearTargets(state);
         actions[id] = state with { MovementDiameter = MovementDiameterFor(state) };
     }
 

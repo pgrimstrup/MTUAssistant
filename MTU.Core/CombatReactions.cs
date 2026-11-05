@@ -8,6 +8,7 @@ public sealed partial class Encounter
         "Dodge",
         "Parry",
         "Dive for Cover",
+        "Dive to Hide",
         "Dive for Prone",
     ];
 
@@ -16,6 +17,7 @@ public sealed partial class Encounter
         return state with
         {
             TargetReaction = "None",
+            TargetReactionCover = null,
             TargetReactionStance = null,
             ReactionColumn = null,
             ReactionRow = null,
@@ -44,9 +46,10 @@ public sealed partial class Encounter
         actions[id] = state with
         {
             TargetReaction = reaction,
+            TargetReactionCover = reaction == "Dive to Hide" ? state.TargetReactionCover : null,
             TargetReactionStance =
                 reaction == "Dive for Prone" ? "Prone"
-                : reaction == "Dive for Cover"
+                : reaction is "Dive for Cover" or "Dive to Hide"
                     ? state.TargetReactionStance ?? ActionFor(target.Id).Stance
                 : null,
             ReactionColumn = state.IsDive ? state.ReactionColumn ?? target.Column : target.Column,
@@ -65,11 +68,11 @@ public sealed partial class Encounter
         var state = ActionFor(id);
         if (
             !state.NeedsReaction
-            || state.TargetReaction != "Dive for Cover"
+            || state.TargetReaction is not ("Dive for Cover" or "Dive to Hide")
             || state.TargetId is not int target
         )
             throw new ArgumentException(
-                "Select Dive for Cover to choose the target's reaction stance."
+                "Select Dive for Cover or Dive to Hide to choose the target's reaction stance."
             );
         if (!CombatActionChoices.Stances.Contains(stance))
             throw new ArgumentException("Choose Standing, Crouching or Prone.");
@@ -82,20 +85,23 @@ public sealed partial class Encounter
     {
         foreach (var actor in entries)
         {
-            var state = ActionFor(actor.Id);
-            if (!state.NeedsReaction || !state.IsDive)
-                continue;
-            var target = entries.FirstOrDefault(e => e.Id == state.TargetId);
-            if (target is not { OnMap: true } || IsDead(target))
-                continue;
-            yield return new(
-                target.Id,
-                state.ReactionColumn ?? target.Column!.Value,
-                state.ReactionRow ?? target.Row!.Value,
-                4.5,
-                "#87cefa",
-                actor.IsVisible && target.IsVisible
-            );
+            for (var index = 0; index < ActionFor(actor.Id).AttackTargets.Count; index++)
+            {
+                var state = AttackStateFor(actor.Id, index);
+                if (!state.NeedsReaction || !state.IsDive)
+                    continue;
+                var target = entries.FirstOrDefault(e => e.Id == state.TargetId);
+                if (target is not { OnMap: true } || IsDead(target))
+                    continue;
+                yield return new(
+                    target.Id,
+                    state.ReactionColumn ?? target.Column!.Value,
+                    state.ReactionRow ?? target.Row!.Value,
+                    4.5,
+                    "#87cefa",
+                    actor.IsVisible && target.IsVisible
+                );
+            }
         }
     }
 }

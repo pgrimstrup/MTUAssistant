@@ -479,6 +479,15 @@ public static class AttackResolutionChecks
         var laserLoadout = new CombatLoadout([new() { Equipped = true, Equipment = laser }]);
         var specialEncounter = Fresh();
         var specialAttack = specialEncounter.BeginAttack(1, roster, laserLoadout, specialArmour, 3);
+        Check(
+            specialAttack.ProtectionBreakdown
+                == "DR +12 vs Lasers, DR +0 vs Energy, DR +3 Natural, DR +8 Wall",
+            "Protection listing shows each applied layer override, zero, Natural DR and Hiding cover"
+        );
+        Check(
+            melee.ProtectionBreakdown == "DR +4, DR +2, DR +3 Natural",
+            "Behind Cover does not add a cover contribution to protection listing"
+        );
         specialAttack.SetAttackRoll(12);
         specialAttack.SetDamageRoll(30);
         Check(

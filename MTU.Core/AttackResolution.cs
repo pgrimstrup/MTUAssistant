@@ -38,7 +38,9 @@ public sealed record AttackOutcome(
     int? AppliedInjury = null,
     CombatMishap? Mishap = null,
     InjuryTolerance InjuryTolerance = InjuryTolerance.None,
-    int WeaponDamageDice = 0
+    int WeaponDamageDice = 0,
+    int? StrengthDamageDm = null,
+    int BurstDamageBonus = 0
 )
 {
     [JsonIgnore]
@@ -51,7 +53,10 @@ public sealed record AttackOutcome(
     public bool IsMishap => AttackRoll == 2 && Modifier < 6;
 
     [JsonIgnore]
-    public int TotalDamage => Hit && DamageRoll.HasValue ? DamageRoll.Value + Effect : 0;
+    public int TotalDamage =>
+        Hit && DamageRoll.HasValue
+            ? Math.Max(0, DamageRoll.Value + Effect + (StrengthDamageDm ?? 0) + BurstDamageBonus)
+            : 0;
 
     [JsonIgnore]
     public int RemainingProtection => Math.Max(0, OverallProtection - ArmourPiercing);
@@ -77,7 +82,14 @@ public sealed record AttackOutcome(
     public string? DamageSummary =>
         !Hit ? null
         : !DamageRoll.HasValue ? "Pending damage roll."
-        : $"Rolled {DamageRoll} + Effect {Effect} → {TotalDamage} damage"
+        : $"Rolled {DamageRoll}"
+            + (
+                StrengthDamageDm is int strength
+                    ? $" {(strength < 0 ? "-" : "+")} STR DM {Math.Abs(strength)}"
+                    : ""
+            )
+            + (BurstDamageBonus > 0 ? $" + Burst {BurstDamageBonus}" : "")
+            + $" + Effect {Effect} → {TotalDamage} damage"
             + (AppliedInjury.HasValue ? $". {AppliedInjury} injury applied." : "");
 
     [JsonIgnore]
@@ -94,11 +106,15 @@ public sealed class AttackResolution
     public EquipmentItem Weapon { get; }
     public AttackModifierSummary Modifiers { get; }
     public int OverallProtection { get; }
+    public string ProtectionBreakdown { get; }
     public int ArmourPiercing { get; }
     public int TargetOriginalHp { get; }
     public int TargetRemainingHp { get; }
     public InjuryTolerance ApplicableInjuryTolerance { get; }
     public int WeaponDamageDice { get; }
+    public int? StrengthDamageDm { get; }
+    public int TargetIndex { get; }
+    public int BurstDamageBonus { get; }
     public string? CalculatedInjuryColour
     {
         get
@@ -135,7 +151,9 @@ public sealed class AttackResolution
                 ArmourPiercing,
                 Mishap: Mishap,
                 InjuryTolerance: ApplicableInjuryTolerance,
-                WeaponDamageDice: WeaponDamageDice
+                WeaponDamageDice: WeaponDamageDice,
+                StrengthDamageDm: StrengthDamageDm,
+                BurstDamageBonus: BurstDamageBonus
             )
             : null;
     public bool Ready =>
@@ -150,16 +168,23 @@ public sealed class AttackResolution
         int targetOriginalHp,
         int targetRemainingHp,
         InjuryTolerance injuryTolerance,
-        bool melee
+        bool melee,
+        int strengthDamageDm,
+        string protectionBreakdown,
+        int targetIndex,
+        int burstDamageBonus
     )
     {
         ActorId = actor.Id;
         TargetId = target.Id;
+        TargetIndex = targetIndex;
+        BurstDamageBonus = burstDamageBonus;
         TargetOriginalHp = targetOriginalHp;
         TargetRemainingHp = targetRemainingHp;
         ActorName = actor.Name;
         TargetName = target.Name;
         Weapon = weapon.Copy();
+        StrengthDamageDm = melee ? strengthDamageDm : null;
         ApplicableInjuryTolerance = InjuryToleranceRules.Applicable(injuryTolerance, weapon, melee);
         WeaponDamageDice = InjuryToleranceRules.DamageDice(weapon.Damage);
         Modifiers = modifiers;
@@ -168,6 +193,7 @@ public sealed class AttackResolution
             : SkillRules.Dm(actor.Skills ?? [], weapon.RequiredSkill);
         mishapIntelligenceDm = Encounter.Dm(Encounter.Stat(actor, 3));
         OverallProtection = Math.Max(0, protection);
+        ProtectionBreakdown = protectionBreakdown;
         var ap = Regex.Match(
             weapon.Traits,
             @"\bAP\s*(?:\(\s*|[:=]\s*)?(?<rating>\d+)\b",
@@ -215,7 +241,7 @@ public sealed class AttackResolution
             die ??= sides => Random.Shared.Next(1, sides + 1);
             var mishapRoll = die(6) + die(6);
             if (mishapRoll is < 2 or > 12)
-                throw new ArgumentException("Mishap dice must produce a 2D6 roll.");
+                throw new ArgumentException("Mishap dice must produce a 2D roll.");
             Mishap = new(mishapRoll, mishapSkillDm, mishapIntelligenceDm);
         }
         Injury = Outcome?.Hit == false ? 0 : null;
@@ -292,35 +318,51 @@ public sealed partial class Encounter
         CombatLoadout? loadout,
         CombatLoadout? targetLoadout,
         int naturalDr,
-        InjuryTolerance injuryTolerance = InjuryTolerance.None
+        InjuryTolerance injuryTolerance = InjuryTolerance.None,
+        int targetIndex = 0
     )
     {
         var actor = RequireActor(id, entries);
         RequireUnresolved(id);
-        var state = ActionFor(id);
+        var state = AttackStateFor(id, targetIndex);
         if (state.MajorAction is not ("Ranged Attack" or "Melee Attack"))
             throw new ArgumentException("Choose an attack first.");
         var target = entries.FirstOrDefault(e => e.Id == state.TargetId && e.IsNpc != actor.IsNpc);
         if (target is null)
             throw new ArgumentException("Choose a target before resolving the attack.");
-        var modifiers = AttackModifierCalculator.Calculate(this, actor, entries, loadout)!;
+        var modifiers = AttackModifierCalculator.Calculate(
+            this,
+            actor,
+            entries,
+            loadout,
+            targetIndex
+        )!;
         if (!modifiers.CanResolve)
             throw new ArgumentException(modifiers.UnavailableReason);
         if (state.SelectedHiding)
             throw new ArgumentException("Stop Hiding before making an attack.");
         var weapon =
             loadout?.WeaponFor(state)
+            ?? (state.MajorAction == "Melee Attack" ? CombatLoadout.UnarmedWeapon : null)
             ?? throw new ArgumentException("Choose an equipped weapon for the attack.");
         var defence = ActionFor(target.Id);
-        var protection =
-            (
-                targetLoadout?.ArmourProtectionFor(
-                    weapon.Equipment,
-                    state.MajorAction == "Melee Attack"
-                ) ?? 0
-            )
-            + Math.Max(0, naturalDr)
-            + (defence.Hiding ? defence.CoverProtection?.Protection ?? 0 : 0);
+        var protectionParts = (
+            targetLoadout?.ArmourProtectionPartsFor(
+                weapon.Equipment,
+                state.MajorAction == "Melee Attack"
+            ) ?? []
+        ).ToList();
+        if (naturalDr > 0)
+            protectionParts.Add(new(naturalDr, "Natural"));
+        var selectedCover =
+            state.TargetReaction == "Dive to Hide"
+                ? state.TargetReactionCover
+                : defence.CoverProtection;
+        if (
+            (defence.Hiding || state.TargetReaction == "Dive to Hide") && selectedCover is { } cover
+        )
+            protectionParts.Add(new(cover.Protection, cover.Name));
+        var protection = protectionParts.Sum(part => part.Value);
         return new(
             actor,
             target,
@@ -330,51 +372,30 @@ public sealed partial class Encounter
             MaximumHp(target),
             Hp(target),
             injuryTolerance,
-            state.MajorAction == "Melee Attack"
+            state.MajorAction == "Melee Attack",
+            Dm(Health(actor).Strength),
+            string.Join(", ", protectionParts.Select(part => part.Description)),
+            targetIndex,
+            state.MajorAction == "Ranged Attack" && state.AutoAttack == "Burst"
+                ? AutoFire.Score(weapon.Equipment.Traits)
+                : 0
         );
     }
 
     // Previews are transient until the GM confirms, and are cleared on cancellation.
-    public void PreviewAttack(int id, AttackOutcome? outcome)
+    public void PreviewAttack(int id, AttackOutcome? outcome, int targetIndex = 0)
     {
         RequireUnresolved(id);
-        actions[id] = ActionFor(id) with { AttackOutcome = outcome };
+        actions[id] = ActionFor(id) with
+        {
+            AttackOutcome = outcome,
+            PreviewTargetIndex = targetIndex,
+        };
     }
 
     public void ApplyAttack(
         AttackResolution attack,
         IReadOnlyList<SceneCombatant> entries,
         bool smartTracker = false
-    )
-    {
-        RequireActor(attack.ActorId, entries);
-        RequireUnresolved(attack.ActorId);
-        var state = ActionFor(attack.ActorId);
-        if (
-            state.TargetId != attack.TargetId
-            || state.MajorAction is not ("Ranged Attack" or "Melee Attack")
-        )
-            throw new ArgumentException(
-                "The selected attack has changed. Cancel and resolve it again."
-            );
-        if (!attack.Ready)
-            throw new ArgumentException(
-                "Complete the attack and damage rolls before applying damage."
-            );
-        var target =
-            entries.FirstOrDefault(e => e.Id == attack.TargetId)
-            ?? throw new ArgumentException("The target is no longer in this scene.");
-        var result = attack.Outcome! with
-        {
-            AppliedInjury = attack.Outcome!.Hit ? attack.Injury : 0,
-        };
-        ResolveActions(attack.ActorId, entries, smartTracker, attack.Modifiers);
-        actions[attack.ActorId] = ActionFor(attack.ActorId) with
-        {
-            AttackOutcome = result,
-            TargetHasBeenHit = state.TargetHasBeenHit || result.Hit,
-        };
-        if (result.Hit)
-            SetHp(target.Id, Math.Max(0, Hp(target) - result.AppliedInjury!.Value), entries);
-    }
+    ) => ApplyAttacks([attack], entries, smartTracker);
 }

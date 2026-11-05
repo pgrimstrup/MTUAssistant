@@ -12,6 +12,12 @@ public sealed record CombatAttackModifiers(
     string? UnavailableReason
 );
 
+public sealed record CombatTargetAttackModifiers(
+    int TargetId,
+    string Name,
+    CombatAttackModifiers Modifiers
+);
+
 public sealed record CombatActionSummary(
     int Id,
     int CharacterId,
@@ -21,7 +27,8 @@ public sealed record CombatActionSummary(
     bool HasTokenImage,
     IReadOnlyList<CombatActionColumn> Columns,
     IReadOnlyList<CombatSummaryRow> Rows,
-    CombatAttackModifiers? AttackModifiers = null
+    CombatAttackModifiers? AttackModifiers = null,
+    IReadOnlyList<CombatTargetAttackModifiers>? TargetAttackModifiers = null
 )
 {
     public static string RangeDescription(string? band) =>
@@ -49,8 +56,17 @@ public sealed record CombatActionSummary(
         var target = entries.FirstOrDefault(e =>
             e.Id == state.TargetId && (!player || e.IsVisible)
         );
+        var resultTarget = state.FullAuto
+            ? entries.FirstOrDefault(e =>
+                e.Id == state.AttackTargets.ElementAtOrDefault(state.PreviewTargetIndex)?.TargetId
+                && (!player || e.IsVisible)
+            )
+            : target;
+        var previewOutcome =
+            player && state.FullAuto && resultTarget is null ? null : state.AttackOutcome;
+        var resultSuffix = state.FullAuto ? $" {state.PreviewTargetIndex + 1}" : "";
         var band = loadout?.TargetBand(state, actor, target);
-        var weapons = loadout?.WeaponsFor(state);
+        var weapons = (loadout ?? new CombatLoadout([])).WeaponsFor(state);
         var rows = new List<CombatSummaryRow> { new("Combatant", actor.Name) };
         if (!player || !actor.IsNpc)
         {
@@ -76,6 +92,29 @@ public sealed record CombatActionSummary(
                 (target?.Name ?? "None") + (band is null ? "" : " — " + RangeDescription(band))
             )
         );
+        if (state.MajorAction == "Ranged Attack" && loadout?.AutoScore > 0)
+            rows.Add(
+                new(
+                    "Auto Attack",
+                    state.AutoAttack == "Burst" ? $"Burst ({loadout.AutoScore} rounds)"
+                        : state.FullAuto ? $"Full Auto ({loadout.AutoScore * 3} rounds)"
+                        : "Single"
+                )
+            );
+        if (state.FullAuto)
+            rows[rows.FindIndex(r => r.Label == "Target")] = new(
+                "Targets",
+                string.Join(
+                    ", ",
+                    state
+                        .TargetIds.Select(id =>
+                            entries
+                                .FirstOrDefault(e => e.Id == id && (!player || e.IsVisible))
+                                ?.Name
+                        )
+                        .Where(n => n != null)
+                )
+            );
         if (state.SelectedHiding)
         {
             rows.Add(new("Cover", "Hiding"));
@@ -93,26 +132,60 @@ public sealed record CombatActionSummary(
         if (state.Unconscious)
             rows.Add(new("Status", "Unconscious"));
         rows.Add(new("Sequence", state.SequenceSummary));
-        rows.Add(
-            new(
-                state.MajorAction is "Ranged Attack" or "Melee Attack" ? "Attack Result" : "Result",
-                state.AttackOutcome is { } outcome ? outcome.AttackSummary
-                    : state.ActionsResolved ? "Actions resolved."
-                    : band == "Out of Range"
-                        ? "Ranged attack cannot be made: target is out of range."
-                    : state.MovementDiameter.HasValue
-                        ? actor.OnMap
-                                ? "Movement range displayed until this turn ends. Action resolution pending."
-                            : "Place the token to display its movement range."
-                    : state.MajorAction is not null ? "Action selected; resolution pending."
-                    : state.MinorCount > 0 ? "Minor actions selected."
-                    : "Aim bonus carried from the previous turn."
-            )
-        );
-        if (state.AttackOutcome is { Hit: true } hit)
+        if (state.FullAuto && state.AutoAttackResults is { Count: > 0 } results)
         {
-            var visibleDamage = target?.IsNpc == false ? hit : hit with { AppliedInjury = null };
-            rows.Add(new("Damage Result", visibleDamage.DamageSummary!));
+            foreach (var result in results)
+            {
+                var victim = entries.FirstOrDefault(e =>
+                    e.Id == result.TargetId && (!player || e.IsVisible)
+                );
+                if (victim is null)
+                    continue;
+                rows.Add(
+                    new($"Attack Result {result.TargetIndex + 1}", result.Outcome.AttackSummary)
+                );
+                if (result.Outcome.Hit)
+                    rows.Add(
+                        new(
+                            $"Damage Result {result.TargetIndex + 1}",
+                            (
+                                victim.IsNpc
+                                    ? result.Outcome with
+                                    {
+                                        AppliedInjury = null,
+                                    }
+                                    : result.Outcome
+                            ).DamageSummary!
+                        )
+                    );
+            }
+        }
+        else
+        {
+            rows.Add(
+                new(
+                    state.MajorAction is "Ranged Attack" or "Melee Attack"
+                        ? "Attack Result" + resultSuffix
+                        : "Result",
+                    previewOutcome is { } outcome ? outcome.AttackSummary
+                        : state.ActionsResolved ? "Actions resolved."
+                        : band == "Out of Range"
+                            ? "Ranged attack cannot be made: target is out of range."
+                        : state.MovementDiameter.HasValue
+                            ? actor.OnMap
+                                    ? "Movement range displayed until this turn ends. Action resolution pending."
+                                : "Place the token to display its movement range."
+                        : state.MajorAction is not null ? "Action selected; resolution pending."
+                        : state.MinorCount > 0 ? "Minor actions selected."
+                        : "Aim bonus carried from the previous turn."
+                )
+            );
+            if (previewOutcome is { Hit: true } hit)
+            {
+                var visibleDamage =
+                    resultTarget?.IsNpc == false ? hit : hit with { AppliedInjury = null };
+                rows.Add(new("Damage Result" + resultSuffix, visibleDamage.DamageSummary!));
+            }
         }
         var columns = new[]
         {
@@ -134,6 +207,30 @@ public sealed record CombatActionSummary(
             player && (actor.IsNpc || (state.TargetId.HasValue && target is null))
                 ? null
                 : AttackModifierCalculator.Calculate(encounter, actor, entries, loadout);
+        var targetModifiers =
+            state.FullAuto && (!player || !actor.IsNpc)
+                ? state
+                    .AttackTargets.Select((slot, index) => (slot, index))
+                    .Where(t =>
+                        entries.Any(e => e.Id == t.slot.TargetId && (!player || e.IsVisible))
+                    )
+                    .Select(t =>
+                    {
+                        var value = AttackModifierCalculator.Calculate(
+                            encounter,
+                            actor,
+                            entries,
+                            loadout,
+                            t.index
+                        )!;
+                        return new CombatTargetAttackModifiers(
+                            t.slot.TargetId!.Value,
+                            entries.First(e => e.Id == t.slot.TargetId).Name,
+                            new(value.Rows, value.Total, value.UnavailableReason)
+                        );
+                    })
+                    .ToArray()
+                : null;
         return new(
             actor.Id,
             actor.CharacterId,
@@ -143,9 +240,10 @@ public sealed record CombatActionSummary(
             actor.HasTokenImage,
             columns,
             rows,
-            modifiers is null
+            state.FullAuto || modifiers is null
                 ? null
-                : new(modifiers.Rows, modifiers.Total, modifiers.UnavailableReason)
+                : new(modifiers.Rows, modifiers.Total, modifiers.UnavailableReason),
+            targetModifiers
         );
     }
 }

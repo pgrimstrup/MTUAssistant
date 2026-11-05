@@ -82,6 +82,7 @@ public static class WeaponSkillChecks
                     "Gun Combat (Archaic)",
                     "Gun Combat (Energy)",
                     "Gun Combat (Slug)",
+                    "Athletics (Dexterity)",
                     "Melee (Blade)",
                     "Melee (Bludgeon)",
                     "Melee (Unarmed)",

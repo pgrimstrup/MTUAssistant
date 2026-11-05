@@ -56,3 +56,15 @@ cast.close();admin.close();
 renderPlayerActions(host,{...state,combatMode:false},doc);assert.equal(host.hidden,true);
 renderPlayerActions(host,null,doc);assert.equal(host.children.length,0);
 console.log('Cast actions are read-only, preserve selections/scroll, update live/late, hide enemy gear and hidden actors, and clear outside combat.');
+
+const multi={...summary,attackModifiers:null,targetAttackModifiers:[{targetId:1,name:'One',modifiers:summary.attackModifiers},{targetId:1,name:'Two',modifiers:updatedModifiers}]};
+renderPlayerActions(host,{...state,actionSummary:multi},doc);
+assert.equal(all(host).filter(e=>e.tag==='table').length,1);
+assert.ok(all(host).some(e=>e.textContent==='One / Two'));
+assert.ok(all(host).some(e=>e.textContent==='+3 / -2'));
+assert.ok(all(host).some(e=>e.textContent==='-2 / 0'));
+assert.equal(all(host).filter(e=>e.textContent==='DEX').length,1);
+assert.ok(validBattlemapSnapshot({...state,actionSummary:multi}));
+assert.equal(validBattlemapSnapshot({...state,actionSummary:{...multi,isNpc:true,rows:[]}}),false);
+assert.equal(validBattlemapSnapshot({...state,actionSummary:{...multi,targetAttackModifiers:[{...multi.targetAttackModifiers[0],targetId:99}]}}),false);
+console.log('Cast renders per-target Full Auto modifiers and rejects private data.');

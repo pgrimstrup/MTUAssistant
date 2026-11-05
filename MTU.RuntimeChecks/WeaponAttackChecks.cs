@@ -277,6 +277,110 @@ public static class WeaponAttackChecks
                 == "Place both tokens to determine close combat range.",
             "Unplaced tokens require positions instead of assuming Out of Range"
         );
+        Encounter AttackFor(SceneCombatant attacker, string action = "Melee Attack")
+        {
+            var entries = new[] { attacker, target };
+            var e = new Encounter();
+            e.Begin(entries, true, true, 0, new Dictionary<int, int> { [1] = 20 }, () => 7);
+            e.ChooseAction(1, action, entries, 2);
+            e.SetTarget(1, 2, entries);
+            return e;
+        }
+        var strong = actor with { Upp = "C77777" };
+        var strongRoster = new[] { strong, target };
+        var strongEncounter = AttackFor(strong);
+        var strongModifiers = AttackModifierCalculator.Calculate(
+            strongEncounter,
+            strong,
+            strongRoster,
+            null
+        )!;
+        Check(
+            strongModifiers.Rows.Any(r => r.Name == "STR" && r.Dm == 2)
+                && !strongModifiers.Rows.Any(r => r.Name == "DEX"),
+            "Melee skill uses and names STR when its DM is higher"
+        );
+        var unarmed = strongEncounter.BeginAttack(1, strongRoster, null, null, 0);
+        Check(
+            unarmed.Weapon is { Name: "Unarmed", Damage: "1D", RequiredSkill: "Melee (Unarmed)" }
+                && unarmed.StrengthDamageDm == 2,
+            "No melee equipment falls back to 1D Unarmed and captures STR damage DM"
+        );
+        unarmed.SetAttackRoll(8);
+        unarmed.SetDamageRoll(4);
+        Check(
+            unarmed.Outcome!.TotalDamage == 4 + 2 + unarmed.Outcome.Effect
+                && unarmed.Outcome.DamageSummary!.Contains("+ STR DM 2"),
+            "Player melee damage includes visible STR DM before protection"
+        );
+        Check(
+            CombatActionSummary
+                .Create(strongEncounter, strong, strongRoster, null)!
+                .Rows.Single(r => r.Label == "Weapon")
+                .Value == "Unarmed (Melee, 1D)",
+            "Unarmed fallback appears in Combat Summary"
+        );
+        var roundTrip = JsonSerializer.Deserialize<AttackOutcome>(
+            JsonSerializer.Serialize(unarmed.Outcome)
+        )!;
+        Check(
+            roundTrip.StrengthDamageDm == 2 && roundTrip.TotalDamage == unarmed.Outcome.TotalDamage,
+            "Melee STR damage persists in saved attack outcome"
+        );
+        unarmed.AutoRoll(_ => 6);
+        Check(
+            unarmed.DamageRoll == 6
+                && unarmed.Outcome!.TotalDamage == 6 + 2 + unarmed.Outcome.Effect,
+            "Automatic unarmed attacks roll 1D and add STR DM"
+        );
+        strongEncounter.SetHp(1, 15, strongRoster);
+        Check(
+            strongEncounter.BeginAttack(1, strongRoster, null, null, 0).StrengthDamageDm == 0,
+            "Melee damage uses current reduced STR rather than original STR"
+        );
+        var nimble = actor with { Upp = "4C7777" };
+        var nimbleRoster = new[] { nimble, target };
+        var nimbleEncounter = AttackFor(nimble);
+        var nimbleAttack = nimbleEncounter.BeginAttack(
+            1,
+            nimbleRoster,
+            new CombatLoadout([rifle]),
+            null,
+            0
+        );
+        Check(
+            nimbleAttack.Weapon.RequiredSkill == "Melee (Unarmed)"
+                && nimbleAttack.Modifiers.Rows.Any(r => r.Name == "DEX" && r.Dm == 2),
+            "Firearm-only loadout falls back to Unarmed and uses higher DEX DM"
+        );
+        nimbleAttack.SetAttackRoll(8);
+        nimbleAttack.SetDamageRoll(4);
+        Check(
+            nimbleAttack.StrengthDamageDm == -1
+                && nimbleAttack.Outcome!.TotalDamage == 4 - 1 + nimbleAttack.Outcome.Effect
+                && nimbleAttack.Outcome.DamageSummary!.Contains("- STR DM 1"),
+            "Negative STR DM reduces melee damage and is labelled correctly"
+        );
+        Check(
+            new AttackOutcome(8, 0, 1, 0, 0, StrengthDamageDm: -3).TotalDamage == 0,
+            "Negative STR cannot create negative damage"
+        );
+        var grenade = Weapon("Grenade", "4D", 20, "Athletics (Dexterity)");
+        var thrower = strong with { Skills = [new(0, 1, "Athletics (Dexterity)", 3)] };
+        var thrownEncounter = AttackFor(thrower, "Ranged Attack");
+        var thrown = thrownEncounter.BeginAttack(
+            1,
+            [thrower, target],
+            new CombatLoadout([grenade]),
+            null,
+            0
+        );
+        Check(
+            thrown.Modifiers.Rows.Any(r => r.Name == "Athletics (Dexterity)" && r.Dm == 3)
+                && thrown.Modifiers.Rows.Any(r => r.Name == "DEX" && r.Dm == 0)
+                && thrown.StrengthDamageDm is null,
+            "Thrown Athletics weapons use Athletics/DEX and do not add melee STR damage"
+        );
         Console.WriteLine(
             "Highest-damage weapon selection, melee modifiers, summaries and persistence passed."
         );

@@ -22,16 +22,24 @@ public static class AttackModifierCalculator
         Encounter encounter,
         SceneCombatant actor,
         IReadOnlyList<SceneCombatant> entries,
-        CombatLoadout? loadout
+        CombatLoadout? loadout,
+        int targetIndex = 0
     )
     {
-        var state = encounter.ActionFor(actor.Id);
+        var rootState = encounter.ActionFor(actor.Id);
+        if (
+            rootState.ActionsResolved
+            && rootState.AutoAttackResults?.FirstOrDefault(r => r.TargetIndex == targetIndex)
+                is { } saved
+        )
+            return saved.Modifiers;
+        var state = encounter.AttackStateFor(actor.Id, targetIndex);
         var melee = state.MajorAction == "Melee Attack";
         if (!melee && state.MajorAction != "Ranged Attack" && !state.IsSelected("Aim"))
             return null;
         if (state.ActionsResolved && state.ResolvedAttackModifiers is { } resolved)
             return resolved;
-        var weapon = loadout?.WeaponFor(state);
+        var weapon = loadout?.WeaponFor(state) ?? (melee ? CombatLoadout.UnarmedWeapon : null);
         if (weapon is null)
             return new(
                 [],
@@ -47,13 +55,37 @@ public static class AttackModifierCalculator
                     : SkillRules.Dm(actor.Skills ?? [], required)
             )
         );
-        rows.Add(new("DEX", Encounter.Dm(encounter.Health(actor).Dexterity)));
+        var health = encounter.Health(actor);
+        var dexterityDm = Encounter.Dm(health.Dexterity);
+        var strengthDm = Encounter.Dm(health.Strength);
+        var usesMeleeSkill =
+            required is not null
+            && (
+                required.Trim().Equals("Melee", StringComparison.OrdinalIgnoreCase)
+                || required.TrimStart().StartsWith("Melee (", StringComparison.OrdinalIgnoreCase)
+            );
+        rows.Add(
+            usesMeleeSkill && strengthDm > dexterityDm
+                ? new("STR", strengthDm)
+                : new("DEX", dexterityDm)
+        );
         var aim =
-            melee ? 0
+            melee || state.AutomaticFire ? 0
             : state.MajorAction == "Ranged Attack" ? state.RangedAimBonus
             : state.AimBonus;
         if (aim > 0)
-            rows.Add(new("Aim", aim));
+        {
+            var carriesAim =
+                state.MajorAction == "Ranged Attack"
+                    ? state.ColumnActions(1).All(action => action == "Aim")
+                    : state.MajorAction is null
+                        && state
+                            .ColumnActions(1)
+                            .Concat(state.ColumnActions(3))
+                            .All(action => action == "Aim");
+            var carried = carriesAim ? Math.Min(Math.Max(0, state.CarriedAimBonus), aim) : 0;
+            rows.Add(new(carried > 0 ? $"Aim (+{carried} carried over)" : "Aim", aim));
+        }
         if (state.SelectedElevated)
             rows.Add(new("Elevated", 1));
         if (state.ReactionCount > 0)
@@ -81,22 +113,24 @@ public static class AttackModifierCalculator
             "Extreme Range" => -4,
             _ => 0,
         };
-        if (rangeDm != 0)
-            rows.Add(new(band!, rangeDm));
+        if (rangeDm != 0 || rootState.FullAuto)
+            rows.Add(new(rootState.FullAuto ? "Range" : band!, rangeDm));
         var targetState = encounter.ActionFor(target.Id);
         var targetProne =
             targetState.SelectedStance == "Prone"
             || state.TargetReaction == "Dive for Prone"
             || (
-                state.TargetReaction == "Dive for Cover"
+                state.TargetReaction is "Dive for Cover" or "Dive to Hide"
                 && (state.TargetReactionStance ?? targetState.SelectedStance) == "Prone"
             );
-        var cover = targetState.BehindCover || state.TargetReaction == "Dive for Cover";
+        var hiding = targetState.Hiding || state.TargetReaction == "Dive to Hide";
+        var cover =
+            targetState.BehindCover || state.TargetReaction is "Dive for Cover" or "Dive to Hide";
         if (targetProne)
             rows.Add(new("Target prone", -1));
-        if (cover && !targetState.Hiding)
+        if (cover && !hiding)
             rows.Add(new("Target behind cover", -2));
-        if (targetState.Hiding)
+        if (hiding)
             rows.Add(new("Target Hiding", -2));
         if (state.TargetReaction == "Dodge")
         {

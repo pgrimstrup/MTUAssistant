@@ -42,9 +42,46 @@ public sealed record CombatantActionState(
     AttackOutcome? AttackOutcome = null,
     bool Unconscious = false,
     int Speed = 6,
-    bool AutomaticMove = false
+    bool AutomaticMove = false,
+    string AutoAttack = "Single",
+    int AutoScore = 0,
+    IReadOnlyList<AutoAttackTarget>? ExtraTargets = null,
+    IReadOnlyList<TargetAttackResult>? AutoAttackResults = null,
+    CombatCover? TargetReactionCover = null,
+    int PreviewTargetIndex = 0
 )
 {
+    [JsonIgnore]
+    public bool AutomaticFire =>
+        MajorAction == "Ranged Attack" && AutoAttack is "Burst" or "Full Auto";
+
+    [JsonIgnore]
+    public bool FullAuto => MajorAction == "Ranged Attack" && AutoAttack == "Full Auto";
+
+    [JsonIgnore]
+    public IReadOnlyList<AutoAttackTarget> AttackTargets =>
+        new[]
+        {
+            new AutoAttackTarget(
+                TargetId,
+                TargetReaction,
+                TargetReactionStance,
+                ReactionColumn,
+                ReactionRow,
+                TargetReactionCover
+            ),
+        }
+            .Concat(AutoAttack == "Full Auto" ? ExtraTargets ?? [] : [])
+            .ToArray();
+
+    [JsonIgnore]
+    public IReadOnlyList<int> TargetIds =>
+        AttackTargets
+            .Where(t => t.TargetId.HasValue)
+            .Select(t => t.TargetId!.Value)
+            .Distinct()
+            .ToArray();
+
     public IReadOnlyList<string> ColumnActions(int column) =>
         column == 3
             ? AfterMajorActions ?? []
@@ -65,7 +102,8 @@ public sealed record CombatantActionState(
     public int AimBeforeMajor => AimAfter(CarriedAimBonus, ColumnActions(1));
 
     [JsonIgnore]
-    public int RangedAimBonus => MajorAction == "Ranged Attack" ? AimBeforeMajor : 0;
+    public int RangedAimBonus =>
+        MajorAction == "Ranged Attack" && !AutomaticFire ? AimBeforeMajor : 0;
 
     [JsonIgnore]
     public int AimBonus =>
@@ -107,7 +145,7 @@ public sealed record CombatantActionState(
     public bool NeedsReaction => MajorAction is "Melee Attack" or "Ranged Attack";
 
     [JsonIgnore]
-    public bool IsDive => TargetReaction is "Dive for Cover" or "Dive for Prone";
+    public bool IsDive => TargetReaction is "Dive for Cover" or "Dive for Prone" or "Dive to Hide";
 
     [JsonIgnore]
     public string SelectedStance => PendingStance ?? Stance;
@@ -250,6 +288,8 @@ public sealed partial class Encounter
 
     private static double? MovementDiameterFor(CombatantActionState state)
     {
+        if (state.ActionsResolved)
+            return null;
         var moves = state.ColumnActions(1).Concat(state.ColumnActions(3)).Count(a => a == "Move");
         var distance = state.SelectedStance switch
         {
@@ -266,6 +306,12 @@ public sealed partial class Encounter
         var state = ReleaseTargetReaction(ActionFor(id));
         actions[id] = new CombatantActionState(
             TargetId: state.TargetId,
+            AutoAttack: state.AutoAttack,
+            AutoScore: state.AutoScore,
+            ExtraTargets: state
+                .ExtraTargets?.Select(t => new AutoAttackTarget(t.TargetId))
+                .ToArray(),
+            TargetTagged: state.TargetTagged,
             Stance: state.Stance,
             CarriedAimBonus: state.ResolvedAimBonus ?? state.CarriedAimBonus,
             TurnOriginColumn: state.TurnOriginColumn,
@@ -273,7 +319,6 @@ public sealed partial class Encounter
             ReactionCount: state.ReactionCount,
             BehindCover: state.BehindCover,
             Hiding: state.Hiding,
-            TargetTagged: state.TargetTagged,
             Elevated: state.Elevated,
             Unconscious: state.Unconscious,
             Speed: state.Speed,
@@ -300,6 +345,8 @@ public sealed partial class Encounter
     {
         var state = ActionFor(id);
         if (state.ActionsResolved)
+            return false;
+        if (action == "Aim" && state.AutomaticFire)
             return false;
         if (action == "Tag Target" && (!smartTracker || !state.TargetHasBeenHit))
             return false;
@@ -376,6 +423,14 @@ public sealed partial class Encounter
                     };
         }
         state = state with { AutomaticMove = false };
+        if (state.MajorAction != "Ranged Attack")
+            state = state with
+            {
+                AutoAttack = "Single",
+                AutoScore = 0,
+                ExtraTargets = [],
+                AutoAttackResults = null,
+            };
         var sequence = state.ColumnActions(1).Concat(state.ColumnActions(3)).ToArray();
         var moves = sequence.Count(a => a == "Move");
         state = state with
@@ -505,6 +560,7 @@ public sealed partial class Encounter
             TurnOriginColumn = null,
             TurnOriginRow = null,
             TargetReaction = "None",
+            TargetReactionCover = null,
             ReactionColumn = null,
             ReactionRow = null,
             PendingStance = null,
@@ -518,6 +574,11 @@ public sealed partial class Encounter
             HasPendingCoverProtection = false,
             ResolvedAttackModifiers = null,
             AttackOutcome = null,
+            AutoAttack = "Single",
+            AutoScore = 0,
+            ExtraTargets = [],
+            AutoAttackResults = null,
+            PreviewTargetIndex = 0,
             AutomaticMove = false,
         };
 

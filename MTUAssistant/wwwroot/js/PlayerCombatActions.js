@@ -33,19 +33,24 @@ export function renderPlayerActions(host,state,doc = globalThis.document) {
             item.type='button'; item.disabled=true; item.setAttribute('aria-pressed',String(button.selected));
         }
     }
-    if (!summary.isNpc && summary.attackModifiers) {
-        const modifiers=summary.attackModifiers;
+    const attacks=summary.isNpc ? [] : summary.targetAttackModifiers ?? (summary.attackModifiers ? [{modifiers:summary.attackModifiers}] : []);
+    if (attacks.length) {
+        const names=[...new Set(attacks.flatMap(a=>a.modifiers.rows.map(r=>r.name)))];
         const table=add(host,'table',null,'attack-modifiers');
         table.setAttribute('aria-label','Attack modifiers');
         add(table,'caption','Attack modifiers');
         const body=add(table,'tbody');
         const formatDm=value=>value > 0 ? '+'+value : String(value);
-        for (const modifier of modifiers.rows) {
-            const row=add(body,'tr'); add(row,'td',modifier.name); add(row,'td',formatDm(modifier.dm));
+        const formatValues=values=>(new Set(values).size===1 ? values.slice(0,1) : values).map(formatDm).join(' / ');
+        for(const name of names) {
+            const row=add(body,'tr');add(row,'td',name);
+            add(row,'td',formatValues(attacks.map(a=>a.modifiers.rows.filter(r=>r.name===name).reduce((sum,r)=>sum+r.dm,0))));
         }
-        const footer=add(table,'tfoot'), total=add(footer,'tr');
-        add(total,'th','Total DM').setAttribute('scope','row'); add(total,'td',formatDm(modifiers.total));
-        if (modifiers.unavailableReason) add(host,'p',modifiers.unavailableReason,'attack-unavailable');
+        const footer=add(table,'tfoot'),total=add(footer,'tr');
+        add(total,'th','Total DM').setAttribute('scope','row');
+        add(total,'td',formatValues(attacks.map(a=>a.modifiers.total)));
+        if(summary.targetAttackModifiers) add(host,'p',attacks.map(a=>a.name).join(' / '),'hint');
+        for(const reason of new Set(attacks.map(a=>a.modifiers.unavailableReason).filter(Boolean))) add(host,'p',reason,'attack-unavailable');
     }
     const section=add(host,'section',null,'action-summary'); add(section,'h2','Combatant Summary');
     const list=add(section,'dl');

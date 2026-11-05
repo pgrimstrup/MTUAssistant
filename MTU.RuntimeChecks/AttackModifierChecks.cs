@@ -284,6 +284,36 @@ public static class AttackModifierChecks
             incompleteAim.ActionFor(1).ActionsResolved,
             "Incomplete attack preview does not prevent resolving Aim itself"
         );
+        var carriedAim = Fresh();
+        var carriedSnapshot = carriedAim.Snapshot();
+        var carriedStates = new Dictionary<int, CombatantActionState>(carriedSnapshot.Actions!);
+        carriedStates[1] = carriedAim.ActionFor(1) with { CarriedAimBonus = 3 };
+        carriedAim.Restore(carriedSnapshot with { Actions = carriedStates }, roster);
+        carriedAim.ChooseAction(1, "Aim", roster);
+        var carriedModifiers = AttackModifierCalculator.Calculate(
+            carriedAim,
+            actor,
+            roster,
+            loadout
+        )!;
+        Check(
+            Dm(carriedModifiers, "Aim (+3 carried over)") == 4,
+            "Aim label distinguishes carried +3 from total +4"
+        );
+        carriedAim.ChooseAction(1, "Ranged Attack", roster, 2);
+        carriedAim.ChooseAction(1, "Move", roster);
+        carriedAim.ChooseAction(1, "Aim", roster, 3);
+        var interruptedModifiers = AttackModifierCalculator.Calculate(
+            carriedAim,
+            actor,
+            roster,
+            loadout
+        )!;
+        Check(
+            Dm(interruptedModifiers, "Aim") == 1
+                && !interruptedModifiers.Rows.Any(row => row.Name.Contains("carried over")),
+            "Interrupted Aim does not claim a carried bonus"
+        );
         Console.WriteLine(
             "Attack modifier skill/DEX/Aim, ranges, reaction previews, Dodge, sights, tagging, P-HUD, X-Ray, totals and persistence passed."
         );

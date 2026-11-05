@@ -50,4 +50,16 @@ assert.equal(validBattlemapSnapshot({...state,targetSelection:{...castSelection,
 map.combatMode=true;map.setTargetSelection(castSelection);
 assert.match(map.movementLabels.get('target').text.text,/Short Range/);
 console.log('Range boundaries, Scope/Aim override and cast range labels passed.');
+const other={...target,id:3,name:'Second',column:7};
+map.characterTokens.set(3,other);
+map.setTargetSelection({actorId:1,targetId:2,targetIds:[2,3]});
+assert.equal(map.targetRingGraphics.strokes.length,2,'all Full Auto targets get pulsing highlights');
+assert.ok(map.movementLabels.has('target:3'),'each target gets its own distance line');
+assert.deepEqual(playerTargetSelection(1,[2,3],[actor,target,other]),{actorId:1,targetId:2,targetIds:[2,3]});
+assert.deepEqual(playerTargetSelection(1,[2,3],[actor,target,{...other,isVisible:false}]),{actorId:1,targetId:2},'hidden targets stay private within volleys');
+assert.ok(validBattlemapSnapshot({...state,tokens:[actor,target,other],targetSelection:{actorId:1,targetId:2,targetIds:[2,3]}}));
+assert.equal(validBattlemapSnapshot({...state,targetSelection:{actorId:1,targetId:2,targetIds:[2,3]}}),false,'hidden extra target rejected');
+map.setTargetSelection({actorId:1,targetId:2});
+assert.equal(map.targetRingGraphics.strokes.length,1);assert.equal(map.movementLabels.has('target:3'),false,'switching to Single clears extra highlights');
+console.log('Multiple target highlights, distance lines, clearing and Cast privacy passed.');
 globalThis.PIXI=oldPixi;

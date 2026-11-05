@@ -94,6 +94,8 @@ public sealed partial class Encounter
             entries.FirstOrDefault(e => e.Id == id)
             ?? throw new ArgumentException("Choose a combatant in this scene.");
         attributes[id] = Health(entry).WithTotal(hp, MaximumHealth(entry));
+        if (IsDead(entry))
+            actions[id] = ClearTargets(ActionFor(id));
         if (!Active)
             return;
         if (SelectedId is null)
@@ -292,6 +294,13 @@ public sealed partial class Encounter
                     }
                 ) with
                 {
+                    ExtraTargets = pair
+                        .Value.ExtraTargets?.Select(t =>
+                            t.TargetId is int targetId && ids.Contains(targetId)
+                                ? t
+                                : new AutoAttackTarget()
+                        )
+                        .ToArray(),
                     TargetId =
                         pair.Value.TargetId is int target && ids.Contains(target) ? target : null,
                     TargetTagged =
@@ -330,9 +339,28 @@ public sealed partial class Encounter
                 EnsureTurnOrigin(entry.Id, entries);
     }
 
-    public void Exit()
+    public void Exit(IReadOnlyList<SceneCombatant>? entries = null)
     {
         ResetTurnActions();
+        foreach (var id in actions.Keys.ToArray())
+        {
+            var state = ClearTargets(ActionFor(id));
+            var entry = entries?.FirstOrDefault(e => e.Id == id);
+            var alive = entry is not null
+                ? !IsDead(entry)
+                : !attributes.TryGetValue(id, out var health) || health.Total > 0;
+            if (alive && !state.Unconscious)
+                state = state with
+                {
+                    Stance = "Standing",
+                    PendingStance = null,
+                    BehindCover = false,
+                    Hiding = false,
+                    PendingBehindCover = null,
+                    PendingHiding = null,
+                };
+            actions[id] = state;
+        }
         Active = false;
         Round = 0;
         SelectedId = null;

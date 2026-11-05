@@ -15,6 +15,7 @@ CombatStatusChecks.Run();
 await InjuryToleranceChecks.RunAsync();
 await SpeedChecks.RunAsync();
 await AutomaticMovementChecks.RunAsync();
+AutoAttackChecks.Run();
 await SkillChecks.RunAsync();
 await NpcGenerationChecks.RunAsync();
 await SceneChecks.RunAsync();

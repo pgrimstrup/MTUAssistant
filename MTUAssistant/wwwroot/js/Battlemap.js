@@ -250,10 +250,29 @@ export class Battlemap {
             if (!this.disposed) await this.callback.invokeMethodAsync('SelectMapToken',token.id);
         } catch (error) { if (!this.disposed) console.warn('Unable to select the battlemap token.',error); }
     }
+    tokenDisplaySize() {
+        const scale=this.view?.scale > 0 ? this.view.scale : 1;
+        return Math.max(this.scene.gridSize,48/scale);
+    }
+    layoutToken(token) {
+        const cell=this.scene.gridSize, size=this.tokenDisplaySize(), offset=(cell-size)/2;
+        if (token.fallback) {
+            token.fallback.width=token.fallback.height=size;
+            token.fallback.position?.set(offset,offset);
+        }
+        if (token.imageSprite) {
+            const aspect=token.imageAspect ?? 1;
+            token.imageSprite.width=size*Math.min(1,aspect);
+            token.imageSprite.height=size*Math.min(1,1/aspect);
+            token.imageSprite.position.set((cell-token.imageSprite.width)/2,(cell-token.imageSprite.height)/2);
+        }
+    }
     hitToken(point) {
-        return [...this.characterTokens.values()].reverse().find(token =>
-            point.x >= token.column*this.scene.gridSize && point.x < (token.column+1)*this.scene.gridSize &&
-            point.y >= token.row*this.scene.gridSize && point.y < (token.row+1)*this.scene.gridSize);
+        const cell=this.scene.gridSize, half=this.tokenDisplaySize()/2;
+        const distance=token=>Math.hypot(point.x-(token.column+.5)*cell,point.y-(token.row+.5)*cell);
+        return [...this.characterTokens.values()].reverse().filter(token=>
+            Math.abs(point.x-(token.column+.5)*cell)<=half && Math.abs(point.y-(token.row+.5)*cell)<=half)
+            .sort((a,b)=>distance(a)-distance(b))[0];
     }
     positionToken(token, column, row) {
         if (this.combatMode && this.dragging?.token === token && this.dragging.movementEpoch === this.movementEpoch) {
@@ -366,7 +385,7 @@ export class Battlemap {
         if (publish) this.publishPresentation();
     }
     setCombatMode(active) {
-        this.setEncounterState(active,this.selectedId,[...(this.deadIds ?? [])],this.combatRound,this.playerTracker ?? [],[...(this.tokenHealth?.values() ?? [])],this.movementRanges ?? [],this.targetId ?? null,this.targetRange ?? null,this.actionSummary ?? null,[...(this.unconsciousIds ?? [])],this.automaticMoveContext ?? null);
+        this.setEncounterState(active,this.selectedId,[...(this.deadIds ?? [])],this.combatRound,this.playerTracker ?? [],[...(this.tokenHealth?.values() ?? [])],this.movementRanges ?? [],this.targetIds ?? this.targetId ?? null,this.targetRange ?? null,this.actionSummary ?? null,[...(this.unconsciousIds ?? [])],this.automaticMoveContext ?? null);
     }
     setEncounterState(active,selectedId,deadIds = [],round = 0,tracker = [],health = tracker,ranges = [],targetId = null,targetRange = null,actionSummary = null,unconsciousIds = [],automaticMoveContext = null) {
         const turnChanged = active === true && (!this.combatMode || selectedId !== this.selectedId || round !== this.combatRound);
@@ -381,7 +400,7 @@ export class Battlemap {
         this.movementRanges = ranges;
         this.drawMovementRanges();
         this.selectedId = selectedId;
-        this.targetActorId = selectedId; this.targetId = targetId; this.targetRange = targetRange; this.actionSummary = actionSummary;
+        this.targetActorId = selectedId; this.targetIds = Array.isArray(targetId) ? targetId : targetId == null ? [] : [targetId]; this.targetId = this.targetIds[0] ?? null; this.targetRange = targetRange; this.actionSummary = actionSummary;
         this.deadIds = new Set(deadIds);
         this.unconsciousIds = new Set(unconsciousIds);
         for (const token of this.characterTokens.values()) this.tokenAppearance(token);
@@ -413,33 +432,36 @@ export class Battlemap {
     clearMovementTrails() { this.movementEpoch++; this.movementTrails.clear(); this.drawMovementIndicators(); }
     setMovementTrails(trails) { this.movementTrails = new Map(trails.map(t => [t.id,t])); this.drawMovementIndicators(); }
     setTargetSelection(selection) {
-        this.targetActorId = selection?.actorId ?? null; this.targetId = selection?.targetId ?? null; this.targetRange = selection?.rangeProfile ?? null;
+        this.targetActorId = selection?.actorId ?? null; this.targetIds = selection?.targetIds ?? (selection?.targetId == null ? [] : [selection.targetId]); this.targetId = this.targetIds[0] ?? null; this.targetRange = selection?.rangeProfile ?? null;
         this.drawMovementIndicators(); this.drawTargetRing();
     }
-    targetTrail() {
-        if (!this.combatMode) return null;
-        const actor = this.characterTokens.get(this.targetActorId), target = this.characterTokens.get(this.targetId);
-        if (!actor || !target || actor.id === target.id) return null;
-        return {id:'target',fromColumn:actor.column,fromRow:actor.row,toColumn:target.column,toRow:target.row,isNpc:actor.isNpc,isTarget:true};
+    targetTrail() { return this.targetTrails()[0] ?? null; }
+    targetTrails() {
+        if (!this.combatMode) return [];
+        const actor = this.characterTokens.get(this.targetActorId);
+        if (!actor) return [];
+        return (this.targetIds ?? (this.targetId == null ? [] : [this.targetId])).flatMap((id,index) => {
+            const target = this.characterTokens.get(id);
+            return !target || actor.id === id ? [] : [{id:index === 0 ? 'target' : 'target:'+id,fromColumn:actor.column,fromRow:actor.row,toColumn:target.column,toRow:target.row,isNpc:actor.isNpc,isTarget:true}];
+        });
     }
     drawTargetRing() {
         const graphics = this.targetRingGraphics;
         if (!graphics || !this.view) return;
         graphics.clear();
-        const trail = this.targetTrail();
-        if (!trail) return;
+        for (const trail of this.targetTrails()) {
         const {end} = movementGeometry(trail,this.scene.gridSize,this.view);
         const wave = (Math.sin((this.pulseTime ?? 0)*Math.PI/700)+1)/2;
         graphics.circle(end.x,end.y,this.scene.gridSize*this.view.scale*(.64+.07*wave))
             .stroke({color:trail.isNpc ? 0xff0000 : 0x00ff00,alpha:.5+.5*wave,width:3});
+        }
     }
     drawMovementIndicators() {
         const graphics = this.movementStroke;
         if (!graphics || !this.view) return;
         graphics.clear();
         const visible = new Set();
-        const target = this.targetTrail();
-        const indicators = [...this.movementTrails.values(),...(target ? [target] : [])];
+        const indicators = [...this.movementTrails.values(),...this.targetTrails()];
         if (this.combatMode) for (const trail of indicators) {
             const {start,end,midpoint,distance} = movementGeometry(trail,this.scene.gridSize,this.view);
             const colour = trail.isTarget ? (trail.isNpc ? 0xff0000 : 0x00ff00) : 0xffffff;
@@ -509,8 +531,8 @@ export class Battlemap {
         if (!this.combatMode || token.id !== this.selectedId || token.isDead) return;
         const size = this.scene.gridSize;
         const wave = (Math.sin((this.pulseTime ?? 0)*Math.PI/700)+1)/2;
-        token.turnRing.circle(size/2,size/2,size*(.61+.07*wave))
-            .stroke({color:token.isNpc ? 0xff0000 : 0x00ff00,alpha:.5+.5*wave,width:Math.max(size*.035,2/this.view.scale)});
+        token.turnRing.circle(size/2,size/2,this.tokenDisplaySize()*(.61+.07*wave))
+            .stroke({color:token.isNpc ? 0xff0000 : 0x00ff00,alpha:.5+.5*wave,width:Math.max(this.tokenDisplaySize()*.035,2/this.view.scale)});
     }
     drawTokenHealth(token) {
         const bar = token.healthBar;
@@ -522,8 +544,8 @@ export class Battlemap {
         }
         bar.visible = this.combatMode === true && Number.isFinite(token.healthWidth);
         if (!bar.visible) return;
-        const scale = this.view.scale, width = this.scene.gridSize*.8;
-        const x = this.scene.gridSize*.1, y = -10/scale, height = 5/scale;
+        const scale = this.view.scale, width = Math.max(this.scene.gridSize*.8,48/scale);
+        const x = (this.scene.gridSize-width)/2, y = (this.scene.gridSize-this.tokenDisplaySize())/2-10/scale, height = 5/scale;
         bar.rect(x,y,width,height).fill({color:0x000000,alpha:.75});
         const colour = {red:0xff0000,orange:0xffa500,green:0x008000}[token.healthColour] ?? 0xff0000;
         bar.rect(x,y,width*Math.max(0,Math.min(100,token.healthWidth))/100,height).fill({color:colour});
@@ -531,18 +553,19 @@ export class Battlemap {
     }
     decorateToken(token) {
         const size = this.scene.gridSize;
+        this.layoutToken(token);
         token.isDead = this.deadIds?.has(token.id) ?? false;
         token.isUnconscious = this.unconsciousIds?.has(token.id) ?? false;
         token.isCurrent = token.id === this.selectedId && !token.isDead;
         this.drawTurnRing(token);
         this.drawTokenHealth(token);
         token.halo.clear();
-        if (this.combatMode) token.halo.circle(size/2,size/2,size*.57).fill({color:token.isNpc ? 0xff0000 : 0x00ff00,alpha:.25});
+        if (this.combatMode) token.halo.circle(size/2,size/2,this.tokenDisplaySize()*.57).fill({color:token.isNpc ? 0xff0000 : 0x00ff00,alpha:.25});
         token.labelText.text = token.name;
         token.labelText.style.fill = token.isNpc ? 0xffb3b3 : 0xb3ffb3;
         token.label.scale.set(1/this.view.scale);
         const width = token.labelText.width + 10, height = token.labelText.height + 4;
-        token.label.position.set(size/2-width/(2*this.view.scale),size+4/this.view.scale);
+        token.label.position.set(size/2-width/(2*this.view.scale),(size+this.tokenDisplaySize())/2+4/this.view.scale);
         token.labelText.position.set(5,2);
         token.labelBackground.clear().rect(0,0,width,height).fill({color:0x000000,alpha:.5});
     }
@@ -581,7 +604,7 @@ export class Battlemap {
         const texture = PIXI.Texture.from(canvas), previous = token.fallbackTexture;
         if (token.fallback) token.fallback.texture = texture;
         else token.fallback = new PIXI.Sprite(texture);
-        token.fallback.width = token.fallback.height = this.scene.gridSize;
+        this.layoutToken(token);
         token.fallbackTexture = texture; token.fallbackKey = key;
         previous?.destroy(true);
     }
@@ -601,12 +624,7 @@ export class Battlemap {
             this.placementPreview?.clear();
             for (const token of this.characterTokens.values()) {
                 token.container.position.set(token.column*size,token.row*size);
-                if (token.fallback) token.fallback.width = token.fallback.height = size;
-                if (token.imageSprite) {
-                    token.imageSprite.width = size*Math.min(1,token.imageAspect);
-                    token.imageSprite.height = size*Math.min(1,1/token.imageAspect);
-                    token.imageSprite.position.set((size-token.imageSprite.width)/2,(size-token.imageSprite.height)/2);
-                }
+                this.layoutToken(token);
             }
         }
         this.apply();
@@ -619,7 +637,7 @@ export class Battlemap {
     }
     publishPresentation() {
         if (!this.presentation || this.disposed || this.readOnly || this.presentationCleared) return;
-        this.presentation.publish({combatMode:this.combatMode === true,round:this.combatRound ?? 0,actionSummary:this.combatMode && this.playerTracker?.some(e => e.id === this.actionSummary?.id && e.isVisible === true) ? this.actionSummary : null,tracker:this.playerTracker ?? [],movementRanges:playerMovementRanges(this.displayMovementRanges()),movementTrails:playerMovementTrails([...this.movementTrails.values()],[...this.characterTokens.values()]),targetSelection:this.combatMode ? playerTargetSelection(this.targetActorId,this.targetId,[...this.characterTokens.values()],this.targetRange) : null,scene:this.scene, tokens:playerTokens([...this.characterTokens.values()]),
+        this.presentation.publish({combatMode:this.combatMode === true,round:this.combatRound ?? 0,actionSummary:this.combatMode && this.playerTracker?.some(e => e.id === this.actionSummary?.id && e.isVisible === true) ? this.actionSummary : null,tracker:this.playerTracker ?? [],movementRanges:playerMovementRanges(this.displayMovementRanges()),movementTrails:playerMovementTrails([...this.movementTrails.values()],[...this.characterTokens.values()]),targetSelection:this.combatMode ? playerTargetSelection(this.targetActorId,this.targetIds ?? this.targetId,[...this.characterTokens.values()],this.targetRange) : null,scene:this.scene, tokens:playerTokens([...this.characterTokens.values()]),
             view:{...this.view, width:this.width,height:this.height,imageWidth:this.imageWidth,imageHeight:this.imageHeight}});
     }
     publishPresentationPointer() {

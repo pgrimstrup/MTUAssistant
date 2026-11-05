@@ -47,30 +47,55 @@
                     </label>
                     @if (coverError is not null) { <p role="alert">@coverError</p> }
                 }
+                @if (state.MajorAction == "Ranged Attack" && Loadout?.AutoScore > 0)
+                {
+                    <label class="inline-option"><span>Auto Attack</span><select class="form-select" value="@state.AutoAttack" disabled="@(Disabled || state.ActionsResolved)" @onchange="ChangeAutoAttack">
+                        <option value="Single" selected="@(state.AutoAttack == "Single")">Single</option>
+                        <option value="Burst" selected="@(state.AutoAttack == "Burst")">Burst (one target, @Loadout.AutoScore rounds)</option>
+                        <option value="Full Auto" selected="@(state.AutoAttack == "Full Auto")">Full Auto (multiple targets, @(Loadout.AutoScore * 3) rounds)</option>
+                    </select></label>
+                }
                 @if (state.NeedsTarget)
                 {
-                    <label>Target
-                        <select class="form-select" value="@(state.TargetId?.ToString() ?? "")" disabled="@(Disabled || state.ActionsResolved)" @onchange="ChangeTarget">
-                            <option value="" selected="@(state.TargetId is null)">No target</option>
-                            @foreach (var target in Entries.Where(e => e.IsNpc != actor.IsNpc))
-                            { <option value="@target.Id" selected="@(state.TargetId == target.Id)">@target.Name@(Encounter.IsDead(target) ? " (Dead)" : Encounter.ActionFor(target.Id).Unconscious ? " (Unconscious)" : "")@(!target.IsVisible ? " (hidden)" : "")</option> }
-                        </select>
-                    </label>
-                    @if (state.NeedsReaction)
+                    @for (var i = 0; i < state.AttackTargets.Count; i++)
                     {
-                        <label>Target Reaction
-                            <select class="form-select" value="@state.TargetReaction" disabled="@(Disabled || state.ActionsResolved || state.TargetId is null)" @onchange="ChangeReaction">
-                                @foreach (var reaction in Encounter.TargetReactions) { <option value="@reaction" selected="@(state.TargetReaction == reaction)">@reaction</option> }
-                            </select>
-                        </label>
-                        @if (state.TargetReaction == "Dive for Cover" && Entries.FirstOrDefault(e => e.Id == state.TargetId) is { } reactingTarget)
-                        {
-                            <label>Target Reaction Stance
-                                <select class="form-select" value="@(state.TargetReactionStance ?? Encounter.ActionFor(reactingTarget.Id).Stance)" disabled="@(Disabled || state.ActionsResolved)" @onchange="ChangeReactionStance">
-                                    @foreach (var stance in CombatActionChoices.Stances) { <option value="@stance" selected="@((state.TargetReactionStance ?? Encounter.ActionFor(reactingTarget.Id).Stance) == stance)">@stance</option> }
+                        var index = i;
+                        var slot = state.AttackTargets[index];
+                        <div class="target-options">
+                            <label class="inline-option"><span>Target@(state.FullAuto ? $" {index + 1}" : "")</span>
+                                <select class="form-select" value="@(slot.TargetId?.ToString() ?? "")" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => ChangeAttackTarget(index, e)">
+                                    <option value="" selected="@(slot.TargetId is null)">No target</option>
+                                    @foreach (var target in Entries.Where(e => e.IsNpc != actor.IsNpc && (!state.FullAuto || ((e.Id == slot.TargetId || !state.TargetIds.Contains(e.Id)) && (index == 0 || MTU.Core.Encounter.WithinAutoTargetRange(Entries.FirstOrDefault(first => first.Id == state.TargetId), e))))))
+                                    { <option value="@target.Id" selected="@(slot.TargetId == target.Id)">@TargetLabel(target)</option> }
                                 </select>
                             </label>
-                        }
+                            @if (state.NeedsReaction)
+                            {
+                                <label class="inline-option"><span>Reaction</span>
+                                    <select class="form-select" value="@slot.Reaction" disabled="@(Disabled || state.ActionsResolved || slot.TargetId is null)" @onchange="e => ChangeAttackReaction(index, e)">
+                                        @foreach (var reaction in Encounter.TargetReactions) { <option value="@reaction" selected="@(slot.Reaction == reaction)">@reaction</option> }
+                                    </select>
+                                </label>
+                                @if (slot.Reaction == "Dive to Hide")
+                                {
+                                    <label class="inline-option reaction-stance"><span>Cover Protection</span>
+                                        <select class="form-select" value="@(slot.Cover?.Id.ToString() ?? "")" disabled="@(Disabled || state.ActionsResolved || coverError is not null)" @onchange="e => ChangeReactionCover(index, e)">
+                                            <option value="" selected="@(slot.Cover is null)">None</option>
+                                            @if (slot.Cover is { } savedCover && !covers.Any(c => c.Id == savedCover.Id)) { <option value="@savedCover.Id">@savedCover.Name</option> }
+                                            @foreach (var cover in covers) { <option value="@cover.Id" selected="@(slot.Cover?.Id == cover.Id)">@cover.Name (+@cover.Protection protection)</option> }
+                                        </select>
+                                    </label>
+                                }
+                                @if (slot.Reaction is ("Dive for Cover" or "Dive to Hide") && Entries.FirstOrDefault(e => e.Id == slot.TargetId) is { } reactingTarget)
+                                {
+                                    <label class="inline-option reaction-stance"><span>Reaction Stance</span>
+                                        <select class="form-select" value="@(slot.Stance ?? Encounter.ActionFor(reactingTarget.Id).Stance)" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => ChangeAttackReactionStance(index, e)">
+                                            @foreach (var stance in CombatActionChoices.Stances) { <option value="@stance" selected="@((slot.Stance ?? Encounter.ActionFor(reactingTarget.Id).Stance) == stance)">@stance</option> }
+                                        </select>
+                                    </label>
+                                }
+                            }
+                        </div>
                     }
                 }
 
@@ -82,18 +107,27 @@
                         </select>
                     </label>
                 }
-                @if (state.MovementDiameter.HasValue)
-                { <p class="hint">Movement range: @state.MovementDiameter.Value.ToString("0.#") m diameter.@(!actor.OnMap ? " Place this token to display its range." : "")</p> }
-                @if (AttackModifierCalculator.Calculate(Encounter, actor, Entries, Loadout) is { } modifiers)
+                @{
+                    var attacks = state.AttackTargets.Select((slot,index) => (slot,index))
+                        .Where(t => t.index == 0 || t.slot.TargetId.HasValue)
+                        .Select(t => (Name: Entries.FirstOrDefault(e => e.Id == t.slot.TargetId)?.Name ?? "No target", Modifiers: AttackModifierCalculator.Calculate(Encounter, actor, Entries, Loadout, t.index)))
+                        .Where(t => t.Modifiers is not null).ToArray();
+                    var modifierNames = attacks.SelectMany(t => t.Modifiers!.Rows).Select(row => row.Name).Distinct().ToArray();
+                }
+                @if (attacks.Length > 0)
                 {
                     <table class="attack-modifiers" aria-label="Attack modifiers">
                         <caption>Attack modifiers</caption>
-                        <tbody>@foreach (var modifier in modifiers.Rows) { <tr><td>@modifier.Name</td><td>@modifier.Dm.ToString("+0;-0;0")</td></tr> }</tbody>
-                        <tfoot><tr><th scope="row">Total</th><td>@modifiers.Total.ToString("+0;-0;0")</td></tr></tfoot>
+                        <tbody>
+                            @foreach (var name in modifierNames)
+                            { <tr><td>@name</td><td>@FormatModifiers(attacks.Select(t => t.Modifiers!.Rows.Where(r => r.Name == name).Sum(r => r.Dm)))</td></tr> }
+                        </tbody>
+                        <tfoot><tr><th scope="row">Total</th><td>@FormatModifiers(attacks.Select(t => t.Modifiers!.Total))</td></tr></tfoot>
                     </table>
-                    @if (modifiers.UnavailableReason is { } reason) { <p class="hint">@reason</p> }
+                    @if (state.FullAuto) { <p class="hint">@string.Join(" / ", attacks.Select(t => t.Name))</p> }
+                    @foreach (var reason in attacks.Select(t => t.Modifiers!.UnavailableReason).OfType<string>().Distinct()) { <p class="hint">@reason</p> }
                 }
-                <button type="button" class="btn btn-sm btn-primary resolve-actions" disabled="@(Disabled || state.ActionsResolved || (state.MinorCount == 0 && state.MajorAction is null && !state.HasPendingStatus) || (state.IsSelected("Tag Target") && (!state.TargetHasBeenHit || Loadout?.HasSmartTracker != true)) || (state.MajorAction == "Ranged Attack" && AttackModifierCalculator.Calculate(Encounter, actor, Entries, Loadout)?.CanResolve != true))" @onclick="() => ResolveRequested.InvokeAsync()">Resolve Actions</button>
+                <button type="button" class="btn btn-sm btn-primary resolve-actions" disabled="@(Disabled || state.ActionsResolved || (state.MinorCount == 0 && state.MajorAction is null && !state.HasPendingStatus) || (state.IsSelected("Tag Target") && (!state.TargetHasBeenHit || Loadout?.HasSmartTracker != true)) || (state.MajorAction == "Ranged Attack" && !CanResolveAttack(actor, state)))" @onclick="() => ResolveRequested.InvokeAsync()">Resolve Actions</button>
             </div>
         }
         else { <p class="hint">Select a combatant in the tracker or double-click their token.</p> }
@@ -111,6 +145,23 @@
 </aside>
 
 @code {
+    [Parameter] public EventCallback<(int Index, CombatCover? Cover)> AttackReactionCoverChanged { get; set; }
+    private Task ChangeReactionCover(int index, ChangeEventArgs e) => AttackReactionCoverChanged.InvokeAsync((index, int.TryParse(e.Value?.ToString(), out var id) && covers.FirstOrDefault(c => c.Id == id) is { } cover ? new CombatCover(cover.Id, cover.Name, cover.Protection, cover.Hits) : null));
+    [Parameter] public EventCallback<string> AutoAttackChanged { get; set; }
+    [Parameter] public EventCallback<(int Index, int? TargetId)> AttackTargetChanged { get; set; }
+    [Parameter] public EventCallback<(int Index, string Reaction)> AttackReactionChanged { get; set; }
+    [Parameter] public EventCallback<(int Index, string Stance)> AttackReactionStanceChanged { get; set; }
+    private static string FormatModifiers(IEnumerable<int> values)
+    {
+        var items = values.ToArray();
+        return string.Join(" / ", (items.Distinct().Count() == 1 ? items.Take(1) : items).Select(v => v.ToString("+0;-0;0")));
+    }
+    private Task ChangeAutoAttack(ChangeEventArgs e) => AutoAttackChanged.InvokeAsync(e.Value?.ToString() ?? "Single");
+    private Task ChangeAttackReaction(int index, ChangeEventArgs e) => AttackReactionChanged.InvokeAsync((index, e.Value?.ToString() ?? "None"));
+    private Task ChangeAttackReactionStance(int index, ChangeEventArgs e) => AttackReactionStanceChanged.InvokeAsync((index, e.Value?.ToString() ?? "Standing"));
+    private Task ChangeAttackTarget(int index, ChangeEventArgs e) => AttackTargetChanged.InvokeAsync((index, int.TryParse(e.Value?.ToString(), out var id) ? id : null));
+    private string TargetLabel(SceneCombatant target) => target.Name + (Encounter.IsDead(target) ? " (Dead)" : Encounter.ActionFor(target.Id).Unconscious ? " (Unconscious)" : "") + (!target.IsVisible ? " (hidden)" : "");
+    private bool CanResolveAttack(SceneCombatant actor, CombatantActionState state) => state.TargetId.HasValue && state.AttackTargets.Select((t,i) => (t,i)).Where(x => x.t.TargetId.HasValue).All(x => AttackModifierCalculator.Calculate(Encounter, actor, Entries, Loadout, x.i)?.CanResolve == true);
     private IReadOnlyList<CoverProtection> covers = [];
     private string? coverError;
     protected override async Task OnInitializedAsync()

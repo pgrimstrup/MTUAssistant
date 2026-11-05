@@ -63,7 +63,7 @@
                 {
                     <section class="generated-skills" aria-label="Generated skills">
                         <h3>Generated skills</h3>
-                        <p class="secondary">@(string.IsNullOrEmpty(generatedArchetype.D66) ? "Combatant" : $"D66 {generatedArchetype.D66}") · @NpcGenerator.SkillRollCount(skillLevel) skill rolls using 2D6. Changing occupation rerolls skills. @(NpcRaces.SupportsGeneration(race) ? "Changing skill level rerolls skills, age and UPP." : "Changing skill level rerolls skills.")</p>
+                        <p class="secondary">@(string.IsNullOrEmpty(generatedArchetype.D66) ? "Combatant" : $"D66 {generatedArchetype.D66}") · @NpcGenerator.SkillRollCount(skillLevel) skill rolls using 2D. Changing occupation rerolls skills. @(NpcRaces.SupportsGeneration(race) ? "Changing skill level rerolls skills, age and UPP." : "Changing skill level rerolls skills.")</p>
                         <p>@string.Join(", ", NpcGenerator.RecordedSkills(editing.Character.Skills ?? []).OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).Select(s => $"{s.Name} {s.Level}"))</p>
                     </section>
                 }
