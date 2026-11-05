@@ -117,7 +117,8 @@ public sealed partial class SceneService
                         keep.IsVisible,
                         null,
                         null,
-                        character.Upp
+                        character.Upp,
+                        Speed: character.Speed
                     );
                     var maximum = Encounter.MaximumHealth(entry);
                     target.Attributes[keep.Id] = maximum.WithTotal(hp, maximum);

@@ -49,6 +49,7 @@
                     <div class="field-row profile-row">
                         <label>Gender <input class="form-control" @bind="gender" @bind:after="RefreshGeneratedName" maxlength="120" disabled="@busy" /></label>
                         <label>UPP <input class="form-control upp" @bind="Upp" @bind:event="oninput" maxlength="40" disabled="@busy" /></label>
+                        <label>Speed (m per Move) <input class="form-control" type="number" min="0" step="1" @bind="speed" disabled="@busy" /></label>
                         <label>Age <input class="form-control" type="number" min="0" @bind="age" disabled="@busy" /></label>
                     </div>
                     <div class="field-row quirks-row">
@@ -131,6 +132,7 @@
     private NpcSkillLevel skillLevel = NpcSkillLevel.Novice;
     private NpcSkillLevel generationLevel = NpcSkillLevel.Novice;
     private int? age;
+    private int speed = 6;
     private InjuryTolerance injuryTolerance;
     private byte[]? tokenImage;
     private int tokenInputKey, version;
@@ -228,6 +230,7 @@
         quirks1 = item.Quirks1; quirks2 = item.Quirks2; Upp = item.Character.Upp; skillLevel = item.SkillLevel;
         age = item.Age;
         injuryTolerance = item.Character.InjuryTolerance;
+        speed = item.Character.Speed;
         npcType = item.Type;
         tokenImage = item.Character.TokenImage; tokenInputKey++;
     }
@@ -260,7 +263,7 @@
         busy = true;
         try
         {
-            await Characters.SaveAsync(current with { Character = current.Character with { Name = name, Race = race, Upp = upp, InjuryTolerance = injuryTolerance, TokenImage = tokenImage }, Occupation = occupation, Gender = gender, Quirks1 = quirks1, Quirks2 = quirks2, SkillLevel = skillLevel, Age = age, Type = npcType }, replaceSkills: skillsRerolled);
+            await Characters.SaveAsync(current with { Character = current.Character with { Name = name, Race = race, Upp = upp, Speed = speed, InjuryTolerance = injuryTolerance, TokenImage = tokenImage }, Occupation = occupation, Gender = gender, Quirks1 = quirks1, Quirks2 = quirks2, SkillLevel = skillLevel, Age = age, Type = npcType }, replaceSkills: skillsRerolled);
             if (campaign?.Id == current.Character.CampaignId) { await Reload(); editing = null; }
         }
         catch (ArgumentException ex) { error = ex.Message; }

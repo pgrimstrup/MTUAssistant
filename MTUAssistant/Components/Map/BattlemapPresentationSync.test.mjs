@@ -67,3 +67,6 @@ assert.ok(validBattlemapSnapshot({...state,movementRanges:ranges}));
 assert.equal(validBattlemapSnapshot({...state,movementRanges:[{...ranges[0],diameter:Infinity}]}),false);
 console.log('Cast movement range filtering and validation passed.');
 for(const diameter of [4.5,7.5,10.5,13.5,19.5,25.5,37.5]) assert.ok(validBattlemapSnapshot({...state,movementRanges:[{...ranges[0],diameter}]}),'cast accepts each Move cycle diameter');
+
+for(const diameter of [1.5,5,8.5,15.5,31.5,55.5,73.5]) assert.ok(validBattlemapSnapshot({...state,movementRanges:[{...ranges[0],diameter}]}),'cast accepts custom character Speed movement');
+for(const diameter of [0,-1,NaN,Infinity]) assert.equal(validBattlemapSnapshot({...state,movementRanges:[{...ranges[0],diameter}]}),false,'cast rejects invalid Speed movement diameter');

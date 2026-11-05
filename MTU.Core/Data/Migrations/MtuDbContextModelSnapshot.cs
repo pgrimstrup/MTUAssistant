@@ -307,6 +307,11 @@ namespace MTU.Core.Data.Migrations
 
                     b.Property<string>("Race").IsRequired().HasColumnType("TEXT");
 
+                    b.Property<int>("Speed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(6);
+
                     b.Property<string>("TermsServed").IsRequired().HasColumnType("TEXT");
 
                     b.Property<byte[]>("TokenImage").HasColumnType("BLOB");

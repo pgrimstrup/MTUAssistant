@@ -19,7 +19,8 @@ public sealed record Character(
     bool Inactive = false,
     IReadOnlyList<EquipmentItem>? Equipment = null,
     bool IsNpc = false,
-    InjuryTolerance InjuryTolerance = InjuryTolerance.None
+    InjuryTolerance InjuryTolerance = InjuryTolerance.None,
+    int Speed = 6
 );
 
 public sealed record CharacterSkill(int Id, int CharacterId, string Name, int Level);
@@ -55,7 +56,8 @@ public sealed class CharacterService(MtuDbContext db)
                 t.Inactive,
                 null,
                 t.IsNpc,
-                t.InjuryTolerance
+                t.InjuryTolerance,
+                t.Speed
             ))
             .ToArrayAsync();
         var skills = await db
@@ -182,6 +184,8 @@ public sealed class CharacterService(MtuDbContext db)
     public async Task SaveAsync(Character character)
     {
         InjuryToleranceRules.Validate(character.InjuryTolerance);
+        if (character.Speed < 0)
+            throw new ArgumentException("Speed must be zero or greater.");
         var name = character.Name?.Trim() ?? "";
         var player = character.PlayerName?.Trim() ?? "";
         var race = character.Race?.Trim() ?? "";
@@ -223,6 +227,7 @@ public sealed class CharacterService(MtuDbContext db)
         entity.HighestScoutRank = character.HighestScoutRank;
         entity.NaturalDr = character.NaturalDr;
         entity.InjuryTolerance = character.InjuryTolerance;
+        entity.Speed = character.Speed;
         entity.TokenImage = character.TokenImage;
         entity.Inactive = character.Inactive;
         await db.SaveChangesAsync();

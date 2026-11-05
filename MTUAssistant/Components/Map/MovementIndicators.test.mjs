@@ -32,6 +32,12 @@ map.view.scale=.5;map.drawMovementIndicators();assert.equal(map.movementStroke.s
 map.setMovementTrails([{...trail,isNpc:true}]);assert.equal(map.movementStroke.strokes[0].color,0xffffff);
 map.tokenAppearance=()=>{};map.setEncounterState(true,1,[],1);assert.equal(map.movementTrails.size,0,'changing turns clears the indicator');
 map.setMovementTrails([trail]);map.setEncounterState(false,null,[],0);assert.equal(map.movementTrails.size,0);assert.equal(map.movementLabels.size,0);
+map.setMovementTrails([trail,{...trail,id:2}]);map.movementRanges=[{id:1,diameter:13.5},{id:2,diameter:7.5}];map.automaticMovePreview={id:1,diameter:25.5};
+map.resetTokenMovement(1);
+assert.equal(map.movementTrails.has(1),false,'Reset clears the selected token distance line');
+assert.equal(map.movementTrails.has(2),true,'Reset preserves other token movement indicators');
+assert.deepEqual(map.movementRanges,[{id:2,diameter:7.5}],'Reset clears only the selected token circle');
+assert.equal(map.automaticMovePreview,null,'Reset clears drag preview');
 globalThis.PIXI=oldPixi;
 const publicTrails=playerMovementTrails([trail,{...trail,id:2}],[{id:1,isVisible:true,isNpc:false},{id:2,isVisible:false,isNpc:true}]);
 assert.equal(publicTrails.length,1);assert.equal(publicTrails[0].id,1);

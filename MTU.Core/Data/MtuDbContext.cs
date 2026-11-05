@@ -180,6 +180,7 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
             .Entity<CharacterEntity>()
             .Property(c => c.InjuryTolerance)
             .HasDefaultValue(InjuryTolerance.None);
+        modelBuilder.Entity<CharacterEntity>().Property(c => c.Speed).HasDefaultValue(6);
         modelBuilder.Entity<CharacterEntity>().HasIndex(t => new { t.CampaignId, t.Name });
         modelBuilder
             .Entity<CampaignEntity>()

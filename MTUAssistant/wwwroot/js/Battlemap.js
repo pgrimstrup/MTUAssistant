@@ -1,3 +1,4 @@
+import { automaticMoveRange } from './AutomaticMovement.js';
 import { movementGeometry, weaponRangeBand } from './MovementIndicators.js';
 import { attachCastWindow } from './CastWindow.js';
 import { presentationSession } from './PresentationSync.js';
@@ -56,6 +57,7 @@ export class Battlemap {
         this.disposed = false;
         this.characterTokens = new Map();
         this.pendingSaves = new Set();
+        this.automaticMoveQueue = Promise.resolve();
         this.movementTrails = new Map(); this.movementLabels = new Map(); this.movementEpoch = 0;
     }
     async start(url) {
@@ -142,7 +144,7 @@ export class Battlemap {
                 return;
             }
             const token = this.hitToken(point);
-            if (token?.saving) return;
+            if (token?.saving || (token && this.pendingSaves.size > 0)) return;
             this.dragging = token ? { id:event.pointerId, token, column:token.column, row:token.row,
                 offsetX:point.x-token.column*this.scene.gridSize, offsetY:point.y-token.row*this.scene.gridSize }
                 : { id:event.pointerId, x:event.clientX, y:event.clientY };
@@ -165,6 +167,8 @@ export class Battlemap {
             if (this.dragging.token) {
                 const cell = snapToken(point.x-this.dragging.offsetX, point.y-this.dragging.offsetY,
                     this.scene.gridSize, this.imageWidth, this.imageHeight);
+                if (cell.column !== this.dragging.token.column || cell.row !== this.dragging.token.row)
+                    this.previewAutomaticMovement(this.dragging,cell.column,cell.row);
                 this.positionToken(this.dragging.token, cell.column, cell.row);
                 return;
             }
@@ -177,16 +181,25 @@ export class Battlemap {
             this.dragging = null;
             if (this.host.hasPointerCapture(event.pointerId)) this.host.releasePointerCapture(event.pointerId);
             if (!drag.token) return;
-            if (event.type !== 'pointerup') { this.restoreMovementTrail(drag); this.positionToken(drag.token, drag.column, drag.row); return; }
-            if (drag.column === drag.token.column && drag.row === drag.token.row) return;
+            if (event.type !== 'pointerup') {
+                this.restoreMovementTrail(drag); this.positionToken(drag.token, drag.column, drag.row);
+                if (drag.automaticMove) {
+                    drag.token.saving=true;
+                    this.trackSave(this.automaticMoveQueue.catch(()=>{}).then(()=>this.callback.invokeMethodAsync('CancelAutomaticMove',drag.token.id,drag.automaticMove.context.round))
+                        .finally(()=>{drag.token.saving=false;this.clearAutomaticMovementPreview();}));
+                }
+                return;
+            }
+            if (drag.column === drag.token.column && drag.row === drag.token.row && !drag.automaticMove) return;
             drag.token.saving = true;
             this.trackSave((async () => {
                 let saved = false;
-                try { saved = await this.callback.invokeMethodAsync('MoveToken', drag.token.id, drag.token.column, drag.token.row); }
+                try { await this.automaticMoveQueue.catch(()=>{}); saved = await this.callback.invokeMethodAsync('MoveToken', drag.token.id, drag.token.column, drag.token.row, drag.automaticMove?.context.round ?? null, drag.automaticMove?.context.column ?? null, drag.automaticMove?.context.row ?? null); }
                 finally {
                     if (!this.disposed && this.characterTokens.get(drag.token.id) === drag.token) {
                         if (!saved) { this.restoreMovementTrail(drag); this.positionToken(drag.token, drag.column, drag.row); }
                         drag.token.saving = false;
+                        this.clearAutomaticMovementPreview();
                     }
                 }
             })());
@@ -243,11 +256,39 @@ export class Battlemap {
             point.y >= token.row*this.scene.gridSize && point.y < (token.row+1)*this.scene.gridSize);
     }
     positionToken(token, column, row) {
-        if (this.combatMode && this.dragging?.token === token && this.dragging.movementEpoch === this.movementEpoch) this.updateMovementTrail(token, this.dragging.column, this.dragging.row, column, row);
+        if (this.combatMode && this.dragging?.token === token && this.dragging.movementEpoch === this.movementEpoch) {
+            const origin=this.dragging.automaticMove?.context;
+            this.updateMovementTrail(token, origin?.column ?? this.dragging.column, origin?.row ?? this.dragging.row, column, row);
+        }
         token.column = column; token.row = row;
         token.container.position.set(column*this.scene.gridSize, row*this.scene.gridSize);
         this.drawMovementIndicators(); this.drawTargetRing();
         this.publishPresentation();
+    }
+    clearAutomaticMovementPreview() {
+        this.automaticMovePreview=null;
+        this.drawMovementRanges();
+        this.publishPresentation();
+    }
+    previewAutomaticMovement(drag,column,row) {
+        if (this.readOnly || !this.combatMode || drag.movementEpoch !== this.movementEpoch || !this.automaticMoveContext || this.automaticMoveContext.id !== drag.token.id) return;
+        if (!drag.automaticMove) {
+            const context=this.automaticMoveContext;
+            if (!context || context.id !== drag.token.id || context.id !== this.selectedId) return;
+            drag.automaticMove={context:{...context},moves:null};
+        }
+        const session=drag.automaticMove;
+        const preview=automaticMoveRange(session.context,column,row);
+        if (!preview) return;
+        this.automaticMovePreview=preview.range;
+        this.drawMovementRanges();
+        if (session.moves === preview.moves) return;
+        session.moves=preview.moves;
+        this.automaticMoveQueue=this.automaticMoveQueue.catch(()=>{}).then(async()=>{
+            if (this.disposed || drag.movementEpoch !== this.movementEpoch) return;
+            await this.callback.invokeMethodAsync('PreviewAutomaticMove',drag.token.id,column,row,session.context.round,session.context.column,session.context.row);
+        });
+        this.trackSave(this.automaticMoveQueue);
     }
     trackSave(promise) {
         const tracked = promise.catch(error => {
@@ -325,15 +366,18 @@ export class Battlemap {
         if (publish) this.publishPresentation();
     }
     setCombatMode(active) {
-        this.setEncounterState(active,this.selectedId,[...(this.deadIds ?? [])],this.combatRound,this.playerTracker ?? [],[...(this.tokenHealth?.values() ?? [])],this.movementRanges ?? [],this.targetId ?? null,this.targetRange ?? null,this.actionSummary ?? null,[...(this.unconsciousIds ?? [])]);
+        this.setEncounterState(active,this.selectedId,[...(this.deadIds ?? [])],this.combatRound,this.playerTracker ?? [],[...(this.tokenHealth?.values() ?? [])],this.movementRanges ?? [],this.targetId ?? null,this.targetRange ?? null,this.actionSummary ?? null,[...(this.unconsciousIds ?? [])],this.automaticMoveContext ?? null);
     }
-    setEncounterState(active,selectedId,deadIds = [],round = 0,tracker = [],health = tracker,ranges = [],targetId = null,targetRange = null,actionSummary = null,unconsciousIds = []) {
+    setEncounterState(active,selectedId,deadIds = [],round = 0,tracker = [],health = tracker,ranges = [],targetId = null,targetRange = null,actionSummary = null,unconsciousIds = [],automaticMoveContext = null) {
         const turnChanged = active === true && (!this.combatMode || selectedId !== this.selectedId || round !== this.combatRound);
         this.combatRound = round;
         this.playerTracker = playerCombatants(tracker);
         this.tokenHealth = new Map(health.map(e => [e.id,e]));
         this.combatMode = active === true;
         if (!this.combatMode || turnChanged) this.clearMovementTrails();
+        if (!this.combatMode || turnChanged) this.automaticMovePreview=null;
+        this.automaticMoveContext=automaticMoveContext;
+        if (this.automaticMovePreview && (!automaticMoveContext || automaticMoveContext.id !== this.automaticMovePreview.id)) this.automaticMovePreview=null;
         this.movementRanges = ranges;
         this.drawMovementRanges();
         this.selectedId = selectedId;
@@ -357,6 +401,14 @@ export class Battlemap {
         if (drag.movementEpoch !== this.movementEpoch) return;
         if (drag.previousTrail) this.movementTrails.set(drag.token.id,drag.previousTrail);
         else this.movementTrails.delete(drag.token.id);
+    }
+    resetTokenMovement(id) {
+        this.movementTrails.delete(id);
+        this.movementRanges=(this.movementRanges ?? []).filter(range=>range.id!==id);
+        if (this.automaticMovePreview?.id===id) this.automaticMovePreview=null;
+        this.drawMovementRanges();
+        this.drawMovementIndicators();
+        this.publishPresentation();
     }
     clearMovementTrails() { this.movementEpoch++; this.movementTrails.clear(); this.drawMovementIndicators(); }
     setMovementTrails(trails) { this.movementTrails = new Map(trails.map(t => [t.id,t])); this.drawMovementIndicators(); }
@@ -411,6 +463,11 @@ export class Battlemap {
         for (const [id,label] of this.movementLabels) if (!visible.has(id)) { label.container.destroy({children:true}); this.movementLabels.delete(id); }
     }
     setMovementRanges(ranges) { this.movementRanges = ranges; this.drawMovementRanges(); }
+    displayMovementRanges() {
+        return this.automaticMovePreview
+            ? [...(this.movementRanges ?? []).filter(r=>r.id!==this.automaticMovePreview.id),this.automaticMovePreview]
+            : this.movementRanges ?? [];
+    }
     drawMovementRanges() {
         const graphics = this.rangeGraphics;
         if (!graphics || !this.view) return;
@@ -418,7 +475,8 @@ export class Battlemap {
         graphics.position.set(this.view.x,this.view.y); graphics.scale.set(this.view.scale);
         if (!this.combatMode) return;
         const size = this.scene.gridSize;
-        for (const range of this.movementRanges ?? []) {
+        const ranges=this.displayMovementRanges();
+        for (const range of ranges) {
             const radius = range.diameter/1.5*size/2;
             graphics.circle((range.column+.5)*size,(range.row+.5)*size,radius)
                 .fill({color:range.colour,alpha:.15}).stroke({color:range.colour,alpha:.7,width:1/this.view.scale});
@@ -561,7 +619,7 @@ export class Battlemap {
     }
     publishPresentation() {
         if (!this.presentation || this.disposed || this.readOnly || this.presentationCleared) return;
-        this.presentation.publish({combatMode:this.combatMode === true,round:this.combatRound ?? 0,actionSummary:this.combatMode && this.playerTracker?.some(e => e.id === this.actionSummary?.id && e.isVisible === true) ? this.actionSummary : null,tracker:this.playerTracker ?? [],movementRanges:playerMovementRanges(this.movementRanges ?? []),movementTrails:playerMovementTrails([...this.movementTrails.values()],[...this.characterTokens.values()]),targetSelection:this.combatMode ? playerTargetSelection(this.targetActorId,this.targetId,[...this.characterTokens.values()],this.targetRange) : null,scene:this.scene, tokens:playerTokens([...this.characterTokens.values()]),
+        this.presentation.publish({combatMode:this.combatMode === true,round:this.combatRound ?? 0,actionSummary:this.combatMode && this.playerTracker?.some(e => e.id === this.actionSummary?.id && e.isVisible === true) ? this.actionSummary : null,tracker:this.playerTracker ?? [],movementRanges:playerMovementRanges(this.displayMovementRanges()),movementTrails:playerMovementTrails([...this.movementTrails.values()],[...this.characterTokens.values()]),targetSelection:this.combatMode ? playerTargetSelection(this.targetActorId,this.targetId,[...this.characterTokens.values()],this.targetRange) : null,scene:this.scene, tokens:playerTokens([...this.characterTokens.values()]),
             view:{...this.view, width:this.width,height:this.height,imageWidth:this.imageWidth,imageHeight:this.imageHeight}});
     }
     publishPresentationPointer() {

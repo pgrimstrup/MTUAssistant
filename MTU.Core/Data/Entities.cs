@@ -167,6 +167,7 @@ public class CharacterEntity
     public int HighestNavalRank { get; set; }
     public int HighestScoutRank { get; set; }
     public int NaturalDr { get; set; }
+    public int Speed { get; set; } = 6;
     public InjuryTolerance InjuryTolerance { get; set; }
     public byte[]? TokenImage { get; set; }
     public bool Inactive { get; set; }

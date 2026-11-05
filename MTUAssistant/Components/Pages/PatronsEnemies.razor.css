@@ -14,10 +14,10 @@ h2 { font-size:1.15rem; margin:0 0 1rem; }
 .fields { display:flex; flex-direction:column; gap:.8rem; }
 .field-row { display:grid; gap:.8rem; }
 .identity-row { grid-template-columns:repeat(5,minmax(0,1fr)); }
-.profile-row { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.profile-row { grid-template-columns:repeat(4,minmax(0,1fr)); }
 .quirks-row { grid-template-columns:repeat(2,minmax(0,1fr)); }
 .fields label { min-width:0; }
-@media (max-width:800px) { .identity-row { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:800px) { .identity-row, .profile-row { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:520px) { .identity-row, .profile-row, .quirks-row { grid-template-columns:minmax(0,1fr); } }
 .fields label, .token-editor label { display:grid; gap:.3rem; color:var(--app-muted); font-size:.8rem; }
 .actions { display:flex; justify-content:flex-end; gap:.5rem; margin-top:1rem; }

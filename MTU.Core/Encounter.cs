@@ -285,7 +285,12 @@ public sealed partial class Encounter
         actions.Clear();
         foreach (var pair in state.Actions ?? [])
             if (ids.Contains(pair.Key))
-                actions[pair.Key] = NormalizeActions(pair.Value) with
+                actions[pair.Key] = NormalizeActions(
+                    pair.Value with
+                    {
+                        Speed = entries.First(e => e.Id == pair.Key).Speed,
+                    }
+                ) with
                 {
                     TargetId =
                         pair.Value.TargetId is int target && ids.Contains(target) ? target : null,

@@ -85,6 +85,8 @@ public sealed class NpcService(MtuDbContext db, CharacterService characterStore)
     {
         var actor = character.Character;
         InjuryToleranceRules.Validate(actor.InjuryTolerance);
+        if (actor.Speed < 0)
+            throw new ArgumentException("Speed must be zero or greater.");
         var name = actor.Name.Trim();
         var race = actor.Race.Trim();
         var upp = string.IsNullOrWhiteSpace(actor.Upp)
@@ -225,6 +227,7 @@ public sealed class NpcService(MtuDbContext db, CharacterService characterStore)
         entity.Upp = upp;
         entity.TokenImage = actor.TokenImage;
         entity.InjuryTolerance = actor.InjuryTolerance;
+        entity.Speed = actor.Speed;
         details.Occupation = occupation;
         details.Gender = gender;
         details.Quirks1 = quirks1;

@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import {automaticMoveCount,automaticMoveRange} from '../../wwwroot/js/AutomaticMovement.js';
+import {Battlemap} from '../../wwwroot/js/Battlemap.js';
+for(const [distance,moves] of [[0,1],[6,1],[6.8,1],[6.8001,2],[12.8,2],[12.8001,3],[99,3]]) assert.equal(automaticMoveCount(distance,6),moves);
+assert.equal(automaticMoveCount(9.8,9),1); assert.equal(automaticMoveCount(9.8001,9),2);
+assert.equal(automaticMoveCount(0,0),null);
+const context={id:1,round:1,column:0,row:0,speed:6,colour:'#87cefa',isVisible:true};
+assert.equal(automaticMoveRange(context,2,4).moves,1);
+assert.equal(automaticMoveRange(context,5,7).moves,3);
+const map=new Battlemap({style:{}},{gridSize:100},'auto-move-test');
+map.combatMode=true;map.selectedId=1;map.automaticMoveContext=context;
+map.drawMovementRanges=()=>{};
+const calls=[]; map.callback={async invokeMethodAsync(...args){calls.push(args);return true;}};
+const drag={token:{id:1},movementEpoch:map.movementEpoch};
+map.previewAutomaticMovement(drag,2,4);await map.automaticMoveQueue;
+assert.equal(calls.length,1);assert.equal(calls[0][0],'PreviewAutomaticMove');
+assert.equal(map.automaticMovePreview.diameter,13.5);
+map.previewAutomaticMovement(drag,1,0);await map.automaticMoveQueue;assert.equal(calls.length,1,'same Move count avoids redundant server updates');
+map.previewAutomaticMovement(drag,5,7);await map.automaticMoveQueue;assert.equal(map.automaticMovePreview.diameter,37.5);
+map.previewAutomaticMovement(drag,1,0);await map.automaticMoveQueue;assert.equal(map.automaticMovePreview.diameter,13.5);
+assert.deepEqual([map.automaticMovePreview.column,map.automaticMovePreview.row],[0,0]);
+assert.equal(calls.length,3,'outward and inward drag crossings update action counts');
+map.movementRanges=[{id:1,diameter:25.5},{id:2,diameter:9.5}];
+assert.equal(map.displayMovementRanges().find(r=>r.id===1).diameter,13.5,'local and Cast circle use live drag preview');
+const other={token:{id:2},movementEpoch:map.movementEpoch};map.previewAutomaticMovement(other,2,4);assert.equal(other.automaticMove,undefined);
+map.readOnly=true;const readOnly={token:{id:1},movementEpoch:map.movementEpoch};map.previewAutomaticMovement(readOnly,2,4);assert.equal(readOnly.automaticMove,undefined);
+map.readOnly=false;map.automaticMoveContext=null;const manual={token:{id:1},movementEpoch:map.movementEpoch};map.previewAutomaticMovement(manual,2,4);assert.equal(manual.automaticMove,undefined);
+console.log('Automatic drag Move thresholds, Speed, direction changes, anchored circles, callback batching and read-only guards passed.');
+
+let publishedRanges;map.publishPresentation=()=>{publishedRanges=map.displayMovementRanges();};map.movementRanges=[];map.clearAutomaticMovementPreview();assert.deepEqual(publishedRanges,[],'cancel/failure clears the preview for Cast as well as GM');
+
+map.automaticMoveContext=context;map.dragging=drag;drag.column=5;drag.row=7;drag.token.container={position:{set(){}}};map.positionToken(drag.token,2,4);assert.equal(map.movementTrails.get(1).fromColumn,0,'movement line uses turn origin after reload or repeated drops');map.positionToken(drag.token,0,0);assert.equal(map.movementTrails.size,0,'return to turn origin clears the distance line');

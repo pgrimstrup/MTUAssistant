@@ -188,7 +188,32 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
     private Task SetHiding(bool value) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetCoverStatus(actor.Id, encounter.ActionFor(actor.Id).SelectedBehindCover, value, entries)) : Task.CompletedTask;
     private Task SetUnconscious(bool value) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetUnconscious(actor.Id, value, entries)) : Task.CompletedTask;
     private Task SetElevated(bool value) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetElevated(actor.Id, value, entries)) : Task.CompletedTask;
-    private Task ResetActions() => SelectedActor is { } actor ? ChangeEncounter(() => encounter.ResetActions(actor.Id, entries)) : Task.CompletedTask;
+    private Task ResetActions() => Run(async scene =>
+    {
+        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        if (SelectedActor is not { } actor) return;
+        var previous = encounter.Snapshot();
+        var state = encounter.ActionFor(actor.Id);
+        SceneCombatant? returned = null;
+        try
+        {
+            encounter.ResetActions(actor.Id, entries);
+            if (actor.OnMap && state.TurnOriginColumn is int column && state.TurnOriginRow is int row)
+                returned = await ScenesStore.PositionCombatantAsync(scene.CampaignId, scene.Id, actor.Id, column, row, encounter.Snapshot());
+            else
+                await ScenesStore.SaveEncounterAsync(scene.CampaignId, scene.Id, encounter.Snapshot());
+        }
+        catch { encounter.Restore(previous, entries); throw; }
+        automaticMoveBefore = null;
+        if (returned is not null)
+        {
+            var index = entries.FindIndex(e => e.Id == actor.Id);
+            if (index >= 0) entries[index] = returned;
+            if (map is not null) await map.InvokeVoidAsync("updateCombatant", returned);
+        }
+        if (map is not null) await map.InvokeVoidAsync("resetTokenMovement", actor.Id);
+        await SyncEncounterMap();
+    });
     private Task SetTarget(int? target) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetTarget(actor.Id, target, entries)) : Task.CompletedTask;
     private Task SetTargetReaction(string reaction) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetTargetReaction(actor.Id, reaction, entries)) : Task.CompletedTask;
     private Task SetTargetReactionStance(string stance) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetTargetReactionStance(actor.Id, stance, entries)) : Task.CompletedTask;
@@ -202,7 +227,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         foreach (var id in entries.Select(e => e.CharacterId).Distinct().Where(id => !loadouts.ContainsKey(id)))
             loadouts[id] = new CombatLoadout(await EquipmentStore.ListDetailsForCharacterAsync(scene.CampaignId, id));
         if (map is null) return;
-        await map.InvokeVoidAsync("setEncounterState", encounter.Active, encounter.SelectedId, entries.Where(encounter.IsDead).Select(e => e.Id).ToArray(), encounter.Round, encounter.PlayerTracker(entries), entries.Select(e => new { e.Id, HealthWidth = encounter.HealthWidth(e), HealthColour = encounter.HealthColour(e) }).ToArray(), encounter.MovementRanges(entries), encounter.SelectedId is int selected ? encounter.ActionFor(selected).TargetId : null, SelectedActor is { } actor && encounter.ActionFor(actor.Id).MajorAction == "Ranged Attack" ? SelectedLoadout?.RangeFor(encounter.ActionFor(actor.Id)) : null, CombatActionSummary.Create(encounter, SelectedActor, entries, SelectedLoadout, player: true), entries.Where(e => encounter.ActionFor(e.Id).Unconscious).Select(e => e.Id).ToArray());
+        await map.InvokeVoidAsync("setEncounterState", encounter.Active, encounter.SelectedId, entries.Where(encounter.IsDead).Select(e => e.Id).ToArray(), encounter.Round, encounter.PlayerTracker(entries), entries.Select(e => new { e.Id, HealthWidth = encounter.HealthWidth(e), HealthColour = encounter.HealthColour(e) }).ToArray(), encounter.MovementRanges(entries), encounter.SelectedId is int selected ? encounter.ActionFor(selected).TargetId : null, SelectedActor is { } actor && encounter.ActionFor(actor.Id).MajorAction == "Ranged Attack" ? SelectedLoadout?.RangeFor(encounter.ActionFor(actor.Id)) : null, CombatActionSummary.Create(encounter, SelectedActor, entries, SelectedLoadout, player: true), entries.Where(e => encounter.ActionFor(e.Id).Unconscious).Select(e => e.Id).ToArray(), encounter.AutomaticMoveFor(entries));
     }
     private ElementReference host, presentationLink;
     private IJSObjectReference? module, map;
@@ -377,22 +402,55 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         }
         catch (Exception) { error = "Unable to save the placement. Please try again."; if (!disposed) StateHasChanged(); return null; }
     }
+    private (int Id, int Round, CombatantActionState State)? automaticMoveBefore;
     [JSInvokable]
-    public async Task<bool> MoveToken(int id, int column, int row)
+    public async Task<bool> PreviewAutomaticMove(int id, int column, int row, int round, int originColumn, int originRow)
+    {
+        if (disposed || busy || attackResolution is not null || encounter.AutomaticMoveFor(entries) is not { } context
+            || context.Id != id || context.Round != round || context.Column != originColumn || context.Row != originRow) return false;
+        if (automaticMoveBefore is not { } prior || prior.Id != id || prior.Round != round) automaticMoveBefore = (id,round,encounter.ActionFor(id));
+        if (!encounter.SetAutomaticMovement(id,column,row,round,originColumn,originRow,entries)) return false;
+        await SyncEncounterMap();
+        StateHasChanged();
+        return true;
+    }
+    [JSInvokable]
+    public async Task CancelAutomaticMove(int id, int round)
+    {
+        if (automaticMoveBefore is not { } previous || previous.Id != id || previous.Round != round) return;
+        if (encounter.Round == round && encounter.SelectedId == id) encounter.CancelAutomaticMovement(id,previous.State);
+        automaticMoveBefore = null;
+        if (!disposed) { await SyncEncounterMap(); StateHasChanged(); }
+    }
+    [JSInvokable]
+    public async Task<bool> MoveToken(int id, int column, int row, int? automaticRound, int? originColumn, int? originRow)
     {
         if (disposed || tokenScene is not { } scene) return false;
+        var previous = automaticMoveBefore is { } saved && saved.Id == id && saved.Round == encounter.Round ? saved.State : encounter.ActionFor(id);
+        var moveCommitted = false;
         try
         {
             if (encounter.Active)
             {
                 encounter.EnsureTurnOrigin(id, entries);
-                await ScenesStore.SaveEncounterAsync(scene.CampaignId, scene.Id, encounter.Snapshot());
+                if (automaticRound is int round && originColumn is int startColumn && originRow is int startRow)
+                    encounter.SetAutomaticMovement(id,column,row,round,startColumn,startRow,entries);
             }
-            var token = await ScenesStore.PositionCombatantAsync(scene.CampaignId, scene.Id, id, column, row);
+            var token = await ScenesStore.PositionCombatantAsync(scene.CampaignId, scene.Id, id, column, row, encounter.Active ? encounter.Snapshot() : null);
+            moveCommitted = true;
+            if (automaticMoveBefore?.Id == id) automaticMoveBefore = null;
             if (!disposed) { var index = entries.FindIndex(e => e.Id == id); if (index >= 0) entries[index] = token; await SyncEncounterMap(); error = null; StateHasChanged(); }
             return true;
         }
-        catch (Exception) { error = "Unable to save the move. The token has returned to its previous square."; if (!disposed) StateHasChanged(); return false; }
+        catch (Exception)
+        {
+            if (moveCommitted) { error = "The move was saved, but the display could not be refreshed."; if (!disposed) StateHasChanged(); return true; }
+            encounter.CancelAutomaticMovement(id,previous);
+            if (automaticMoveBefore?.Id == id) automaticMoveBefore = null;
+            error = "Unable to save the move. The token has returned to its previous square.";
+            if (!disposed) { await SyncEncounterMap(); StateHasChanged(); }
+            return false;
+        }
     }
     private void SetGridFields(SceneSummary scene) { gridSize = scene.GridSize; gridColour = scene.GridColour.ToLowerInvariant(); gridWidth = scene.GridlineWidth; gridOpacity = scene.GridOpacity; }
     private async Task SaveGrid()

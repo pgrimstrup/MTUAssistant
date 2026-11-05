@@ -24,6 +24,7 @@
                     <label>Terms Served <input class="form-control" maxlength="240" placeholder="Navy 3, Diplomat 1" @bind="terms" disabled="@busy" /></label>
                     <label>Highest Naval Rank <input class="form-control" type="number" min="0" @bind="naval" disabled="@busy" /></label>
                     <label>Highest Scout Rank <input class="form-control" type="number" min="0" @bind="scout" disabled="@busy" /></label>
+                    <label>Speed (m per Move) <input class="form-control" type="number" min="0" step="1" @bind="speed" disabled="@busy" /></label>
                     <label>Natural DR <input class="form-control" type="number" min="0" @bind="naturalDr" disabled="@busy" /></label>
                 </div>
                 <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
@@ -64,6 +65,7 @@
     private string terms = "0";
     private InjuryTolerance injuryTolerance;
     private int naval, scout, naturalDr, tokenInputKey;
+    private int speed = 6;
     private byte[]? tokenImage;
     private string? error;
     private bool busy, disposed, inactive;
@@ -108,6 +110,7 @@
         playerName = item.PlayerName; travellerName = item.Name; race = item.Race; upp = item.Upp;
         terms = item.TermsServed; naval = item.HighestNavalRank; scout = item.HighestScoutRank; naturalDr = item.NaturalDr;
         injuryTolerance = item.InjuryTolerance;
+        speed = item.Speed;
         tokenImage = item.TokenImage; inactive = item.Inactive; tokenInputKey++;
     }
     private void Cancel() { editing = null; tokenImage = null; error = null; }
@@ -140,7 +143,7 @@
         try
         {
             await CharacterStore.SaveAsync(current with { PlayerName = playerName, Name = travellerName, Race = race, Upp = upp,
-                TermsServed = terms, HighestNavalRank = naval, HighestScoutRank = scout, NaturalDr = naturalDr, InjuryTolerance = injuryTolerance, TokenImage = tokenImage, Inactive = inactive });
+                TermsServed = terms, HighestNavalRank = naval, HighestScoutRank = scout, NaturalDr = naturalDr, Speed = speed, InjuryTolerance = injuryTolerance, TokenImage = tokenImage, Inactive = inactive });
             if (campaign?.Id == current.CampaignId) { items = await CharacterStore.ListAsync(current.CampaignId, equippedOnly: true); editing = null; error = null; }
         }
         catch (ArgumentException ex) { error = ex.Message; }

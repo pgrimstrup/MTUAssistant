@@ -39,7 +39,7 @@ export function playerMovementRanges(ranges) {
 function validMovementRange(r) {
     return r.isVisible === true && Number.isInteger(r.id) && r.id > 0
         && [r.column,r.row].every(v => Number.isInteger(v) && v >= 0)
-        && [4.5,7.5,10.5,13.5,19.5,25.5,37.5].includes(r.diameter) && /^#[0-9a-fA-F]{6}$/.test(r.colour);
+        && Number.isFinite(r.diameter) && r.diameter >= 1.5 && /^#[0-9a-fA-F]{6}$/.test(r.colour);
 }
 export function playerMovementTrails(trails,tokens) {
     return trails.filter(t => tokens.some(token => token.id === t.id && token.isVisible === true))

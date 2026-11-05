@@ -40,7 +40,9 @@ public sealed record CombatantActionState(
     CombatCover? PendingCoverProtection = null,
     bool HasPendingCoverProtection = false,
     AttackOutcome? AttackOutcome = null,
-    bool Unconscious = false
+    bool Unconscious = false,
+    int Speed = 6,
+    bool AutomaticMove = false
 )
 {
     public IReadOnlyList<string> ColumnActions(int column) =>
@@ -251,9 +253,9 @@ public sealed partial class Encounter
         var moves = state.ColumnActions(1).Concat(state.ColumnActions(3)).Count(a => a == "Move");
         var distance = state.SelectedStance switch
         {
-            "Crouching" => 6,
-            "Prone" => 3,
-            _ => 12,
+            "Crouching" => (double)state.Speed,
+            "Prone" => state.Speed / 2.0,
+            _ => state.Speed * 2.0,
         };
         return moves == 0 ? null : 1.5 + distance * Math.Min(3, moves);
     }
@@ -274,6 +276,7 @@ public sealed partial class Encounter
             TargetTagged: state.TargetTagged,
             Elevated: state.Elevated,
             Unconscious: state.Unconscious,
+            Speed: state.Speed,
             CoverProtection: state.CoverProtection,
             TargetHasBeenHit: state.TargetHasBeenHit
         );
@@ -289,6 +292,7 @@ public sealed partial class Encounter
             ?? throw new ArgumentException("Select a combatant in this scene.");
         if (!Active || IsDead(actor))
             throw new ArgumentException("Choose a living combatant during an encounter.");
+        actions[id] = ActionFor(id) with { Speed = actor.Speed };
         return actor;
     }
 
@@ -371,6 +375,7 @@ public sealed partial class Encounter
                         AfterMajorActions = selected.ToArray(),
                     };
         }
+        state = state with { AutomaticMove = false };
         var sequence = state.ColumnActions(1).Concat(state.ColumnActions(3)).ToArray();
         var moves = sequence.Count(a => a == "Move");
         state = state with
@@ -429,7 +434,8 @@ public sealed partial class Encounter
     {
         if (!Active || entries.FirstOrDefault(e => e.Id == id) is not { OnMap: true } actor)
             return false;
-        var state = ActionFor(id);
+        var state = ActionFor(id) with { Speed = actor.Speed };
+        actions[id] = state;
         if (!reset && state.TurnOriginColumn.HasValue && state.TurnOriginRow.HasValue)
             return false;
         actions[id] = state with
@@ -512,6 +518,7 @@ public sealed partial class Encounter
             HasPendingCoverProtection = false,
             ResolvedAttackModifiers = null,
             AttackOutcome = null,
+            AutomaticMove = false,
         };
 
     private void ClearMovement(int? id)
@@ -526,10 +533,12 @@ public sealed partial class Encounter
             actions[id] = EndTurn(ActionFor(id), false) with { ReactionCount = 0 };
     }
 
-    public IReadOnlyList<CombatMovementRange> MovementRanges(
-        IReadOnlyList<SceneCombatant> entries
-    ) =>
-        !Active
+    public IReadOnlyList<CombatMovementRange> MovementRanges(IReadOnlyList<SceneCombatant> entries)
+    {
+        foreach (var entry in entries)
+            if (actions.TryGetValue(entry.Id, out var state) && state.Speed != entry.Speed)
+                actions[entry.Id] = NormalizeActions(state with { Speed = entry.Speed });
+        return !Active
             ? []
             : entries
                 .Where(e =>
@@ -552,4 +561,5 @@ public sealed partial class Encounter
                 })
                 .Concat(TargetReactionRanges(entries))
                 .ToArray();
+    }
 }

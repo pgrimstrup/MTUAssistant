@@ -18,7 +18,8 @@ public sealed record SceneCombatant(
     string PlayerName = "",
     string Occupation = "",
     int? Tactics = null,
-    IReadOnlyList<CharacterSkill>? Skills = null
+    IReadOnlyList<CharacterSkill>? Skills = null,
+    int Speed = 6
 )
 {
     public bool OnMap => Column.HasValue && Row.HasValue;
@@ -83,7 +84,9 @@ public sealed partial class SceneService
                     ?? "",
                 db.CharacterSkills.Where(s => s.CharacterId == t.CharacterId && s.Name == "Tactics")
                     .Select(s => (int?)s.Level)
-                    .Max()
+                    .Max(),
+                null,
+                t.Character.Speed
             ))
             .ToArrayAsync();
         return await WithSkillChecks(db, result);
@@ -162,7 +165,8 @@ public sealed partial class SceneService
             await db
                 .CharacterSkills.Where(s => s.CharacterId == characterId && s.Name == "Tactics")
                 .Select(s => (int?)s.Level)
-                .MaxAsync()
+                .MaxAsync(),
+            Speed: character.Speed
         );
         return (await WithSkillChecks(db, [entry]))[0];
     }
@@ -172,7 +176,8 @@ public sealed partial class SceneService
         int sceneId,
         int id,
         int? column,
-        int? row
+        int? row,
+        EncounterSnapshot? encounter = null
     )
     {
         if (column.HasValue != row.HasValue || column < 0 || row < 0)
@@ -185,7 +190,8 @@ public sealed partial class SceneService
             {
                 t.Column = column;
                 t.Row = row;
-            }
+            },
+            encounter
         );
     }
 
@@ -233,7 +239,8 @@ public sealed partial class SceneService
         int campaignId,
         int sceneId,
         int id,
-        Action<SceneTokenEntity> edit
+        Action<SceneTokenEntity> edit,
+        EncounterSnapshot? encounter = null
     )
     {
         await using var scope = scopes.CreateAsyncScope();
@@ -244,6 +251,13 @@ public sealed partial class SceneService
                 .SingleOrDefaultAsync(t => t.Id == id)
             ?? throw new ArgumentException("This combatant is no longer in this scene.");
         edit(token);
+        if (encounter is not null)
+        {
+            var scene = await db.Scenes.SingleAsync(s =>
+                s.Id == sceneId && s.CampaignId == campaignId
+            );
+            scene.EncounterState = System.Text.Json.JsonSerializer.Serialize(encounter);
+        }
         await db.SaveChangesAsync();
         var entry = new SceneCombatant(
             token.Id,
@@ -272,7 +286,8 @@ public sealed partial class SceneService
                     s.CharacterId == token.CharacterId && s.Name == "Tactics"
                 )
                 .Select(s => (int?)s.Level)
-                .MaxAsync()
+                .MaxAsync(),
+            Speed: token.Character.Speed
         );
         return (await WithSkillChecks(db, [entry]))[0];
     }
