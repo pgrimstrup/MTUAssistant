@@ -6,6 +6,12 @@ public sealed record CombatActionButton(string Text, bool Selected);
 
 public sealed record CombatActionColumn(string Title, IReadOnlyList<CombatActionButton> Buttons);
 
+public sealed record CombatAttackModifiers(
+    IReadOnlyList<AttackModifier> Rows,
+    int Total,
+    string? UnavailableReason
+);
+
 public sealed record CombatActionSummary(
     int Id,
     int CharacterId,
@@ -14,7 +20,8 @@ public sealed record CombatActionSummary(
     bool IsNpc,
     bool HasTokenImage,
     IReadOnlyList<CombatActionColumn> Columns,
-    IReadOnlyList<CombatSummaryRow> Rows
+    IReadOnlyList<CombatSummaryRow> Rows,
+    CombatAttackModifiers? AttackModifiers = null
 )
 {
     public static string RangeDescription(string? band) =>
@@ -43,15 +50,14 @@ public sealed record CombatActionSummary(
             e.Id == state.TargetId && (!player || e.IsVisible)
         );
         var band = loadout?.TargetBand(state, actor, target);
+        var weapons = loadout?.WeaponsFor(state);
         var rows = new List<CombatSummaryRow> { new("Combatant", actor.Name) };
         if (!player || !actor.IsNpc)
         {
             rows.Add(
                 new("Armour", string.IsNullOrEmpty(loadout?.Armour) ? "None" : loadout.Armour)
             );
-            rows.Add(
-                new("Weapon", string.IsNullOrEmpty(loadout?.Weapons) ? "None" : loadout.Weapons)
-            );
+            rows.Add(new("Weapon", string.IsNullOrEmpty(weapons) ? "None" : weapons));
         }
         rows.Add(
             new("Stance", state.SelectedStance == "Prone" ? "Prone (-1)" : state.SelectedStance)
@@ -70,11 +76,28 @@ public sealed record CombatActionSummary(
                 (target?.Name ?? "None") + (band is null ? "" : " — " + RangeDescription(band))
             )
         );
+        if (state.SelectedHiding)
+        {
+            rows.Add(new("Cover", "Hiding"));
+            rows.Add(
+                new(
+                    "Cover Protection",
+                    state.SelectedCoverProtection is { } cover
+                        ? $"{cover.Name} (+{state.EffectiveCoverProtection} protection; {cover.Hits} Hits)"
+                        : "None selected"
+                )
+            );
+        }
+        else if (state.SelectedBehindCover)
+            rows.Add(new("Cover", "Behind Cover"));
+        if (state.Unconscious)
+            rows.Add(new("Status", "Unconscious"));
         rows.Add(new("Sequence", state.SequenceSummary));
         rows.Add(
             new(
-                "Result",
-                state.ActionsResolved ? "Actions resolved."
+                state.MajorAction is "Ranged Attack" or "Melee Attack" ? "Attack Result" : "Result",
+                state.AttackOutcome is { } outcome ? outcome.AttackSummary
+                    : state.ActionsResolved ? "Actions resolved."
                     : band == "Out of Range"
                         ? "Ranged attack cannot be made: target is out of range."
                     : state.MovementDiameter.HasValue
@@ -86,6 +109,11 @@ public sealed record CombatActionSummary(
                     : "Aim bonus carried from the previous turn."
             )
         );
+        if (state.AttackOutcome is { Hit: true } hit)
+        {
+            var visibleDamage = target?.IsNpc == false ? hit : hit with { AppliedInjury = null };
+            rows.Add(new("Damage Result", visibleDamage.DamageSummary!));
+        }
         var columns = new[]
         {
             (1, "Minor Before", CombatActionChoices.Minor),
@@ -102,6 +130,10 @@ public sealed record CombatActionSummary(
                     .ToArray()
             ))
             .ToArray();
+        var modifiers =
+            player && (actor.IsNpc || (state.TargetId.HasValue && target is null))
+                ? null
+                : AttackModifierCalculator.Calculate(encounter, actor, entries, loadout);
         return new(
             actor.Id,
             actor.CharacterId,
@@ -110,7 +142,10 @@ public sealed record CombatActionSummary(
             actor.IsNpc,
             actor.HasTokenImage,
             columns,
-            rows
+            rows,
+            modifiers is null
+                ? null
+                : new(modifiers.Rows, modifiers.Total, modifiers.UnavailableReason)
         );
     }
 }

@@ -35,7 +35,12 @@ public sealed record CombatantActionState(
     bool Elevated = false,
     bool? PendingElevated = null,
     bool TargetHasBeenHit = false,
-    AttackModifierSummary? ResolvedAttackModifiers = null
+    AttackModifierSummary? ResolvedAttackModifiers = null,
+    CombatCover? CoverProtection = null,
+    CombatCover? PendingCoverProtection = null,
+    bool HasPendingCoverProtection = false,
+    AttackOutcome? AttackOutcome = null,
+    bool Unconscious = false
 )
 {
     public IReadOnlyList<string> ColumnActions(int column) =>
@@ -113,7 +118,18 @@ public sealed record CombatantActionState(
 
     [JsonIgnore]
     public bool HasPendingStatus =>
-        PendingBehindCover.HasValue || PendingHiding.HasValue || PendingElevated.HasValue;
+        PendingBehindCover.HasValue
+        || PendingHiding.HasValue
+        || PendingElevated.HasValue
+        || HasPendingCoverProtection;
+
+    [JsonIgnore]
+    public CombatCover? SelectedCoverProtection =>
+        HasPendingCoverProtection ? PendingCoverProtection : CoverProtection;
+
+    [JsonIgnore]
+    public int EffectiveCoverProtection =>
+        SelectedHiding ? SelectedCoverProtection?.Protection ?? 0 : 0;
 
     [JsonIgnore]
     public bool SelectedElevated => PendingElevated ?? Elevated;
@@ -257,6 +273,8 @@ public sealed partial class Encounter
             Hiding: state.Hiding,
             TargetTagged: state.TargetTagged,
             Elevated: state.Elevated,
+            Unconscious: state.Unconscious,
+            CoverProtection: state.CoverProtection,
             TargetHasBeenHit: state.TargetHasBeenHit
         );
     }
@@ -490,7 +508,10 @@ public sealed partial class Encounter
             PendingBehindCover = null,
             PendingHiding = null,
             PendingElevated = null,
+            PendingCoverProtection = null,
+            HasPendingCoverProtection = false,
             ResolvedAttackModifiers = null,
+            AttackOutcome = null,
         };
 
     private void ClearMovement(int? id)

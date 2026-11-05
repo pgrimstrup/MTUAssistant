@@ -7,7 +7,11 @@ using MTU.Core;
 using MTU.Core.Data;
 using MTU.Core.Models;
 
+await CoverProtectionChecks.RunAsync();
 await WeaponSkillChecks.RunAsync();
+WeaponAttackChecks.Run();
+AttackResolutionChecks.Run();
+CombatStatusChecks.Run();
 await SkillChecks.RunAsync();
 await NpcGenerationChecks.RunAsync();
 await SceneChecks.RunAsync();
@@ -683,28 +687,25 @@ Check(
     "Unsupported code handling"
 );
 Check(UwpLookup.Describe("X000000-0")[1].Description == "Asteroid belt", "Asteroid size");
-Check(
-    UwpLookup.Describe("X000000-0")[4].Description.Contains("possibly uninhabited"),
-    "Population zero"
-);
+Check(UwpLookup.Describe("X000000-0")[4].Description == "Uninhabited", "Population zero");
 var populationDescription = UwpLookup.Describe("A788899-C", "703")[4].Description;
 Check(
     populationDescription.StartsWith(profile[4].Description)
-        && populationDescription.Contains($"{700_000_000:N0} inhabitants (multiplier 7)"),
+        && populationDescription.Contains($"Population: {700_000_000:N0}."),
     "Population multiplier and existing description"
 );
 Check(
-    UwpLookup.Describe("X000000-0", "000")[4].Description.Contains("Population: 0 inhabitants"),
+    UwpLookup.Describe("X000000-0", "000")[4].Description == "Uninhabited. Population: 0.",
     "Uninhabited population"
 );
 Check(
-    UwpLookup.Describe("X000000-0", "503")[4].Description.Contains("Population: 5 inhabitants"),
+    UwpLookup.Describe("X000000-0", "503")[4].Description.Contains("Population: 5."),
     "Exponent zero with nonzero multiplier"
 );
 Check(
     UwpLookup
         .Describe("A788F99-C", "903")[4]
-        .Description.Contains($"{9_000_000_000_000_000L:N0} inhabitants"),
+        .Description.Contains($"Population: {9_000_000_000_000_000L:N0}."),
     "Large population"
 );
 foreach (var pbg in new string?[] { null, "", "?03", "A03" })
@@ -720,7 +721,7 @@ Check(
 var landDescription = UwpLookup.Describe("A868899-C")[3].Description;
 Check(
     UwpLookup.Describe("A868899-C")[1].Description
-        == $"Approximately {12_800:N0} km diameter. Approximate surface gravity: 1 g (assuming Earth-like density)",
+        == $"Approximately {12_800:N0} km diameter. Surface gravity: 1 g",
     "Earth-sized world gravity and retained diameter"
 );
 Check(
@@ -733,26 +734,24 @@ Check(
 );
 foreach (var uwp in new[] { "A068899-C", "AS68899-C", "A?68899-C", "AG68899-C", "invalid" })
     Check(
-        !UwpLookup.Describe(uwp)[1].Description.Contains("surface gravity"),
+        !UwpLookup
+            .Describe(uwp)[1]
+            .Description.Contains("surface gravity", StringComparison.OrdinalIgnoreCase),
         "No gravity estimate without a standard size"
     );
 Check(
-    landDescription.StartsWith("Approximately 80% surface liquid coverage")
-        && landDescription.Contains(
-            $"{77_207_781:N0}–{128_679_635:N0} km² (75–85% liquid coverage)"
-        ),
+    landDescription.StartsWith("Approximately 80% surface liquid")
+        && landDescription.Contains($"{77_207_781:N0}–{128_679_635:N0} km²."),
     "Spherical surface and land area range"
 );
 Check(
     UwpLookup
         .Describe("A860899-C")[3]
-        .Description.Contains($"{488_982_613:N0}–{514_718_540:N0} km² (0–5% liquid coverage)"),
+        .Description.Contains($"{488_982_613:N0}–{514_718_540:N0} km²."),
     "Dry world lower clamp"
 );
 Check(
-    UwpLookup
-        .Describe("A86A899-C")[3]
-        .Description.Contains($"{0:N0}–{25_735_927:N0} km² (95–100% liquid coverage)"),
+    UwpLookup.Describe("A86A899-C")[3].Description.Contains($"{0:N0}–{25_735_927:N0} km²."),
     "Water world upper clamp"
 );
 foreach (
@@ -2301,8 +2300,8 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
         "Patron/enemy UPP is uppercase"
     );
     await npcStore.SaveAsync(npc with { Character = npc.Character with { Upp = "FFFFFF" } });
-    await npcTravellers.SaveSkillAsync(1, new CharacterSkill(0, npc.Character.Id, "Steward", 10));
-    await npcTravellers.SaveSkillAsync(1, new CharacterSkill(0, npc.Character.Id, "Broker", 10));
+    await npcTravellers.SaveSkillAsync(1, new CharacterSkill(0, npc.Character.Id, "Steward", 5));
+    await npcTravellers.SaveSkillAsync(1, new CharacterSkill(0, npc.Character.Id, "Broker", 5));
     await variantStore.AddToCharacterAsync(
         1,
         npc.Character.Id,
@@ -2694,7 +2693,7 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
         firstCampaign.Id,
         (await characterService.ListSkillsAsync(firstCampaign.Id, character.Id)).Single() with
         {
-            Level = 5,
+            Level = 3,
         }
     );
     Check(
@@ -2731,7 +2730,7 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     );
     await characterService.SaveSkillAsync(
         secondCampaign.Id,
-        new CharacterSkill(0, otherSteward.Id, "Steward", 9)
+        new CharacterSkill(0, otherSteward.Id, "Steward", 5)
     );
     Check(
         (await characterService.StewardModifierAsync(firstCampaign.Id)).Value == -1,

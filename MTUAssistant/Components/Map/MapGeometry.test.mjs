@@ -3,7 +3,7 @@ import { HEX_X, hexCenter, findHex, detailLevel, LabelLayout, parseHex, worldPri
 import { readFile } from 'node:fs/promises';
 // Collocated browser modules use public /js URLs; map those to physical wwwroot files in Node.
 let rendererSource = await readFile(new URL('./MapView.razor.js', import.meta.url), 'utf8');
-for (const moduleName of ['WorldSelection.js', 'MapGeometry.js', 'PresentationSync.js'])
+for (const moduleName of ['WorldSelection.js', 'MapGeometry.js', 'PresentationSync.js', 'CastWindow.js'])
     rendererSource = rendererSource.replaceAll(`../../js/${moduleName}`,
         new URL(`../../wwwroot/js/${moduleName}`, import.meta.url).href);
 const { DynamicMap } = await import(`data:text/javascript;base64,${Buffer.from(rendererSource).toString('base64')}`);

@@ -35,6 +35,8 @@ admin.publish(null); assert.equal(received.at(-1),null,'closing the scene clears
 player.close(); admin.close(); isolated.close();
 console.log('Battlemap public filtering, read-only sync, late join, visibility, close and session isolation checks passed.');
 
+const unconsciousTokens=playerTokens([{...visible,isUnconscious:true},{...hidden,isUnconscious:true}]);
+assert.equal(unconsciousTokens.length,1);assert.equal(unconsciousTokens[0].isUnconscious,true,"Cast shares unconscious status only for visible tokens");
 const statusTokens=playerTokens([{...visible,isCurrent:true,isDead:true,currentHp:-2},{...hidden,isCurrent:true,isDead:true}]);
 assert.equal(statusTokens.length,1);
 assert.equal(statusTokens[0].isCurrent,true); assert.equal(statusTokens[0].isDead,true);

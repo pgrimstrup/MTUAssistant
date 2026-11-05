@@ -85,7 +85,9 @@ public static class WeaponSkillChecks
                     "Gun Combat (Archaic)",
                     "Gun Combat (Energy)",
                     "Gun Combat (Slug)",
-                    "Melee",
+                    "Melee (Blade)",
+                    "Melee (Bludgeon)",
+                    "Melee (Unarmed)",
                 }
             ),
             "Weapon category choices"

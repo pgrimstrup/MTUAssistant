@@ -1,0 +1,6 @@
+.cover-page { max-width: 1000px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.table-wrap { overflow-x: auto; }
+.cover-editor { border: 1px solid #888; border-radius: .4rem; padding: 1rem; max-width: 36rem; }
+.cover-editor label { display: block; margin-bottom: .8rem; }
+.cover-editor button { margin-right: .5rem; }

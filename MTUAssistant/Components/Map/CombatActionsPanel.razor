@@ -1,4 +1,5 @@
 @using MTU.Core
+@inject CoverProtectionService CoverStore
 
 <aside class="combat-actions" aria-label="Combat actions">
     <div class="action-top">
@@ -31,14 +32,28 @@
                     <label><input type="checkbox" checked="@state.SelectedBehindCover" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => CoverChanged.InvokeAsync(e.Value is true)" /> Behind Cover</label>
                     <label><input type="checkbox" checked="@state.SelectedHiding" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => HidingChanged.InvokeAsync(e.Value is true)" /> Hiding</label>
                     <label><input type="checkbox" checked="@state.SelectedElevated" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => ElevatedChanged.InvokeAsync(e.Value is true)" /> Elevated</label>
+                    <label><input type="checkbox" checked="@state.Unconscious" disabled="@Disabled" @onchange="e => UnconsciousChanged.InvokeAsync(e.Value is true)" /> Unconscious</label>
                 </fieldset>
+                @if (state.SelectedHiding)
+                {
+                    <label>Cover Protection
+                        <select class="form-select" value="@(state.SelectedCoverProtection?.Id.ToString() ?? "")" disabled="@(Disabled || state.ActionsResolved || coverError is not null)" @onchange="ChangeCoverProtection">
+                            <option value="">None</option>
+                            @if (state.SelectedCoverProtection is { } saved && !covers.Any(c => c.Id == saved.Id && c.Name == saved.Name && c.Protection == saved.Protection && c.Hits == saved.Hits))
+                            { <option value="@saved.Id">@saved.Name (+@saved.Protection protection; @saved.Hits Hits; saved values)</option> }
+                            @foreach (var cover in covers.Where(c => state.SelectedCoverProtection is not { } selected || c.Id != selected.Id || (c.Name == selected.Name && c.Protection == selected.Protection && c.Hits == selected.Hits)))
+                            { <option value="@cover.Id">@cover.Name (+@cover.Protection protection; @cover.Hits Hits)</option> }
+                        </select>
+                    </label>
+                    @if (coverError is not null) { <p role="alert">@coverError</p> }
+                }
                 @if (state.NeedsTarget)
                 {
                     <label>Target
                         <select class="form-select" value="@(state.TargetId?.ToString() ?? "")" disabled="@(Disabled || state.ActionsResolved)" @onchange="ChangeTarget">
                             <option value="" selected="@(state.TargetId is null)">No target</option>
                             @foreach (var target in Entries.Where(e => e.IsNpc != actor.IsNpc))
-                            { <option value="@target.Id" selected="@(state.TargetId == target.Id)">@target.Name@(!target.IsVisible ? " (hidden)" : "")</option> }
+                            { <option value="@target.Id" selected="@(state.TargetId == target.Id)">@target.Name@(Encounter.IsDead(target) ? " (Dead)" : Encounter.ActionFor(target.Id).Unconscious ? " (Unconscious)" : "")@(!target.IsVisible ? " (hidden)" : "")</option> }
                         </select>
                     </label>
                     @if (state.NeedsReaction)
@@ -96,6 +111,15 @@
 </aside>
 
 @code {
+    private IReadOnlyList<CoverProtection> covers = [];
+    private string? coverError;
+    protected override async Task OnInitializedAsync()
+    {
+        try { covers = await CoverStore.ListAsync(); }
+        catch (Exception) { coverError = "Unable to load cover protection."; }
+    }
+    private Task ChangeCoverProtection(ChangeEventArgs e) => CoverProtectionChanged.InvokeAsync(int.TryParse(e.Value?.ToString(), out var id) && covers.FirstOrDefault(c => c.Id == id) is { } cover ? new CombatCover(cover.Id, cover.Name, cover.Protection, cover.Hits) : null);
+    [Parameter] public EventCallback<CombatCover?> CoverProtectionChanged { get; set; }
     [Parameter] public CombatLoadout? Loadout { get; set; }
     [Parameter] public int CampaignId { get; set; }
     [Parameter] public SceneCombatant? Actor { get; set; }
@@ -107,6 +131,7 @@
     [Parameter] public EventCallback SkillsRequested { get; set; }
     [Parameter] public EventCallback<bool> CoverChanged { get; set; }
     [Parameter] public EventCallback<bool> HidingChanged { get; set; }
+    [Parameter] public EventCallback<bool> UnconsciousChanged { get; set; }
     [Parameter] public EventCallback<bool> ElevatedChanged { get; set; }
     [Parameter] public EventCallback ResetRequested { get; set; }
     [Parameter] public EventCallback ResolveRequested { get; set; }

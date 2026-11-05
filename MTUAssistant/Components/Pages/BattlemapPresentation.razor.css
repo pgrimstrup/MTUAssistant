@@ -47,3 +47,10 @@
 .player-combat-actions ::deep dl { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:.4rem; margin:0; font-size:.8rem; }
 .player-combat-actions ::deep dt { color:#c0c8d8; font-weight:400; white-space:nowrap; }
 .player-combat-actions ::deep dd { margin:0; overflow-wrap:anywhere; }
+
+.player-combat-actions ::deep .attack-modifiers { width:100%; margin:1rem 0 .5rem; font-size:.8rem; border-collapse:collapse; }
+.player-combat-actions ::deep .attack-modifiers caption { caption-side:top; text-align:left; color:#e4e9f2; font-size:1rem; padding-bottom:.4rem; }
+.player-combat-actions ::deep .attack-modifiers td,.player-combat-actions ::deep .attack-modifiers th { padding:.15rem .2rem; }
+.player-combat-actions ::deep .attack-modifiers td:last-child { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.player-combat-actions ::deep .attack-modifiers tfoot { border-top:1px solid #354050; font-weight:600; }
+.player-combat-actions ::deep .attack-unavailable { font-size:.8rem; color:#c0c8d8; }

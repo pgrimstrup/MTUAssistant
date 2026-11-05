@@ -325,9 +325,9 @@ export class Battlemap {
         if (publish) this.publishPresentation();
     }
     setCombatMode(active) {
-        this.setEncounterState(active,this.selectedId,[...(this.deadIds ?? [])],this.combatRound,this.playerTracker ?? [],[...(this.tokenHealth?.values() ?? [])],this.movementRanges ?? [],this.targetId ?? null,this.targetRange ?? null,this.actionSummary ?? null);
+        this.setEncounterState(active,this.selectedId,[...(this.deadIds ?? [])],this.combatRound,this.playerTracker ?? [],[...(this.tokenHealth?.values() ?? [])],this.movementRanges ?? [],this.targetId ?? null,this.targetRange ?? null,this.actionSummary ?? null,[...(this.unconsciousIds ?? [])]);
     }
-    setEncounterState(active,selectedId,deadIds = [],round = 0,tracker = [],health = tracker,ranges = [],targetId = null,targetRange = null,actionSummary = null) {
+    setEncounterState(active,selectedId,deadIds = [],round = 0,tracker = [],health = tracker,ranges = [],targetId = null,targetRange = null,actionSummary = null,unconsciousIds = []) {
         const turnChanged = active === true && (!this.combatMode || selectedId !== this.selectedId || round !== this.combatRound);
         this.combatRound = round;
         this.playerTracker = playerCombatants(tracker);
@@ -339,6 +339,7 @@ export class Battlemap {
         this.selectedId = selectedId;
         this.targetActorId = selectedId; this.targetId = targetId; this.targetRange = targetRange; this.actionSummary = actionSummary;
         this.deadIds = new Set(deadIds);
+        this.unconsciousIds = new Set(unconsciousIds);
         for (const token of this.characterTokens.values()) this.tokenAppearance(token);
         this.drawMovementIndicators(); this.drawTargetRing();
         if (!this.combatMode || turnChanged) this.cancelPan();
@@ -473,6 +474,7 @@ export class Battlemap {
     decorateToken(token) {
         const size = this.scene.gridSize;
         token.isDead = this.deadIds?.has(token.id) ?? false;
+        token.isUnconscious = this.unconsciousIds?.has(token.id) ?? false;
         token.isCurrent = token.id === this.selectedId && !token.isDead;
         this.drawTurnRing(token);
         this.drawTokenHealth(token);
@@ -489,7 +491,7 @@ export class Battlemap {
     tokenAppearance(token) {
         this.decorateToken(token);
         token.container.alpha = token.isVisible === false ? .4 : 1;
-        if (token.isDead || token.isVisible === false) {
+        if (token.isDead || token.isUnconscious || token.isVisible === false) {
             token.filter ??= new PIXI.ColorMatrixFilter();
             if (token.isDead) {
                 // Keep image detail and transparency while washing the portrait in red.
@@ -499,12 +501,19 @@ export class Battlemap {
                     .08,.10,.02,0,0,
                     0,0,0,1,0
                 ];
+            } else if (token.isUnconscious) {
+                token.filter.matrix = [
+                    .5,.45,.15,0,.12,
+                    .5,.45,.15,0,.12,
+                    .08,.10,.02,0,0,
+                    0,0,0,1,0
+                ];
             } else token.filter.desaturate();
         }
         // Filter portraits only, keeping faction markers and labels legible.
         token.container.filters = [];
         for (const portrait of [token.fallback,token.imageSprite])
-            if (portrait) portrait.filters = token.isDead || token.isVisible === false ? [token.filter] : [];
+            if (portrait) portrait.filters = token.isDead || token.isUnconscious || token.isVisible === false ? [token.filter] : [];
     }
     refreshFallback(token) {
         const key = `${token.isNpc}:${tokenInitials(token.name)}`;

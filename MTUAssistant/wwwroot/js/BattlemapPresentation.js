@@ -42,7 +42,7 @@ class PresentedBattlemap {
                     await Promise.all(state.tokens.map(token => this.map.updateCombatant(token)));
                     this.map.setGrid(state.scene);
                 }
-                this.map.setEncounterState(state.combatMode === true,state.tokens.find(t => t.isCurrent === true)?.id ?? null,state.tokens.filter(t => t.isDead === true).map(t => t.id));
+                this.map.setEncounterState(state.combatMode === true,state.tokens.find(t => t.isCurrent === true)?.id ?? null,state.tokens.filter(t => t.isDead === true).map(t => t.id),0,[],[],[],null,null,null,state.tokens.filter(t => t.isUnconscious === true).map(t => t.id));
                 this.map.setMovementRanges(state.movementRanges ?? []);
                 this.map.setMovementTrails(state.movementTrails ?? []);
                 this.map.setTargetSelection(state.targetSelection ?? null);

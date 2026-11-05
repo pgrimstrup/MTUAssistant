@@ -71,7 +71,12 @@ public sealed class EquipmentService(MtuDbContext db)
         CharacterSkillCatalogue
             .Find("Gun Combat")!
             .Specialities.Select(s => $"Gun Combat ({s})")
-            .Append("Melee")
+            .Concat(
+                CharacterSkillCatalogue
+                    .Find("Melee")!
+                    .Specialities.Where(s => s != "Natural")
+                    .Select(s => $"Melee ({s})")
+            )
             .ToArray();
 
     public async Task<IReadOnlyList<EquipmentItem>> ListAsync() =>
@@ -136,7 +141,7 @@ public sealed class EquipmentService(MtuDbContext db)
                 && !WeaponRequiredSkills.Contains(value.RequiredSkill)
             )
                 throw new ArgumentException(
-                    "Choose a Gun Combat specialization or Melee, or leave Required Skill blank."
+                    "Choose a Gun Combat or Melee specialization (except Natural), or leave Required Skill blank."
                 );
         }
         if (

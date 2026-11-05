@@ -26,6 +26,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<CharacterService>();
         services.AddScoped<NpcService>();
         services.AddScoped<EquipmentService>();
+        services.AddScoped<CoverProtectionService>();
         services.AddScoped<PassengerMarketService>();
         services.AddScoped<FreightMarketService>();
         services.AddMtuCatalogue();

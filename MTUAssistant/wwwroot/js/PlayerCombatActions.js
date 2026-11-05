@@ -33,6 +33,20 @@ export function renderPlayerActions(host,state,doc = globalThis.document) {
             item.type='button'; item.disabled=true; item.setAttribute('aria-pressed',String(button.selected));
         }
     }
+    if (!summary.isNpc && summary.attackModifiers) {
+        const modifiers=summary.attackModifiers;
+        const table=add(host,'table',null,'attack-modifiers');
+        table.setAttribute('aria-label','Attack modifiers');
+        add(table,'caption','Attack modifiers');
+        const body=add(table,'tbody');
+        const formatDm=value=>value > 0 ? '+'+value : String(value);
+        for (const modifier of modifiers.rows) {
+            const row=add(body,'tr'); add(row,'td',modifier.name); add(row,'td',formatDm(modifier.dm));
+        }
+        const footer=add(table,'tfoot'), total=add(footer,'tr');
+        add(total,'th','Total DM').setAttribute('scope','row'); add(total,'td',formatDm(modifiers.total));
+        if (modifiers.unavailableReason) add(host,'p',modifiers.unavailableReason,'attack-unavailable');
+    }
     const section=add(host,'section',null,'action-summary'); add(section,'h2','Combatant Summary');
     const list=add(section,'dl');
     for (const row of summary.rows) {

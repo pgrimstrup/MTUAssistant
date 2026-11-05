@@ -26,13 +26,17 @@ public static class AttackModifierCalculator
     )
     {
         var state = encounter.ActionFor(actor.Id);
-        if (state.MajorAction != "Ranged Attack" && !state.IsSelected("Aim"))
+        var melee = state.MajorAction == "Melee Attack";
+        if (!melee && state.MajorAction != "Ranged Attack" && !state.IsSelected("Aim"))
             return null;
         if (state.ActionsResolved && state.ResolvedAttackModifiers is { } resolved)
             return resolved;
-        var weapon = loadout?.RangedWeapon;
+        var weapon = loadout?.WeaponFor(state);
         if (weapon is null)
-            return new([], "Equip a ranged weapon to calculate attack modifiers.");
+            return new(
+                [],
+                $"Equip a {(melee ? "melee" : "ranged")} weapon to calculate attack modifiers."
+            );
         var rows = new List<AttackModifier>();
         var required = weapon.Equipment.RequiredSkill;
         rows.Add(
@@ -44,7 +48,10 @@ public static class AttackModifierCalculator
             )
         );
         rows.Add(new("DEX", Encounter.Dm(encounter.Health(actor).Dexterity)));
-        var aim = state.MajorAction == "Ranged Attack" ? state.RangedAimBonus : state.AimBonus;
+        var aim =
+            melee ? 0
+            : state.MajorAction == "Ranged Attack" ? state.RangedAimBonus
+            : state.AimBonus;
         if (aim > 0)
             rows.Add(new("Aim", aim));
         if (state.SelectedElevated)
@@ -54,10 +61,11 @@ public static class AttackModifierCalculator
         var target = entries.FirstOrDefault(e => e.Id == state.TargetId);
         if (target is null)
             return new(rows, "Select a target to calculate attack modifiers.");
-        if (!actor.OnMap || !target.OnMap)
+        if (!melee && (!actor.OnMap || !target.OnMap))
             return new(rows, "Place both tokens to calculate range and sight modifiers.");
-        var distance =
-            Math.Sqrt(
+        var distance = melee
+            ? 0
+            : Math.Sqrt(
                 Math.Pow(target.Column!.Value - actor.Column!.Value, 2)
                     + Math.Pow(target.Row!.Value - actor.Row!.Value, 2)
             ) * 1.5;
@@ -65,7 +73,7 @@ public static class AttackModifierCalculator
             state.MajorAction == "Ranged Attack"
                 ? state
                 : new CombatantActionState(MajorAction: "Ranged Attack", CarriedAimBonus: aim);
-        var band = loadout!.TargetBand(rangedState, actor, target);
+        var band = melee ? null : loadout!.TargetBand(rangedState, actor, target);
         var rangeDm = band switch
         {
             "Short Range" => 1,
@@ -76,15 +84,17 @@ public static class AttackModifierCalculator
         if (rangeDm != 0)
             rows.Add(new(band!, rangeDm));
         var targetState = encounter.ActionFor(target.Id);
-        var stance =
-            state.TargetReaction == "Dive for Prone" ? "Prone"
-            : state.TargetReaction == "Dive for Cover"
-                ? state.TargetReactionStance ?? targetState.Stance
-            : targetState.Stance;
+        var targetProne =
+            targetState.SelectedStance == "Prone"
+            || state.TargetReaction == "Dive for Prone"
+            || (
+                state.TargetReaction == "Dive for Cover"
+                && (state.TargetReactionStance ?? targetState.SelectedStance) == "Prone"
+            );
         var cover = targetState.BehindCover || state.TargetReaction == "Dive for Cover";
-        if (stance == "Prone")
+        if (targetProne)
             rows.Add(new("Target prone", -1));
-        if (cover)
+        if (cover && !targetState.Hiding)
             rows.Add(new("Target behind cover", -2));
         if (targetState.Hiding)
             rows.Add(new("Target Hiding", -2));
@@ -94,19 +104,38 @@ public static class AttackModifierCalculator
             var athletics = SkillRules.Rank(target.Skills ?? [], "Athletics (Dexterity)") ?? 0;
             rows.Add(new("Target Dodge", -Math.Max(1, Math.Max(dex, athletics))));
         }
-        if (weapon.LaserSight && distance < 50)
+        // All eight neighbouring squares count as adjacent, including diagonals.
+        var closeCombat =
+            actor.OnMap
+            && target.OnMap
+            && Math.Abs(actor.Column!.Value - target.Column!.Value) <= 1
+            && Math.Abs(actor.Row!.Value - target.Row!.Value) <= 1;
+        if (melee && closeCombat && state.TargetReaction == "Parry")
+        {
+            var bestMelee = CharacterSkillCatalogue
+                .Find("Melee")!
+                .Specialities.Select(speciality =>
+                    SkillRules.Rank(target.Skills ?? [], $"Melee ({speciality})") ?? 0
+                )
+                .Max();
+            rows.Add(new("Target Parry", -Math.Max(1, bestMelee)));
+        }
+        if (!melee && weapon.LaserSight && distance < 50)
             rows.Add(new("Laser Sights", 1));
-        if (weapon.HolographicSight && distance >= 50)
+        if (!melee && weapon.HolographicSight && distance >= 50)
             rows.Add(new("Holographic Sights", 1));
-        if (weapon.SmartTracker && state.TargetTagged)
+        if (!melee && weapon.SmartTracker && state.TargetTagged)
             rows.Add(new("Smart Tracker — tagged target", 2));
-        if (weapon.Phud)
+        if (!melee && weapon.Phud)
             rows.Add(new("P-HUD", 1));
-        if (weapon.XRayOutliningAid && cover)
+        if (!melee && weapon.XRayOutliningAid && cover)
             rows.Add(new("X-Ray Outlining Aid", 2));
         return new(
             rows,
-            band == "Out of Range" ? "Ranged attack cannot be made: target is out of range."
+            melee && (!actor.OnMap || !target.OnMap)
+                    ? "Place both tokens to determine close combat range."
+                : melee && !closeCombat ? "Out of Range: target is not in Close Combat."
+                : band == "Out of Range" ? "Ranged attack cannot be made: target is out of range."
                 : state.SelectedHiding ? "Stop Hiding before making an attack."
                 : null
         );

@@ -41,8 +41,8 @@ public sealed partial class Encounter
         if (state.NeedsReaction || state.IsSelected("Tag Target"))
         {
             target = entries.FirstOrDefault(e => e.Id == state.TargetId && e.IsNpc != actor.IsNpc);
-            if (target is null || IsDead(target))
-                throw new ArgumentException("Choose a living target before resolving the action.");
+            if (target is null)
+                throw new ArgumentException("Choose a target before resolving the action.");
         }
         if (state.IsSelected("Tag Target") && (!smartTracker || !state.TargetHasBeenHit))
             throw new ArgumentException(
@@ -72,11 +72,16 @@ public sealed partial class Encounter
             ResolvedAimBonus = state.AimBonus,
             BehindCover = state.SelectedBehindCover,
             Hiding = state.SelectedHiding,
+            CoverProtection = state.SelectedCoverProtection,
+            PendingCoverProtection = null,
+            HasPendingCoverProtection = false,
             PendingBehindCover = null,
             PendingHiding = null,
             Elevated = state.SelectedElevated,
             PendingElevated = null,
-            ResolvedAttackModifiers = state.MajorAction == "Ranged Attack" ? attackModifiers : null,
+            ResolvedAttackModifiers = state.MajorAction is "Ranged Attack" or "Melee Attack"
+                ? attackModifiers
+                : null,
             TargetTagged = state.TargetTagged || state.IsSelected("Tag Target"),
         };
         actions[id] = state with { MovementDiameter = MovementDiameterFor(state) };

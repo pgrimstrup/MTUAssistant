@@ -1,0 +1,69 @@
+@page "/cover-protection"
+@inject CoverProtectionService Store
+
+<PageTitle>Cover Protection</PageTitle>
+<section class="cover-page">
+    <header><h1>Cover Protection</h1><button class="btn btn-primary" disabled="@busy" @onclick="Add">Add Cover</button></header>
+    <p>Hits are reference values; cover damage is not tracked.</p>
+    @if (error is not null) { <p role="alert" class="text-danger">@error</p> }
+    @if (loading) { <p>Loading cover protection…</p> }
+    else if (items.Count == 0) { <p>No cover protection recorded.</p> }
+    else
+    {
+        <div class="table-wrap"><table class="table"><thead><tr><th>Cover</th><th>Protection</th><th>Hits</th><th>Actions</th></tr></thead><tbody>
+        @foreach (var item in items)
+        {
+            <tr @key="item.Id"><th scope="row">@item.Name</th><td>+@item.Protection</td><td>@item.Hits</td><td><button class="btn btn-sm btn-outline-secondary" disabled="@busy" @onclick="() => Edit(item)">Edit</button> <button class="btn btn-sm btn-outline-danger" disabled="@busy" @onclick="() => ConfirmDelete(item)">Delete</button></td></tr>
+        }
+        </tbody></table></div>
+    }
+    @if (editing is not null)
+    {
+        <section class="cover-editor" aria-labelledby="cover-editor-title">
+            <h2 id="cover-editor-title">@(deleting ? "Delete Cover" : editing.Id == 0 ? "Add Cover" : "Edit Cover")</h2>
+            @if (deleting)
+            { <p>Delete @editing.Name? Saved encounters will retain their selected cover values.</p> }
+            else
+            {
+                <label>Cover<input class="form-control" maxlength="120" @bind="editing.Name" disabled="@busy" /></label>
+                <label>Protection<input class="form-control" type="number" min="0" @bind="editing.Protection" disabled="@busy" /></label>
+                <label>Hits<input class="form-control" type="number" min="1" @bind="editing.Hits" disabled="@busy" /></label>
+            }
+            <button class="btn @(deleting ? "btn-danger" : "btn-primary")" disabled="@busy" @onclick="Save">@(deleting ? "Delete" : "Save")</button>
+            <button class="btn btn-outline-secondary" disabled="@busy" @onclick="Close">Cancel</button>
+        </section>
+    }
+</section>
+
+@code {
+    private IReadOnlyList<CoverProtection> items = [];
+    private CoverProtection? editing;
+    private bool loading = true, busy, deleting;
+    private string? error;
+    protected override async Task OnInitializedAsync()
+    {
+        try { items = await Store.ListAsync(); }
+        catch (Exception) { error = "Unable to load cover protection."; }
+        finally { loading = false; }
+    }
+    private void Add() { editing = new(); deleting = false; error = null; }
+    private void Edit(CoverProtection item) { editing = item.Copy(); deleting = false; error = null; }
+    private void ConfirmDelete(CoverProtection item) { editing = item.Copy(); deleting = true; error = null; }
+    private void Close() { editing = null; error = null; }
+    private async Task Save()
+    {
+        if (editing is null || busy) return;
+        busy = true;
+        try
+        {
+            if (deleting) await Store.DeleteAsync(editing.Id);
+            else await Store.SaveAsync(editing);
+            items = await Store.ListAsync();
+            editing = null;
+            error = null;
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to save cover protection. Please try again."; }
+        finally { busy = false; }
+    }
+}

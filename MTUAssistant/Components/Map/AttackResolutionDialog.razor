@@ -1,0 +1,77 @@
+@using MTU.Core
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<dialog @ref="dialog" class="attack-dialog" aria-labelledby="attack-dialog-title">
+    <header><h2 id="attack-dialog-title">Resolve Attack</h2><button type="button" class="btn btn-sm btn-outline-primary auto-roll" disabled="@Busy" @onclick="AutoRoll">Auto Roll</button></header>
+    <p class="combatants"><strong>@Resolution.ActorName</strong> → <strong>@Resolution.TargetName</strong></p>
+    <p class="weapon">@Resolution.Weapon.Name · @Resolution.Weapon.Damage damage</p>
+    <div class="roll-fields">
+        <label><span>Attack Roll (2D6)</span><input class="form-control form-control-sm" type="number" min="2" max="12" value="@Resolution.AttackRoll" disabled="@Busy" @onchange="ChangeAttack" /></label>
+        <label><span>Damage Roll (@Resolution.Weapon.Damage)</span><input class="form-control form-control-sm" type="number" min="0" max="1000000" value="@Resolution.DamageRoll" disabled="@(Busy || Resolution.Outcome?.Hit != true)" @onchange="ChangeDamage" /></label>
+    </div>
+    <table class="modifiers"><caption>Attack modifiers</caption><tbody>
+        @foreach (var row in Resolution.Modifiers.Rows) { <tr><td>@row.Name</td><td>@row.Dm.ToString("+0;-0;0")</td></tr> }
+    </tbody><tfoot><tr><th scope="row">Total DM</th><td>@Resolution.Modifiers.Total.ToString("+0;-0;0")</td></tr></tfoot></table>
+    <dl>
+        <dt>Total Damage</dt><dd>@(Resolution.Outcome is { } result && (!result.Hit || Resolution.DamageRoll.HasValue) ? result.TotalDamage.ToString() : "Pending")</dd>
+        <dt>Overall Protection</dt><dd>@Resolution.OverallProtection</dd>
+        <dt>Weapon AP</dt><dd>@Resolution.ArmourPiercing</dd>
+        <dt>Remaining Protection</dt><dd>@Math.Max(0, Resolution.OverallProtection - Resolution.ArmourPiercing)</dd>
+        <dt style="@InjuryStyle">Calculated Injury</dt><dd style="@InjuryStyle">@(Resolution.Outcome is { } injuryResult && (!injuryResult.Hit || Resolution.DamageRoll.HasValue) ? injuryResult.CalculatedInjury.ToString() : "Pending")</dd>
+    </dl>
+    <dl class="roll-results" role="status" aria-live="polite">
+        <dt>Attack Result</dt><dd>@(Resolution.Outcome?.AttackSummary ?? "Pending attack roll.")</dd>
+        @if (Resolution.Outcome is { Hit: true } outcome)
+        { <dt>Damage Result</dt><dd>@outcome.DamageSummary</dd> }
+    </dl>
+    <label class="injury-field"><span>Actual Injury</span><input class="form-control form-control-sm" type="number" min="0" max="1000000" value="@Resolution.Injury" disabled="@(Busy || Resolution.Outcome?.Hit != true || !Resolution.DamageRoll.HasValue)" @onchange="ChangeInjury" /></label>
+    @if (Resolution.RollError is { } rollError) { <p role="alert">@rollError</p> }
+    @if (!string.IsNullOrWhiteSpace(validation ?? Error)) { <p role="alert" class="error">@(validation ?? Error)</p> }
+    <footer><button class="btn btn-primary" disabled="@(Busy || !Resolution.Ready || validation is not null)" @onclick="() => OnApply.InvokeAsync()">Apply Damage</button>
+    <button class="btn btn-outline-secondary" disabled="@Busy" @onclick="Cancel">Cancel</button></footer>
+</dialog>
+
+@code {
+    [Parameter, EditorRequired] public AttackResolution Resolution { get; set; } = default!;
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback OnApply { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    private ElementReference dialog;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<AttackResolutionDialog>? reference;
+    private string? validation;
+    private string? InjuryStyle => Resolution.CalculatedInjuryColour is { } colour ? $"color:{colour}" : null;
+    protected override async Task OnInitializedAsync() => await OnChanged.InvokeAsync();
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/EquipmentDialog.js");
+        reference = DotNetObjectReference.Create(this);
+        await module.InvokeVoidAsync("open", dialog, reference);
+    }
+    private static int? Number(ChangeEventArgs e) => string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null
+        : int.TryParse(e.Value?.ToString(), out var value) ? value : throw new ArgumentException("Enter a whole number.");
+    private async Task Change(Action action)
+    {
+        if (Busy) return;
+        try { action(); validation = null; await OnChanged.InvokeAsync(); }
+        catch (ArgumentException ex) { validation = ex.Message; }
+    }
+    private Task AutoRoll() => Change(() => Resolution.AutoRoll());
+    private Task ChangeAttack(ChangeEventArgs e) => Change(() => Resolution.SetAttackRoll(Number(e)));
+    private Task ChangeDamage(ChangeEventArgs e) => Change(() => Resolution.SetDamageRoll(Number(e)));
+    private Task ChangeInjury(ChangeEventArgs e) => Change(() => Resolution.SetInjury(Number(e)));
+    [JSInvokable] public Task Cancel() => Busy ? Task.CompletedTask : OnCancel.InvokeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        if (module is not null)
+        {
+            try { await module.InvokeVoidAsync("close", dialog); await module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+        reference?.Dispose();
+    }
+}

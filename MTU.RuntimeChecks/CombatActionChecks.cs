@@ -408,7 +408,7 @@ public static class CombatActionChecks
                         "Reactions Made",
                         "Target",
                         "Sequence",
-                        "Result",
+                        "Attack Result",
                     }
                 ),
             "Summary row order"
@@ -495,6 +495,76 @@ public static class CombatActionChecks
             publicTraveller.Rows.Any(r => r.Label == "Armour")
                 && publicTraveller.Rows.Single(r => r.Label == "Target").Value == "None",
             "Traveller gear shown and hidden targets omitted"
+        );
+        var castRoster = new[] { hero, enemy with { IsVisible = true } };
+        var castEncounter = Fresh();
+        castEncounter.ChooseAction(1, "Aim", castRoster);
+        castEncounter.ChooseAction(1, "Ranged Attack", castRoster, 2);
+        castEncounter.SetTarget(1, 2, castRoster);
+        var gmModifiers = AttackModifierCalculator.Calculate(
+            castEncounter,
+            hero,
+            castRoster,
+            loadout
+        )!;
+        var castSummary = CombatActionSummary.Create(
+            castEncounter,
+            hero,
+            castRoster,
+            loadout,
+            true
+        )!;
+        Check(
+            castSummary.AttackModifiers is { } castModifiers
+                && castModifiers.Rows.SequenceEqual(gmModifiers.Rows)
+                && castModifiers.Total == gmModifiers.Total,
+            "Cast attack breakdown and total match GM calculation"
+        );
+        var castJson = JsonSerializer.Serialize(castSummary);
+        var castRoundTrip = JsonSerializer.Deserialize<CombatActionSummary>(castJson)!;
+        Check(
+            castRoundTrip.AttackModifiers!.Total == gmModifiers.Total
+                && castRoundTrip.AttackModifiers.Rows.SequenceEqual(gmModifiers.Rows),
+            "Cast modifier rows and total survive serialization"
+        );
+        castEncounter.ResolveActions(1, castRoster, attackModifiers: gmModifiers);
+        Check(
+            CombatActionSummary
+                .Create(castEncounter, hero, castRoster, shortWeapon, true)!
+                .AttackModifiers!.Rows.SequenceEqual(gmModifiers.Rows),
+            "Resolved Cast modifiers retain the values used for the attack"
+        );
+        Check(
+            CombatActionSummary
+                .Create(castEncounter, hero, [hero, enemy], loadout, true)!
+                .AttackModifiers
+                is null,
+            "Hidden target modifiers stay out of Cast payloads"
+        );
+        castEncounter.ChooseAction(2, "Ranged Attack", castRoster, 2);
+        castEncounter.SetTarget(2, 1, castRoster);
+        Check(
+            CombatActionSummary
+                .Create(castEncounter, castRoster[1], castRoster, loadout, true)!
+                .AttackModifiers
+                is null,
+            "NPC attack equipment modifiers stay private"
+        );
+        castEncounter.ResetActions(1, castRoster);
+        Check(
+            CombatActionSummary
+                .Create(castEncounter, hero, castRoster, loadout, true)!
+                .AttackModifiers
+                is null,
+            "Cast modifier table clears without an attack or Aim"
+        );
+        castEncounter.ChooseAction(1, "Ranged Attack", castRoster, 2);
+        Check(
+            CombatActionSummary
+                .Create(castEncounter, hero, castRoster, null, true)!
+                .AttackModifiers!.UnavailableReason
+                is not null,
+            "Cast includes unavailable attack calculation reason"
         );
         var movement = Fresh();
         movement.ChooseAction(hero.Id, "Change Stance", roster);

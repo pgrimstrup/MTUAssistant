@@ -18,6 +18,191 @@ namespace MTU.Core.Data.Migrations
             modelBuilder.HasAnnotation("ProductVersion", "10.0.13");
 
             modelBuilder.Entity(
+                "MTU.Core.CoverProtection",
+                b =>
+                {
+                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("INTEGER");
+
+                    b.Property<int>("Hits").HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT")
+                        .UseCollation("NOCASE");
+
+                    b.Property<int>("Protection").HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name").IsUnique();
+
+                    b.ToTable(
+                        "CoverProtections",
+                        t =>
+                        {
+                            t.HasCheckConstraint("CK_CoverProtections_Hits", "Hits > 0");
+
+                            t.HasCheckConstraint(
+                                "CK_CoverProtections_Protection",
+                                "Protection >= 0"
+                            );
+                        }
+                    );
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Hits = 1,
+                            Name = "Vegetation",
+                            Protection = 2,
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Hits = 8,
+                            Name = "Tree Trunk",
+                            Protection = 6,
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Hits = 24,
+                            Name = "Stone Wall",
+                            Protection = 8,
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Hits = 50,
+                            Name = "Civilian Vehicle",
+                            Protection = 10,
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Hits = 150,
+                            Name = "Armoured Vehicle",
+                            Protection = 15,
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Hits = 250,
+                            Name = "Fortifications",
+                            Protection = 20,
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Hits = 4,
+                            Name = "Small Kitchen Appliance",
+                            Protection = 0,
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Hits = 6,
+                            Name = "Personal Computer",
+                            Protection = 0,
+                        },
+                        new
+                        {
+                            Id = 9,
+                            Hits = 8,
+                            Name = "Wooden Chair",
+                            Protection = 2,
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Hits = 12,
+                            Name = "Bar Table",
+                            Protection = 2,
+                        },
+                        new
+                        {
+                            Id = 11,
+                            Hits = 6,
+                            Name = "Wooden Door",
+                            Protection = 1,
+                        },
+                        new
+                        {
+                            Id = 12,
+                            Hits = 8,
+                            Name = "Reinforced Wooden Door",
+                            Protection = 2,
+                        },
+                        new
+                        {
+                            Id = 13,
+                            Hits = 8,
+                            Name = "Wooden Fence",
+                            Protection = 1,
+                        },
+                        new
+                        {
+                            Id = 14,
+                            Hits = 5,
+                            Name = "Plastic Door",
+                            Protection = 2,
+                        },
+                        new
+                        {
+                            Id = 15,
+                            Hits = 16,
+                            Name = "Brick Wall",
+                            Protection = 4,
+                        },
+                        new
+                        {
+                            Id = 16,
+                            Hits = 24,
+                            Name = "Concrete Wall",
+                            Protection = 8,
+                        },
+                        new
+                        {
+                            Id = 17,
+                            Hits = 28,
+                            Name = "Reinforced Concrete Wall",
+                            Protection = 10,
+                        },
+                        new
+                        {
+                            Id = 18,
+                            Hits = 40,
+                            Name = "Small Boulder",
+                            Protection = 10,
+                        },
+                        new
+                        {
+                            Id = 19,
+                            Hits = 60,
+                            Name = "Large Boulder",
+                            Protection = 10,
+                        },
+                        new
+                        {
+                            Id = 20,
+                            Hits = 50,
+                            Name = "Steel Hatch",
+                            Protection = 8,
+                        },
+                        new
+                        {
+                            Id = 21,
+                            Hits = 150,
+                            Name = "Steel Blast Door",
+                            Protection = 12,
+                        }
+                    );
+                }
+            );
+
+            modelBuilder.Entity(
                 "MTU.Core.Data.AllegianceEntity",
                 b =>
                 {

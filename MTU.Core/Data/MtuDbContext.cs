@@ -32,8 +32,24 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
     public DbSet<TransportMarketEntity> TransportMarkets => Set<TransportMarketEntity>();
     public DbSet<SystemEntity> Systems => Set<SystemEntity>();
 
+    public DbSet<CoverProtection> CoverProtections => Set<CoverProtection>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder
+            .Entity<CoverProtection>()
+            .Property(c => c.Name)
+            .UseCollation("NOCASE")
+            .HasMaxLength(120);
+        modelBuilder.Entity<CoverProtection>().HasIndex(c => c.Name).IsUnique();
+        modelBuilder
+            .Entity<CoverProtection>()
+            .ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_CoverProtections_Protection", "Protection >= 0");
+                t.HasCheckConstraint("CK_CoverProtections_Hits", "Hits > 0");
+            });
+        modelBuilder.Entity<CoverProtection>().HasData(CoverProtectionDefaults.Items);
         modelBuilder.Entity<SceneTokenEntity>().HasKey(t => t.Id);
         modelBuilder.Entity<SceneTokenEntity>().Property(t => t.IsVisible).HasDefaultValue(true);
         modelBuilder

@@ -4,7 +4,7 @@ import { validSession, validPointer } from './PresentationSync.js';
 export function playerTokens(tokens) {
     return tokens.filter(t => t.isVisible === true && t.column != null && t.row != null)
         .map(t => ({id:t.id,characterId:t.characterId,name:t.name,isNpc:t.isNpc,hasTokenImage:t.hasTokenImage,
-            isVisible:true,column:t.column,row:t.row,...(Number.isFinite(t.healthWidth) && ['green','orange','red'].includes(t.healthColour) ? {healthWidth:t.healthWidth,healthColour:t.healthColour} : {}),...(t.isCurrent === true ? {isCurrent:true} : {}),...(t.isDead === true ? {isDead:true} : {})}));
+            isVisible:true,column:t.column,row:t.row,...(Number.isFinite(t.healthWidth) && ['green','orange','red'].includes(t.healthColour) ? {healthWidth:t.healthWidth,healthColour:t.healthColour} : {}),...(t.isCurrent === true ? {isCurrent:true} : {}),...(t.isDead === true ? {isDead:true} : {}),...(t.isUnconscious === true ? {isUnconscious:true} : {})}));
 }
 // Tracker rows can include visible, unplaced combatants. NPC HP totals stay private.
 export function playerCombatants(entries) {
@@ -53,10 +53,16 @@ export function playerTargetSelection(actorId,targetId,tokens,rangeProfile = nul
     return actorId !== targetId && tokens.some(t => t.id === actorId && t.isVisible === true) && tokens.some(t => t.id === targetId && t.isVisible === true)
         ? {actorId,targetId,...(rangeProfile ? {rangeProfile:{range:rangeProfile.range,scope:rangeProfile.scope,aimBonus:rangeProfile.aimBonus}} : {})} : null;
 }
+function validAttackModifiers(modifiers,isNpc) {
+    return modifiers == null || (!isNpc && Array.isArray(modifiers.rows)
+        && modifiers.rows.every(row => typeof row.name === 'string' && Number.isSafeInteger(row.dm))
+        && Number.isSafeInteger(modifiers.total) && modifiers.total === modifiers.rows.reduce((total,row) => total+row.dm,0)
+        && (modifiers.unavailableReason == null || typeof modifiers.unavailableReason === 'string'));
+}
 export function validBattlemapSnapshot(state) {
     if (state === null) return true;
     const scene = state?.scene, view = state?.view;
-    return (state.actionSummary == null || (state.combatMode === true && state.tracker?.some(e => e.id === state.actionSummary.id && e.isVisible === true) && Array.isArray(state.actionSummary.columns) && state.actionSummary.columns.every(c => typeof c.title === "string" && Array.isArray(c.buttons) && c.buttons.every(b => typeof b.text === "string" && typeof b.selected === "boolean")) && Array.isArray(state.actionSummary.rows) && state.actionSummary.rows.every(r => typeof r.label === "string" && typeof r.value === "string" && (!state.actionSummary.isNpc || !["Armour","Weapon"].includes(r.label)))))
+    return (state.actionSummary == null || (state.combatMode === true && state.tracker?.some(e => e.id === state.actionSummary.id && e.isVisible === true) && validAttackModifiers(state.actionSummary.attackModifiers,state.actionSummary.isNpc) && Array.isArray(state.actionSummary.columns) && state.actionSummary.columns.every(c => typeof c.title === "string" && Array.isArray(c.buttons) && c.buttons.every(b => typeof b.text === "string" && typeof b.selected === "boolean")) && Array.isArray(state.actionSummary.rows) && state.actionSummary.rows.every(r => typeof r.label === "string" && typeof r.value === "string" && (!state.actionSummary.isNpc || !["Armour","Weapon"].includes(r.label)))))
         && (state.round === undefined || (Number.isInteger(state.round) && state.round >= 0))
         && (state.movementTrails === undefined || (Array.isArray(state.movementTrails) && state.movementTrails.every(validMovementTrail)))
         && (state.movementRanges === undefined || (Array.isArray(state.movementRanges) && state.movementRanges.every(validMovementRange)))
@@ -74,6 +80,7 @@ export function validBattlemapSnapshot(state) {
             && state.tokens.some(t => t.id === state.targetSelection.targetId && t.isVisible === true)))
         && state.tokens.every(t => Number.isInteger(t.id) && t.id > 0
             && Number.isInteger(t.characterId) && t.characterId > 0 && t.isVisible === true
+            && (t.isUnconscious === undefined || typeof t.isUnconscious === 'boolean')
             && Number.isInteger(t.column) && t.column >= 0 && Number.isInteger(t.row) && t.row >= 0 && typeof t.name === 'string');
 }
 export function connectBattlemapPresentation({session,readOnly,onState,onPointer,storage,

@@ -22,8 +22,102 @@ public sealed class CombatLoadout(IReadOnlyList<CharacterEquipmentDetails> equip
 {
     private IEnumerable<CharacterEquipmentDetails> Equipped => equipment.Where(e => e.Equipped);
     public bool HasSmartTracker => Equipped.Any(e => e.SupportsAttachments && e.SmartTracker);
-    public CharacterEquipmentDetails? RangedWeapon =>
-        Equipped.FirstOrDefault(e => e.SupportsAttachments);
+    public CharacterEquipmentDetails? RangedWeapon => StrongestWeapon(true);
+    public CharacterEquipmentDetails? MeleeWeapon => StrongestWeapon(false);
+
+    private CharacterEquipmentDetails? StrongestWeapon(bool ranged) =>
+        Equipped
+            .Where(e =>
+                e.Equipment.Kind == EquipmentKind.Weapon && (e.Equipment.Range > 0) == ranged
+            )
+            .OrderByDescending(e => AverageDamage(e.Equipment.Damage))
+            .FirstOrDefault();
+
+    // Compare expected damage; equal or unrecognised expressions retain catalog order.
+    public static double AverageDamage(string damage)
+    {
+        var text = Regex.Replace(damage ?? "", @"\s+", "").ToUpperInvariant().Replace('−', '-');
+        var match = Regex.Match(
+            text,
+            @"^(?<dice>\d*)D(?<sides>\d+|D)?(?<bonus>[+-]\d+)?(?:(?:X|×|\*)(?<multiplier>\d+))?$"
+        );
+        if (!match.Success)
+            return
+                double.TryParse(
+                    text,
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var flat
+                ) && double.IsFinite(flat)
+                ? flat
+                : -1;
+        double Number(string group, double fallback) =>
+            double.TryParse(
+                match.Groups[group].Value,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var number
+            )
+                ? number
+                : fallback;
+        var destructive = match.Groups["sides"].Value == "D";
+        var average =
+            (Number("dice", 1) * (Number("sides", 6) + 1) / 2 + Number("bonus", 0))
+            * Number("multiplier", 1)
+            * (destructive ? 10 : 1);
+        return double.IsFinite(average) ? average : -1;
+    }
+
+    public CharacterEquipmentDetails? WeaponFor(CombatantActionState state) =>
+        state.MajorAction == "Melee Attack" ? MeleeWeapon
+        : state.MajorAction == "Ranged Attack" || state.IsSelected("Aim") ? RangedWeapon
+        : null;
+
+    public string WeaponsFor(CombatantActionState state) =>
+        state.MajorAction is "Melee Attack" or "Ranged Attack" || state.IsSelected("Aim")
+            ? WeaponFor(state) is { } weapon
+                ? DescribeWeapon(weapon)
+                : ""
+            : Weapons;
+
+    private static string DescribeWeapon(CharacterEquipmentDetails weapon) =>
+        $"{weapon.Equipment.Name} ({(weapon.Equipment.Range > 0 ? $"{weapon.Equipment.Range:0.##}m" : "Melee")}, {weapon.Equipment.Damage})";
+
+    public int ArmourProtection =>
+        Equipped
+            .Where(e => e.Equipment.Kind == EquipmentKind.Armour)
+            .Sum(e => e.Equipment.Protection);
+
+    public int ArmourProtectionFor(EquipmentItem weapon, bool melee)
+    {
+        var laser = Regex.IsMatch(weapon.Name, @"\bLaser\b", RegexOptions.IgnoreCase);
+        var energy = string.Equals(
+            weapon.RequiredSkill?.Trim(),
+            "Gun Combat (Energy)",
+            StringComparison.OrdinalIgnoreCase
+        );
+        var slug = string.Equals(
+            weapon.RequiredSkill?.Trim(),
+            "Gun Combat (Slug)",
+            StringComparison.OrdinalIgnoreCase
+        );
+        return Equipped
+            .Where(e => e.Equipment.Kind == EquipmentKind.Armour)
+            .Sum(e =>
+            {
+                var armour = e.Equipment;
+                if (melee)
+                    return armour.ProtectionK ?? armour.Protection;
+                if (laser && armour.ProtectionL.HasValue)
+                    return armour.ProtectionL.Value;
+                if (energy)
+                    return armour.ProtectionE ?? armour.Protection;
+                if (slug)
+                    return armour.ProtectionK ?? armour.Protection;
+                return armour.Protection;
+            });
+    }
+
     public string Armour =>
         string.Join(
             ", ",
@@ -34,11 +128,7 @@ public sealed class CombatLoadout(IReadOnlyList<CharacterEquipmentDetails> equip
     public string Weapons =>
         string.Join(
             ", ",
-            Equipped
-                .Where(e => e.Equipment.Kind == EquipmentKind.Weapon)
-                .Select(e =>
-                    $"{e.Equipment.Name} ({(e.Equipment.Range > 0 ? $"{e.Equipment.Range:0.##}m" : "Melee")}, {e.Equipment.Damage})"
-                )
+            Equipped.Where(e => e.Equipment.Kind == EquipmentKind.Weapon).Select(DescribeWeapon)
         );
 
     public CombatWeaponRange? RangeFor(CombatantActionState state)
