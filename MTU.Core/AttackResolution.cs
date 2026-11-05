@@ -36,7 +36,9 @@ public sealed record AttackOutcome(
     int OverallProtection,
     int ArmourPiercing,
     int? AppliedInjury = null,
-    CombatMishap? Mishap = null
+    CombatMishap? Mishap = null,
+    InjuryTolerance InjuryTolerance = InjuryTolerance.None,
+    int WeaponDamageDice = 0
 )
 {
     [JsonIgnore]
@@ -55,7 +57,11 @@ public sealed record AttackOutcome(
     public int RemainingProtection => Math.Max(0, OverallProtection - ArmourPiercing);
 
     [JsonIgnore]
-    public int CalculatedInjury => Math.Max(0, TotalDamage - RemainingProtection);
+    public int InjuryAfterProtection => Math.Max(0, TotalDamage - RemainingProtection);
+
+    [JsonIgnore]
+    public int CalculatedInjury =>
+        InjuryToleranceRules.Apply(InjuryAfterProtection, InjuryTolerance, WeaponDamageDice);
 
     [JsonIgnore]
     public string AttackSummary =>
@@ -91,6 +97,8 @@ public sealed class AttackResolution
     public int ArmourPiercing { get; }
     public int TargetOriginalHp { get; }
     public int TargetRemainingHp { get; }
+    public InjuryTolerance ApplicableInjuryTolerance { get; }
+    public int WeaponDamageDice { get; }
     public string? CalculatedInjuryColour
     {
         get
@@ -125,7 +133,9 @@ public sealed class AttackResolution
                 DamageRoll,
                 OverallProtection,
                 ArmourPiercing,
-                Mishap: Mishap
+                Mishap: Mishap,
+                InjuryTolerance: ApplicableInjuryTolerance,
+                WeaponDamageDice: WeaponDamageDice
             )
             : null;
     public bool Ready =>
@@ -138,7 +148,9 @@ public sealed class AttackResolution
         AttackModifierSummary modifiers,
         int protection,
         int targetOriginalHp,
-        int targetRemainingHp
+        int targetRemainingHp,
+        InjuryTolerance injuryTolerance,
+        bool melee
     )
     {
         ActorId = actor.Id;
@@ -148,6 +160,8 @@ public sealed class AttackResolution
         ActorName = actor.Name;
         TargetName = target.Name;
         Weapon = weapon.Copy();
+        ApplicableInjuryTolerance = InjuryToleranceRules.Applicable(injuryTolerance, weapon, melee);
+        WeaponDamageDice = InjuryToleranceRules.DamageDice(weapon.Damage);
         Modifiers = modifiers;
         mishapSkillDm = string.IsNullOrWhiteSpace(weapon.RequiredSkill)
             ? 0
@@ -277,7 +291,8 @@ public sealed partial class Encounter
         IReadOnlyList<SceneCombatant> entries,
         CombatLoadout? loadout,
         CombatLoadout? targetLoadout,
-        int naturalDr
+        int naturalDr,
+        InjuryTolerance injuryTolerance = InjuryTolerance.None
     )
     {
         var actor = RequireActor(id, entries);
@@ -313,7 +328,9 @@ public sealed partial class Encounter
             modifiers,
             protection,
             MaximumHp(target),
-            Hp(target)
+            Hp(target),
+            injuryTolerance,
+            state.MajorAction == "Melee Attack"
         );
     }
 

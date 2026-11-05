@@ -57,22 +57,10 @@ public static class SceneChecks
             .Scenes.Where(s => s.Name == "Existing scene")
             .Select(s => new { s.Id })
             .SingleAsync();
-        db.Characters.AddRange(
-            new CharacterEntity
-            {
-                Id = 301,
-                CampaignId = 1,
-                Name = "Legacy Traveller",
-            },
-            new CharacterEntity
-            {
-                Id = 302,
-                CampaignId = 1,
-                Name = "Legacy Mercenary",
-                IsNpc = true,
-            }
+        // Historical fixture must not reference character columns added by later migrations.
+        await db.Database.ExecuteSqlRawAsync(
+            "INSERT INTO Characters (Id, CampaignId, Name, PlayerName, Race, Upp, TermsServed, HighestNavalRank, HighestScoutRank, NaturalDr, Inactive, IsNpc) VALUES (301,1,'Legacy Traveller','','','','0',0,0,0,0,0),(302,1,'Legacy Mercenary','','','','0',0,0,0,0,1)"
         );
-        await db.SaveChangesAsync();
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"INSERT INTO SceneTokens (SceneId, CharacterId, \"Column\", \"Row\") VALUES ({legacyScene.Id}, {301}, {2}, {3}), ({legacyScene.Id}, {302}, {4}, {5})"
         );

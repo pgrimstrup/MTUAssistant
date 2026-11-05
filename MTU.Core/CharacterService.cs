@@ -18,7 +18,8 @@ public sealed record Character(
     IReadOnlyList<CharacterSkill>? Skills = null,
     bool Inactive = false,
     IReadOnlyList<EquipmentItem>? Equipment = null,
-    bool IsNpc = false
+    bool IsNpc = false,
+    InjuryTolerance InjuryTolerance = InjuryTolerance.None
 );
 
 public sealed record CharacterSkill(int Id, int CharacterId, string Name, int Level);
@@ -53,7 +54,8 @@ public sealed class CharacterService(MtuDbContext db)
                 null,
                 t.Inactive,
                 null,
-                t.IsNpc
+                t.IsNpc,
+                t.InjuryTolerance
             ))
             .ToArrayAsync();
         var skills = await db
@@ -179,6 +181,7 @@ public sealed class CharacterService(MtuDbContext db)
 
     public async Task SaveAsync(Character character)
     {
+        InjuryToleranceRules.Validate(character.InjuryTolerance);
         var name = character.Name?.Trim() ?? "";
         var player = character.PlayerName?.Trim() ?? "";
         var race = character.Race?.Trim() ?? "";
@@ -219,6 +222,7 @@ public sealed class CharacterService(MtuDbContext db)
         entity.HighestNavalRank = character.HighestNavalRank;
         entity.HighestScoutRank = character.HighestScoutRank;
         entity.NaturalDr = character.NaturalDr;
+        entity.InjuryTolerance = character.InjuryTolerance;
         entity.TokenImage = character.TokenImage;
         entity.Inactive = character.Inactive;
         await db.SaveChangesAsync();

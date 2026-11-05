@@ -1,0 +1,22 @@
+<fieldset class="injury-tolerance" disabled="@Disabled">
+    <legend>Injury Tolerance</legend>
+    @foreach (var option in Options)
+    {
+        <label><input type="checkbox" checked="@Value.HasFlag(option.Flag)" @onchange="e => Toggle(option.Flag, e.Value is true)" /> @option.Label</label>
+    }
+</fieldset>
+
+@code {
+    [Parameter] public InjuryTolerance Value { get; set; }
+    [Parameter] public EventCallback<InjuryTolerance> ValueChanged { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    private static readonly (InjuryTolerance Flag, string Label)[] Options = [
+        (InjuryTolerance.HalveInjury, "Halve Injury"),
+        (InjuryTolerance.MinusOnePerDie, "Minus 1 per D"),
+        (InjuryTolerance.Kinetic, "Kinetic"),
+        (InjuryTolerance.Energy, "Energy"),
+        (InjuryTolerance.Laser, "Laser"),
+        (InjuryTolerance.Psionic, "Psionic (reserved)")
+    ];
+    private Task Toggle(InjuryTolerance flag, bool selected) => ValueChanged.InvokeAsync(selected ? Value | flag : Value & ~flag);
+}

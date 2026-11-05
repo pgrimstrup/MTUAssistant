@@ -84,6 +84,7 @@ public sealed class NpcService(MtuDbContext db, CharacterService characterStore)
     public async Task SaveAsync(Npc character, bool replaceSkills = false)
     {
         var actor = character.Character;
+        InjuryToleranceRules.Validate(actor.InjuryTolerance);
         var name = actor.Name.Trim();
         var race = actor.Race.Trim();
         var upp = string.IsNullOrWhiteSpace(actor.Upp)
@@ -223,6 +224,7 @@ public sealed class NpcService(MtuDbContext db, CharacterService characterStore)
         entity.Race = race;
         entity.Upp = upp;
         entity.TokenImage = actor.TokenImage;
+        entity.InjuryTolerance = actor.InjuryTolerance;
         details.Occupation = occupation;
         details.Gender = gender;
         details.Quirks1 = quirks1;

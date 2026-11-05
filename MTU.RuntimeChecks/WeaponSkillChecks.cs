@@ -22,13 +22,10 @@ public static class WeaponSkillChecks
         var migrator = db.GetService<IMigrator>();
         await migrator.MigrateAsync("20261103221959_EncounterPersistence");
         db.Campaigns.Add(new CampaignEntity { Id = 1, Name = "Weapon skills" });
-        db.Characters.Add(
-            new CharacterEntity
-            {
-                Id = 1,
-                CampaignId = 1,
-                Name = "Traveller",
-            }
+        await db.SaveChangesAsync();
+        // Use the historical schema before new character columns are migrated.
+        await db.Database.ExecuteSqlRawAsync(
+            "INSERT INTO Characters (Id, CampaignId, Name, PlayerName, Race, Upp, TermsServed, HighestNavalRank, HighestScoutRank, NaturalDr, Inactive, IsNpc) VALUES (1,1,'Traveller','','','','0',0,0,0,0,0)"
         );
         db.Equipment.AddRange(
             new EquipmentItem

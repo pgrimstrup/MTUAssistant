@@ -176,6 +176,10 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
             .WithMany()
             .HasForeignKey(t => t.CampaignId)
             .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder
+            .Entity<CharacterEntity>()
+            .Property(c => c.InjuryTolerance)
+            .HasDefaultValue(InjuryTolerance.None);
         modelBuilder.Entity<CharacterEntity>().HasIndex(t => new { t.CampaignId, t.Name });
         modelBuilder
             .Entity<CampaignEntity>()

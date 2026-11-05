@@ -160,7 +160,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
                 ?? throw new ArgumentException("The target is no longer in the campaign.");
             loadouts[actor.CharacterId] = new CombatLoadout(await EquipmentStore.ListDetailsForCharacterAsync(scene.CampaignId, actor.CharacterId));
             loadouts[target.CharacterId] = new CombatLoadout(await EquipmentStore.ListDetailsForCharacterAsync(scene.CampaignId, target.CharacterId));
-            attackResolution = encounter.BeginAttack(actor.Id, entries, loadouts[actor.CharacterId], loadouts[target.CharacterId], character.NaturalDr);
+            attackResolution = encounter.BeginAttack(actor.Id, entries, loadouts[actor.CharacterId], loadouts[target.CharacterId], character.NaturalDr, character.InjuryTolerance);
         });
     }
     private async Task AttackPreviewChanged()

@@ -292,6 +292,11 @@ namespace MTU.Core.Data.Migrations
 
                     b.Property<bool>("Inactive").HasColumnType("INTEGER");
 
+                    b.Property<int>("InjuryTolerance")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0);
+
                     b.Property<bool>("IsNpc").HasColumnType("INTEGER");
 
                     b.Property<string>("Name").IsRequired().HasColumnType("TEXT");
