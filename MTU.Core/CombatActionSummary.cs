@@ -129,6 +129,8 @@ public sealed record CombatActionSummary(
         }
         else if (state.SelectedBehindCover)
             rows.Add(new("Cover", "Behind Cover"));
+        if (state.SelectedFlying)
+            rows.Add(new("Flying", "Yes"));
         if (state.Unconscious)
             rows.Add(new("Status", "Unconscious"));
         rows.Add(new("Sequence", state.SequenceSummary));

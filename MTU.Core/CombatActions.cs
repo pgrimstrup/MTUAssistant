@@ -48,7 +48,10 @@ public sealed record CombatantActionState(
     IReadOnlyList<AutoAttackTarget>? ExtraTargets = null,
     IReadOnlyList<TargetAttackResult>? AutoAttackResults = null,
     CombatCover? TargetReactionCover = null,
-    int PreviewTargetIndex = 0
+    int PreviewTargetIndex = 0,
+    bool Flying = false,
+    bool? PendingFlying = null,
+    int? NaturalAttackId = null
 )
 {
     [JsonIgnore]
@@ -161,6 +164,7 @@ public sealed record CombatantActionState(
         PendingBehindCover.HasValue
         || PendingHiding.HasValue
         || PendingElevated.HasValue
+        || PendingFlying.HasValue
         || HasPendingCoverProtection;
 
     [JsonIgnore]
@@ -173,6 +177,9 @@ public sealed record CombatantActionState(
 
     [JsonIgnore]
     public bool SelectedElevated => PendingElevated ?? Elevated;
+
+    [JsonIgnore]
+    public bool SelectedFlying => PendingFlying ?? Flying;
 
     [JsonIgnore]
     public string MinorSummary => string.Join(" → ", ColumnActions(1).Concat(ColumnActions(3)));
@@ -320,6 +327,8 @@ public sealed partial class Encounter
             BehindCover: state.BehindCover,
             Hiding: state.Hiding,
             Elevated: state.Elevated,
+            Flying: state.Flying,
+            NaturalAttackId: state.NaturalAttackId,
             Unconscious: state.Unconscious,
             Speed: state.Speed,
             CoverProtection: state.CoverProtection,
@@ -337,7 +346,7 @@ public sealed partial class Encounter
             ?? throw new ArgumentException("Select a combatant in this scene.");
         if (!Active || IsDead(actor))
             throw new ArgumentException("Choose a living combatant during an encounter.");
-        actions[id] = ActionFor(id) with { Speed = actor.Speed };
+        actions[id] = ActionFor(id) with { Speed = SpeedFor(actor) };
         return actor;
     }
 
@@ -460,10 +469,8 @@ public sealed partial class Encounter
         var actor = RequireActor(id, entries);
         RequireUnresolved(id);
         EnsureTurnOrigin(id, entries);
-        if (targetId is int target && !entries.Any(e => e.Id == target && e.IsNpc != actor.IsNpc))
-            throw new ArgumentException(
-                "Choose a combatant from the opposing side, or clear the target."
-            );
+        if (targetId is int target && !entries.Any(e => e.Id == target && e.Id != actor.Id))
+            throw new ArgumentException("Choose another combatant, or clear the target.");
         var state = ActionFor(id);
         if (state.TargetId != targetId)
             state = ReleaseTargetReaction(state);
@@ -489,7 +496,7 @@ public sealed partial class Encounter
     {
         if (!Active || entries.FirstOrDefault(e => e.Id == id) is not { OnMap: true } actor)
             return false;
-        var state = ActionFor(id) with { Speed = actor.Speed };
+        var state = ActionFor(id) with { Speed = SpeedFor(actor) };
         actions[id] = state;
         if (!reset && state.TurnOriginColumn.HasValue && state.TurnOriginRow.HasValue)
             return false;
@@ -570,6 +577,7 @@ public sealed partial class Encounter
             PendingBehindCover = null,
             PendingHiding = null,
             PendingElevated = null,
+            PendingFlying = null,
             PendingCoverProtection = null,
             HasPendingCoverProtection = false,
             ResolvedAttackModifiers = null,
@@ -597,8 +605,8 @@ public sealed partial class Encounter
     public IReadOnlyList<CombatMovementRange> MovementRanges(IReadOnlyList<SceneCombatant> entries)
     {
         foreach (var entry in entries)
-            if (actions.TryGetValue(entry.Id, out var state) && state.Speed != entry.Speed)
-                actions[entry.Id] = NormalizeActions(state with { Speed = entry.Speed });
+            if (actions.TryGetValue(entry.Id, out var state) && state.Speed != SpeedFor(entry))
+                actions[entry.Id] = NormalizeActions(state with { Speed = SpeedFor(entry) });
         return !Active
             ? []
             : entries

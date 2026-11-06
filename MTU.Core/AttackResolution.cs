@@ -327,7 +327,7 @@ public sealed partial class Encounter
         var state = AttackStateFor(id, targetIndex);
         if (state.MajorAction is not ("Ranged Attack" or "Melee Attack"))
             throw new ArgumentException("Choose an attack first.");
-        var target = entries.FirstOrDefault(e => e.Id == state.TargetId && e.IsNpc != actor.IsNpc);
+        var target = entries.FirstOrDefault(e => e.Id == state.TargetId && e.Id != actor.Id);
         if (target is null)
             throw new ArgumentException("Choose a target before resolving the attack.");
         var modifiers = AttackModifierCalculator.Calculate(
@@ -374,7 +374,7 @@ public sealed partial class Encounter
             Hp(target),
             injuryTolerance,
             state.MajorAction == "Melee Attack",
-            Dm(Health(actor).Strength),
+            actor.IsAnimal ? 0 : Dm(Health(actor).Strength),
             string.Join(", ", protectionParts.Select(part => part.Description)),
             targetIndex,
             state.MajorAction == "Ranged Attack" && state.AutoAttack == "Burst"

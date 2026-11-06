@@ -23,12 +23,19 @@ public sealed record ProtectionContribution(int Value, string? Label = null)
     public string Description => $"DR +{Value}" + (Label is null ? "" : $" {Label}");
 }
 
-public sealed class CombatLoadout(IReadOnlyList<CharacterEquipmentDetails> equipment)
+public sealed class CombatLoadout(
+    IReadOnlyList<CharacterEquipmentDetails> equipment,
+    bool naturalWeapons = false
+)
 {
     private IEnumerable<CharacterEquipmentDetails> Equipped => equipment.Where(e => e.Equipped);
     public int AutoScore => AutoFire.Score(RangedWeapon?.Equipment.Traits);
     public bool HasSmartTracker => Equipped.Any(e => e.SupportsAttachments && e.SmartTracker);
     public CharacterEquipmentDetails? RangedWeapon => StrongestWeapon(true);
+    public IReadOnlyList<CharacterEquipmentDetails> NaturalWeapons =>
+        naturalWeapons
+            ? Equipped.Where(e => e.Equipment.Kind == EquipmentKind.Weapon).ToArray()
+            : [];
     public CharacterEquipmentDetails MeleeWeapon => StrongestWeapon(false) ?? UnarmedWeapon;
     public static CharacterEquipmentDetails UnarmedWeapon =>
         new()
@@ -87,7 +94,13 @@ public sealed class CombatLoadout(IReadOnlyList<CharacterEquipmentDetails> equip
     }
 
     public CharacterEquipmentDetails? WeaponFor(CombatantActionState state) =>
-        state.MajorAction == "Melee Attack" ? MeleeWeapon
+        state.MajorAction == "Melee Attack"
+            ? (
+                naturalWeapons
+                    ? NaturalWeapons.FirstOrDefault(w => w.Equipment.Id == state.NaturalAttackId)
+                        ?? NaturalWeapons.FirstOrDefault()
+                    : MeleeWeapon
+            )
         : state.MajorAction == "Ranged Attack" || state.IsSelected("Aim") ? RangedWeapon
         : null;
 

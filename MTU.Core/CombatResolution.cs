@@ -66,7 +66,7 @@ public sealed partial class Encounter
         SceneCombatant? target = null;
         if (state.NeedsReaction || state.IsSelected("Tag Target"))
         {
-            target = entries.FirstOrDefault(e => e.Id == state.TargetId && e.IsNpc != actor.IsNpc);
+            target = entries.FirstOrDefault(e => e.Id == state.TargetId && e.Id != actor.Id);
             if (target is null)
                 throw new ArgumentException("Choose a target before resolving the action.");
         }
@@ -94,6 +94,8 @@ public sealed partial class Encounter
             HasPendingCoverProtection = false,
             PendingBehindCover = null,
             PendingHiding = null,
+            Flying = state.SelectedFlying,
+            PendingFlying = null,
             Elevated = state.SelectedElevated,
             PendingElevated = null,
             ResolvedAttackModifiers = state.MajorAction is "Ranged Attack" or "Melee Attack"

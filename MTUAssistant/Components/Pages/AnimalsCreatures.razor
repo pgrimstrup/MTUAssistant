@@ -45,8 +45,8 @@
             </section>
         }
         @if (!items.Any()) { <p class="empty-message">No animals or creatures in this campaign yet.</p> }
-        else { <div class="table-wrap"><table class="table characters-table"><thead><tr><th>Token</th><th>Name</th><th>Type</th><th>Behaviour</th><th>Hits</th><th>Traits</th><th>Skills</th><th>Natural Attacks</th><th></th></tr></thead><tbody>
-            @foreach (var animal in Filtered) { <tr @key="animal.Character.Id"><td>@if (CharacterToken.DataUri(animal.Character.TokenImage) is { } token) { <img class="token-thumbnail" src="@token" alt="@($"{animal.Character.Name} token")" /> }</td><th scope="row">@animal.Character.Name</th><td>@animal.AnimalType</td><td>@animal.Behaviour</td><td>@animal.Hits</td><td>@animal.Traits</td><td>@Skills(animal)</td><td>@string.Join(", ", animal.NaturalAttacks.Select(a => $"{a.Name} ({a.Damage})"))</td><td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenSkills(animal.Character)">Skills</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenAttacks(animal)">Attacks</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(animal)">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => Delete(animal)">Delete</button></td></tr> }
+        else { <div class="table-wrap"><table class="table characters-table"><thead><tr><th>Token</th><th>Name</th><th>Type</th><th>Behaviour</th><th>Speed</th><th>Hits</th><th>Traits</th><th>Skills</th><th>Natural Attacks</th><th></th></tr></thead><tbody>
+            @foreach (var animal in Filtered) { <tr @key="animal.Character.Id"><td>@if (CharacterToken.DataUri(animal.Character.TokenImage) is { } token) { <img class="token-thumbnail" src="@token" alt="@($"{animal.Character.Name} token")" /> }</td><th scope="row">@animal.Character.Name</th><td>@animal.AnimalType</td><td>@animal.Behaviour</td><td>@animal.Character.Speed</td><td>@animal.Hits</td><td>@animal.Traits</td><td>@Skills(animal)</td><td>@string.Join(", ", animal.NaturalAttacks.Select(a => $"{a.Name} ({a.Damage})"))</td><td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenSkills(animal.Character)">Skills</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenAttacks(animal)">Attacks</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(animal)">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => Delete(animal)">Delete</button></td></tr> }
         </tbody></table></div> }
         @if (selectedAttacks is { } attacker) { <AnimalAttacks @key="attacker.Character.Id" Animal="attacker" OnChanged="Reload" OnClose="CloseAttacks" /> }
         @if (selectedSkills is { } skilled) { <CharacterSkills @key="skilled.Id" Character="skilled" OnChanged="Reload" OnClose="CloseSkills" /> }
@@ -56,7 +56,7 @@
 @code {
     private Campaign? campaign;
     private IReadOnlyList<Animal> items = [];
-    private string filter = "", typeFilter = "", name = "", animalType = "Herbivores", behaviour = "Eater", traits = "";
+    private string filter = "", typeFilter = "", name = "", animalType = "Herbivore", behaviour = "Eater", traits = "";
     private int id, hits = 1, speed = 6, tokenInputKey;
     private string description = "";
     private byte[]? tokenImage;
@@ -72,7 +72,7 @@
     private async Task SetCampaign(Campaign? value) { Cancel(); selectedSkills = null; selectedAttacks = null; campaign = value; await Reload(); }
     private async Task Reload() { if (campaign is null) { items = []; return; } try { items = await Animals.ListAsync(campaign.Id); error = null; } catch { error = "Unable to load animals and creatures."; } }
     private static string Skills(Animal a) => string.Join(", ", (a.Character.Skills ?? []).Select(s => $"{s.Name} {s.Level}"));
-    private void Add() { id = 0; description = ""; injuryTolerance = InjuryTolerance.None; name = ""; hits = 1; speed = 6; animalType = "Herbivores"; behaviour = "Eater"; traits = ""; editingAnimal = null; selectedSkills = null; selectedAttacks = null; tokenImage = null; tokenInputKey++; error = null; editing = true; }
+    private void Add() { id = 0; description = ""; injuryTolerance = InjuryTolerance.None; name = ""; hits = 1; speed = 6; animalType = "Herbivore"; behaviour = "Eater"; traits = ""; editingAnimal = null; selectedSkills = null; selectedAttacks = null; tokenImage = null; tokenInputKey++; error = null; editing = true; }
     private void Edit(Animal a) { id = a.Character.Id; description = a.Description; injuryTolerance = a.Character.InjuryTolerance; name = a.Character.Name; hits = a.Hits; speed = a.Character.Speed; animalType = a.AnimalType; behaviour = a.Behaviour; traits = a.Traits; editingAnimal = a; selectedSkills = null; selectedAttacks = null; tokenImage = a.Character.TokenImage; tokenInputKey++; error = null; editing = true; }
     private void OpenSkills(Character character) { editing = false; editingAnimal = null; tokenImage = null; selectedAttacks = null; selectedSkills = character; error = null; }
     private void OpenAttacks(Animal animal) { Cancel(); selectedSkills = null; selectedAttacks = animal; }

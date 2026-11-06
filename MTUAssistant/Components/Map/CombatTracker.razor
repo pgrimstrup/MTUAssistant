@@ -5,22 +5,22 @@
 <aside class="combat-tracker" aria-label="Combat Tracker">
     <header><h2>Combat Tracker@(Encounter.Active ? $" - Round {Encounter.Round}" : "")</h2><span class="count">@Entries.Count</span></header>
     <div class="npc-picker">
-        <div class="npc-picker-heading"><label for="combat-npc-search">Add NPC</label>
+        <div class="npc-picker-heading"><label for="combat-npc-search">Add NPC / Animal</label>
             <button type="button" class="add-travellers" disabled="@(Disabled || Encounter.Active)" title="Add missing active Travellers here unplaced; preserve existing Travellers and their positions" @onclick="() => AddTravellers.InvokeAsync()">Add Travellers</button>
         </div>
-        <input id="combat-npc-search" class="form-control" placeholder="Search NPC or Traveller…" autocomplete="off"
+        <input id="combat-npc-search" class="form-control" placeholder="Search NPC, Animal or Traveller…" autocomplete="off"
                role="combobox" aria-autocomplete="list" aria-controls="combat-npc-results" aria-expanded="@searchOpen.ToString().ToLowerInvariant()"
                @bind="search" @bind:event="oninput" @onfocus="() => searchOpen = true" @onkeydown="SearchKey" />
         @if (searchOpen)
         {
-            <div class="npc-results" id="combat-npc-results" role="listbox" aria-label="Matching NPCs">
+            <div class="npc-results" id="combat-npc-results" role="listbox" aria-label="Matching combatants">
                 @foreach (var npc in Matches.Take(25))
                 {
-                    <button type="button" role="option" aria-selected="false" disabled="@(Disabled || Encounter.Active)" @onclick="() => AddNpc.InvokeAsync(npc.CharacterId)">
-                        <span>@npc.Name</span><small>@string.Join(" · ", new[] { npc.IsNpc ? npc.Occupation : "Traveller", npc.Race }.Where(s => !string.IsNullOrWhiteSpace(s)))</small><span class="add-mark" aria-hidden="true">+</span>
+                    <button type="button" role="option" aria-selected="false" disabled="@(Disabled || (Encounter.Active && !npc.IsNpc))" @onclick="() => AddNpc.InvokeAsync(npc.CharacterId)">
+                        <span>@npc.Name</span><small>@(npc.IsAnimal ? $"{AnimalTypes.Normalize(npc.AnimalType)} - {npc.Behaviour}" : string.Join(" · ", new[] { npc.IsNpc ? npc.Occupation : "Traveller", npc.Race }.Where(s => !string.IsNullOrWhiteSpace(s))))</small><span class="add-mark" aria-hidden="true">+</span>
                     </button>
                 }
-                @if (!Matches.Any()) { <p>No matching NPCs.</p> }
+                @if (!Matches.Any()) { <p>No matching combatants.</p> }
                 @if (Matches.Count() > 25) { <p>Refine your search for more matches.</p> }
                 <button type="button" class="done-search" @onclick="() => searchOpen = false">Done</button>
             </div>
@@ -29,7 +29,7 @@
     <div class="tracker-entries" @ref="trackerEntries">
         @foreach (var group in (Encounter.Active ? new[] { Encounter.Order(Entries) } : Entries.GroupBy(e => e.IsNpc).OrderBy(g => g.Key).Select(g => g.AsEnumerable())))
         {
-            <h3>@(Encounter.Active ? "Initiative order" : group.First().IsNpc ? "NPCs" : "Travellers")</h3>
+            <h3>@(Encounter.Active ? "Initiative order" : group.First().IsNpc ? "NPCs / Animals" : "Travellers")</h3>
             <ol>
                 @foreach (var entry in group)
                 {
@@ -47,7 +47,7 @@
                         }
                         else { <span class="traveller-name" title="@entry.Name">@entry.Name</span> }
                         @if (Encounter.Active) { <span title="Initiative">@Encounter.Initiative.GetValueOrDefault(entry.Id)</span> }
-                        <div class="health" title="@($"HP {Encounter.Hp(entry)} / {Encounter.MaximumHp(entry)} · STR {Encounter.Health(entry).Strength} DEX {Encounter.Health(entry).Dexterity} END {Encounter.Health(entry).Endurance}")">
+                        <div class="health" title="@(entry.IsAnimal ? $"HP {Encounter.Hp(entry)} / {Encounter.MaximumHp(entry)}" : $"HP {Encounter.Hp(entry)} / {Encounter.MaximumHp(entry)} · STR {Encounter.Health(entry).Strength} DEX {Encounter.Health(entry).Dexterity} END {Encounter.Health(entry).Endurance}")">
                             <div class="health-track"><div style="@($"width:{Encounter.HealthWidth(entry).ToString(System.Globalization.CultureInfo.InvariantCulture)}%;background:{Encounter.HealthColour(entry)}")"></div></div>
                             <label>HP <input type="number" min="0" max="@Encounter.MaximumHp(entry)" @key="(entry.Id, editVersions.GetValueOrDefault(entry.Id), 1)" disabled="@Disabled" @onclick:stopPropagation="true" value="@Encounter.Hp(entry)" aria-label="@($"Current HP for {entry.Name}")" @onchange="e => SetHp(entry.Id, e)" /></label>
                         </div>
@@ -113,7 +113,7 @@
     private async Task ChangeName(int id, ChangeEventArgs e) { await NameChanged.InvokeAsync((id, e.Value?.ToString() ?? string.Empty)); editVersions[id] = editVersions.GetValueOrDefault(id) + 1; }
     private async Task ChangeVisibility(int id, ChangeEventArgs e) { await VisibilityChanged.InvokeAsync((id, e.Value is true)); editVersions[id] = editVersions.GetValueOrDefault(id) + 1; }
     private IEnumerable<SceneNpcChoice> Matches => Npcs.Where(n => string.IsNullOrWhiteSpace(search) ||
-        $"{n.Name} {n.Occupation} {n.Race}".Contains(search.Trim(), StringComparison.OrdinalIgnoreCase));
+        $"{n.Name} {n.Occupation} {n.Race} {AnimalTypes.Normalize(n.AnimalType)} {n.Behaviour}".Contains(search.Trim(), StringComparison.OrdinalIgnoreCase));
     private void SearchKey(KeyboardEventArgs e) { if (e.Key == "Escape") searchOpen = false; else if (e.Key == "ArrowDown") searchOpen = true; }
     private static string Initials(string name) => string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(s => s[0])).ToUpperInvariant();
 }

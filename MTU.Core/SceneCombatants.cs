@@ -19,7 +19,13 @@ public sealed record SceneCombatant(
     string Occupation = "",
     int? Tactics = null,
     IReadOnlyList<CharacterSkill>? Skills = null,
-    int Speed = 6
+    int Speed = 6,
+    bool IsAnimal = false,
+    string AnimalName = "",
+    int AnimalHits = 0,
+    string AnimalTraits = "",
+    IReadOnlyList<NaturalAttack>? NaturalAttacks = null,
+    InjuryTolerance InjuryTolerance = InjuryTolerance.None
 )
 {
     public bool OnMap => Column.HasValue && Row.HasValue;
@@ -30,7 +36,10 @@ public sealed record SceneNpcChoice(
     string Name,
     string Race,
     string Occupation,
-    bool IsNpc = true
+    bool IsNpc = true,
+    bool IsAnimal = false,
+    string AnimalType = "",
+    string Behaviour = ""
 );
 
 public sealed partial class SceneService
@@ -41,7 +50,7 @@ public sealed partial class SceneService
         var db = scope.ServiceProvider.GetRequiredService<MtuDbContext>();
         return await db
             .Characters.AsNoTracking()
-            .Where(c => c.CampaignId == campaignId && (c.IsNpc || !c.Inactive))
+            .Where(c => c.CampaignId == campaignId && (c.IsNpc || c.IsAnimal || !c.Inactive))
             .OrderBy(c => c.Name)
             .ThenBy(c => c.Id)
             .Select(c => new SceneNpcChoice(
@@ -50,7 +59,16 @@ public sealed partial class SceneService
                 c.Race,
                 db.NPCs.Where(n => n.CharacterId == c.Id).Select(n => n.Occupation).FirstOrDefault()
                     ?? "",
-                c.IsNpc
+                c.IsNpc || c.IsAnimal,
+                c.IsAnimal,
+                db.Animals.Where(a => a.CharacterId == c.Id)
+                    .Select(a => a.AnimalType)
+                    .FirstOrDefault()
+                    ?? "",
+                db.Animals.Where(a => a.CharacterId == c.Id)
+                    .Select(a => a.Behaviour)
+                    .FirstOrDefault()
+                    ?? ""
             ))
             .ToArrayAsync();
     }
@@ -65,8 +83,8 @@ public sealed partial class SceneService
             .Select(t => new SceneCombatant(
                 t.Id,
                 t.CharacterId,
-                t.Character.IsNpc ? t.Name : t.Character.Name,
-                t.Character.IsNpc,
+                t.Character.IsNpc || t.Character.IsAnimal ? t.Name : t.Character.Name,
+                t.Character.IsNpc || t.Character.IsAnimal,
                 t.Character.TokenImage != null,
                 t.IsVisible,
                 t.Column,
@@ -99,7 +117,9 @@ public sealed partial class SceneService
         var db = scope.ServiceProvider.GetRequiredService<MtuDbContext>();
         await RequireScene(db, campaignId, sceneId);
         var existing = await db
-            .SceneTokens.Where(t => t.SceneId == sceneId && !t.Character.IsNpc)
+            .SceneTokens.Where(t =>
+                t.SceneId == sceneId && !t.Character.IsNpc && !t.Character.IsAnimal
+            )
             .Include(t => t.Character)
             .ToListAsync();
         db.SceneTokens.RemoveRange(
@@ -121,9 +141,9 @@ public sealed partial class SceneService
             await db
                 .Characters.AsNoTracking()
                 .SingleOrDefaultAsync(c =>
-                    c.Id == characterId && c.CampaignId == campaignId && c.IsNpc
+                    c.Id == characterId && c.CampaignId == campaignId && (c.IsNpc || c.IsAnimal)
                 )
-            ?? throw new ArgumentException("Choose an NPC from this campaign.");
+            ?? throw new ArgumentException("Choose an NPC or Animal from this campaign.");
         var number =
             (
                 await db
@@ -214,8 +234,10 @@ public sealed partial class SceneService
             id,
             t =>
             {
-                if (!t.Character.IsNpc)
-                    throw new ArgumentException("Only NPC instance names can be edited here.");
+                if (!t.Character.IsNpc && !t.Character.IsAnimal)
+                    throw new ArgumentException(
+                        "Only NPC and Animal instance names can be edited here."
+                    );
                 var trimmed = name.Trim();
                 if (trimmed.Length is 0 or > 160)
                     throw new ArgumentException("Enter a name of up to 160 characters.");
@@ -229,8 +251,10 @@ public sealed partial class SceneService
         var db = scope.ServiceProvider.GetRequiredService<MtuDbContext>();
         var token =
             await Combatants(db, campaignId, sceneId)
-                .SingleOrDefaultAsync(t => t.Id == id && t.Character.IsNpc)
-            ?? throw new ArgumentException("Choose an NPC instance from this scene.");
+                .SingleOrDefaultAsync(t =>
+                    t.Id == id && (t.Character.IsNpc || t.Character.IsAnimal)
+                )
+            ?? throw new ArgumentException("Choose an NPC or Animal instance from this scene.");
         db.SceneTokens.Remove(token);
         await db.SaveChangesAsync();
     }
@@ -262,8 +286,8 @@ public sealed partial class SceneService
         var entry = new SceneCombatant(
             token.Id,
             token.CharacterId,
-            token.Character.IsNpc ? token.Name : token.Character.Name,
-            token.Character.IsNpc,
+            token.Character.IsNpc || token.Character.IsAnimal ? token.Name : token.Character.Name,
+            token.Character.IsNpc || token.Character.IsAnimal,
             token.Character.TokenImage != null,
             token.IsVisible,
             token.Column,
@@ -303,6 +327,30 @@ public sealed partial class SceneService
             .Where(s => ids.Contains(s.CharacterId))
             .Select(s => new CharacterSkill(s.Id, s.CharacterId, s.Name, s.Level))
             .ToArrayAsync();
+        var animals = await db
+            .Animals.AsNoTracking()
+            .Include(a => a.Character)
+            .Where(a => ids.Contains(a.CharacterId))
+            .ToDictionaryAsync(a => a.CharacterId);
+        var attacks = await db
+            .AnimalAttacks.AsNoTracking()
+            .Where(a => ids.Contains(a.CharacterId))
+            .OrderBy(a => a.Id)
+            .ToArrayAsync();
+        var tolerances = await db
+            .Characters.AsNoTracking()
+            .Where(c => ids.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.InjuryTolerance);
+        foreach (var animal in animals.Values)
+            if (
+                !skills.Any(s =>
+                    s.CharacterId == animal.CharacterId
+                    && s.Name.Equals("Melee", StringComparison.OrdinalIgnoreCase)
+                )
+            )
+                skills = skills
+                    .Append(new CharacterSkill(0, animal.CharacterId, "Melee", 0))
+                    .ToArray();
         var byCharacter = skills.ToLookup(s => s.CharacterId);
         return entries
             .Select(e =>
@@ -314,6 +362,19 @@ public sealed partial class SceneService
                     ),
                     Tactics = SkillRules.Rank(byCharacter[e.CharacterId], "Tactics"),
                     Skills = byCharacter[e.CharacterId].ToArray(),
+                    IsAnimal = animals.ContainsKey(e.CharacterId),
+                    IsNpc = e.IsNpc || animals.ContainsKey(e.CharacterId),
+                    AnimalName = animals.GetValueOrDefault(e.CharacterId)?.Character.Name ?? "",
+                    AnimalHits = animals.GetValueOrDefault(e.CharacterId)?.Hits ?? 0,
+                    AnimalTraits = animals.GetValueOrDefault(e.CharacterId)?.Traits ?? "",
+                    InjuryTolerance = tolerances.GetValueOrDefault(e.CharacterId),
+                    NaturalAttacks = attacks
+                        .Where(a => a.CharacterId == e.CharacterId)
+                        .Select(a => new NaturalAttack(
+                            a.Name,
+                            NaturalAttack.FormatDamage(a.Damage)
+                        ))
+                        .ToArray(),
                 }
             )
             .ToArray();
@@ -328,7 +389,7 @@ public sealed partial class SceneService
             t.SceneId == sceneId
             && t.Scene.CampaignId == campaignId
             && t.Character.CampaignId == campaignId
-            && (t.Character.IsNpc || !t.Character.Inactive)
+            && (t.Character.IsNpc || t.Character.IsAnimal || !t.Character.Inactive)
         );
 
     private static async Task RequireScene(MtuDbContext db, int campaignId, int sceneId)

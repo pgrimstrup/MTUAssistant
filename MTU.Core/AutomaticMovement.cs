@@ -28,7 +28,7 @@ public sealed partial class Encounter
         )
             return null;
         var speed =
-            actor.Speed
+            SpeedFor(actor)
             * (
                 state.SelectedStance == "Prone" ? .25
                 : state.SelectedStance == "Crouching" ? .5
@@ -79,7 +79,7 @@ public sealed partial class Encounter
             Math.Clamp(Math.Ceiling(Math.Max(0, distance - .8) / context.Speed - 1e-9), 1, 3);
         var state = ActionFor(id) with
         {
-            Speed = entries.First(e => e.Id == id).Speed,
+            Speed = SpeedFor(entries.First(e => e.Id == id)),
             AutomaticMove = true,
             Action = "Move",
             BeforeMajorActions = Enumerable.Repeat("Move", moves).ToArray(),

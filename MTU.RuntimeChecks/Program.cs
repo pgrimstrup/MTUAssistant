@@ -19,6 +19,7 @@ AutoAttackChecks.Run();
 await SkillChecks.RunAsync();
 await NpcGenerationChecks.RunAsync();
 await SceneChecks.RunAsync();
+await AnimalCombatChecks.RunAsync();
 
 static void Check(bool condition, string message)
 {

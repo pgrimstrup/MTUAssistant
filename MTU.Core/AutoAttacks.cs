@@ -198,8 +198,8 @@ public sealed partial class Encounter
         }
         var actor = RequireActor(id, entries);
         RequireUnresolved(id);
-        if (targetId is int target && !entries.Any(e => e.Id == target && e.IsNpc != actor.IsNpc))
-            throw new ArgumentException("Choose an opposing combatant.");
+        if (targetId is int target && !entries.Any(e => e.Id == target && e.Id != actor.Id))
+            throw new ArgumentException("Choose another combatant.");
         if (
             targetId is int chosen
             && !WithinAutoTargetRange(

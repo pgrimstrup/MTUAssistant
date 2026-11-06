@@ -3,7 +3,7 @@
 
 <aside class="combat-actions" aria-label="Combat actions">
     <div class="action-top">
-        <div class="actions-heading"><h2>Combat Actions</h2><span class="character-tools"><button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(EquipDisabled || Actor is null)" @onclick="() => SkillsRequested.InvokeAsync()">Skills</button><button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(EquipDisabled || Actor is null)" @onclick="() => EquipRequested.InvokeAsync()">Equip</button></span></div>
+        <div class="actions-heading"><h2>Combat Actions</h2><span class="character-tools"><button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(EquipDisabled || Actor is null)" @onclick="() => SkillsRequested.InvokeAsync()">Skills</button><button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(EquipDisabled || Actor is null || Actor.IsAnimal)" @onclick="() => EquipRequested.InvokeAsync()">Equip</button></span></div>
         @if (Actor is { } actor)
         {
             var state = Encounter.ActionFor(actor.Id);
@@ -32,6 +32,7 @@
                     <label><input type="checkbox" checked="@state.SelectedBehindCover" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => CoverChanged.InvokeAsync(e.Value is true)" /> Behind Cover</label>
                     <label><input type="checkbox" checked="@state.SelectedHiding" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => HidingChanged.InvokeAsync(e.Value is true)" /> Hiding</label>
                     <label><input type="checkbox" checked="@state.SelectedElevated" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => ElevatedChanged.InvokeAsync(e.Value is true)" /> Elevated</label>
+                    <label><input type="checkbox" checked="@state.SelectedFlying" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => FlyingChanged.InvokeAsync(e.Value is true)" /> Flying</label>
                     <label><input type="checkbox" checked="@state.Unconscious" disabled="@Disabled" @onchange="e => UnconsciousChanged.InvokeAsync(e.Value is true)" /> Unconscious</label>
                 </fieldset>
                 @if (state.SelectedHiding)
@@ -60,6 +61,12 @@
                     </label>
                     @if (coverError is not null) { <p role="alert">@coverError</p> }
                 }
+                @if (actor.IsAnimal && state.MajorAction == "Melee Attack" && Loadout?.NaturalWeapons is { Count: > 1 } naturalWeapons)
+                {
+                    <label>Attack <select class="form-select" value="@(state.NaturalAttackId ?? naturalWeapons[0].Equipment.Id)" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => NaturalAttackChanged.InvokeAsync(int.Parse(e.Value!.ToString()!))">
+                        @foreach (var weapon in naturalWeapons) { <option value="@weapon.Equipment.Id">@weapon.Equipment.Name</option> }
+                    </select></label>
+                }
                 @if (state.MajorAction == "Ranged Attack" && Loadout?.AutoScore > 0)
                 {
                     <label class="inline-option"><span>Auto Attack</span><select class="form-select" value="@state.AutoAttack" disabled="@(Disabled || state.ActionsResolved)" @onchange="ChangeAutoAttack">
@@ -78,7 +85,7 @@
                             <label class="inline-option"><span>Target@(state.FullAuto ? $" {index + 1}" : "")</span>
                                 <select class="form-select" value="@(slot.TargetId?.ToString() ?? "")" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => ChangeAttackTarget(index, e)">
                                     <option value="" selected="@(slot.TargetId is null)">No target</option>
-                                    @foreach (var target in Entries.Where(e => e.IsNpc != actor.IsNpc && (!state.FullAuto || ((e.Id == slot.TargetId || !state.TargetIds.Contains(e.Id)) && (index == 0 || MTU.Core.Encounter.WithinAutoTargetRange(Entries.FirstOrDefault(first => first.Id == state.TargetId), e))))))
+                                    @foreach (var target in Entries.Where(e => e.Id != actor.Id && (!state.FullAuto || ((e.Id == slot.TargetId || !state.TargetIds.Contains(e.Id)) && (index == 0 || MTU.Core.Encounter.WithinAutoTargetRange(Entries.FirstOrDefault(first => first.Id == state.TargetId), e))))))
                                     { <option value="@target.Id" selected="@(slot.TargetId == target.Id)">@TargetLabel(target)</option> }
                                 </select>
                             </label>
@@ -187,6 +194,8 @@
     [Parameter] public EventCallback<bool> CoverChanged { get; set; }
     [Parameter] public EventCallback<bool> HidingChanged { get; set; }
     [Parameter] public EventCallback<bool> UnconsciousChanged { get; set; }
+    [Parameter] public EventCallback<bool> FlyingChanged { get; set; }
+    [Parameter] public EventCallback<int> NaturalAttackChanged { get; set; }
     [Parameter] public EventCallback<bool> ElevatedChanged { get; set; }
     [Parameter] public EventCallback ResetRequested { get; set; }
     [Parameter] public EventCallback ResolveRequested { get; set; }
@@ -203,3 +212,4 @@
     private Task ChangeTarget(ChangeEventArgs e) => TargetChanged.InvokeAsync(int.TryParse(e.Value?.ToString(), out var id) ? id : null);
     private static string Initials(string name) => string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(s => s[0])).ToUpperInvariant();
 }
+

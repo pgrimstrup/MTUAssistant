@@ -77,6 +77,27 @@ public sealed partial class Encounter
         actions[id] = state with { MovementDiameter = MovementDiameterFor(state) };
     }
 
+    public void SetFlying(int id, bool flying, IReadOnlyList<SceneCombatant> entries)
+    {
+        var actor = RequireActor(id, entries);
+        RequireUnresolved(id);
+        var state = ActionFor(id) with
+        {
+            PendingFlying = flying,
+            Speed = AnimalCombat.Speed(actor, flying),
+        };
+        actions[id] = state with { MovementDiameter = MovementDiameterFor(state) };
+    }
+
+    public void SetNaturalAttack(int id, int attackId, IReadOnlyList<SceneCombatant> entries)
+    {
+        var actor = RequireActor(id, entries);
+        RequireUnresolved(id);
+        if (!actor.IsAnimal || attackId < 1 || attackId > (actor.NaturalAttacks?.Count ?? 0))
+            throw new ArgumentException("Choose a natural attack.");
+        actions[id] = ActionFor(id) with { NaturalAttackId = attackId };
+    }
+
     public void SetElevated(int id, bool elevated, IReadOnlyList<SceneCombatant> entries)
     {
         RequireActor(id, entries);

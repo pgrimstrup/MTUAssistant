@@ -364,6 +364,94 @@ public static class AutoAttackChecks
             ),
             "Exit preserves unconscious and dead combatant stance and cover statuses"
         );
+        foreach (var sameSideIsNpc in new[] { false, true })
+        {
+            var alliedActor = actor with { IsNpc = sameSideIsNpc };
+            var alliedOne = one with { IsNpc = sameSideIsNpc };
+            var alliedTwo = two with { IsNpc = sameSideIsNpc };
+            var alliedRoster = new[] { alliedActor, alliedOne, alliedTwo };
+            var allied = new Encounter();
+            allied.Begin(
+                alliedRoster,
+                true,
+                true,
+                0,
+                new Dictionary<int, int>
+                {
+                    [1] = 10,
+                    [2] = 9,
+                    [3] = 8,
+                },
+                () => 7
+            );
+            allied.ChooseAction(1, "Ranged Attack", alliedRoster, 2);
+            allied.SetTarget(1, 2, alliedRoster);
+            allied.SetTargetReaction(1, "Dodge", alliedRoster);
+            allied.SetAutoAttack(1, "Full Auto", 2, alliedRoster);
+            allied.SetAttackTarget(1, 1, 3, alliedRoster);
+            allied.SetAttackReaction(1, 1, "Dodge", alliedRoster);
+            var gun = new CombatLoadout([
+                new CharacterEquipmentDetails
+                {
+                    Equipped = true,
+                    Equipment = new EquipmentItem
+                    {
+                        Kind = EquipmentKind.Weapon,
+                        Name = "Rifle",
+                        RequiredSkill = "Gun Combat (Slug)",
+                        Range = 100,
+                        Damage = "3D",
+                        Traits = "Auto 2",
+                    },
+                },
+            ]);
+            var sameSideHit = allied.BeginAttack(1, alliedRoster, gun, new CombatLoadout([]), 0);
+            sameSideHit.SetAttackRoll(10);
+            sameSideHit.SetDamageRoll(10);
+            Check(sameSideHit.TargetId == 2, "Same-side combatants can be targeted and attacked");
+            Check(
+                allied
+                    .BeginAttack(1, alliedRoster, gun, new CombatLoadout([]), 0, targetIndex: 1)
+                    .TargetId == 3,
+                "Full Auto can attack another combatant on the same side"
+            );
+            var selfRejected = false;
+            try
+            {
+                allied.SetTarget(1, 1, alliedRoster);
+            }
+            catch (ArgumentException)
+            {
+                selfRejected = true;
+            }
+            Check(selfRejected, "Primary self-targeting remains forbidden");
+            selfRejected = false;
+            try
+            {
+                allied.SetAttackTarget(1, 1, 1, alliedRoster);
+            }
+            catch (ArgumentException)
+            {
+                selfRejected = true;
+            }
+            Check(selfRejected, "Full Auto self-targeting remains forbidden");
+            var secondaryHit = allied.BeginAttack(
+                1,
+                alliedRoster,
+                gun,
+                new CombatLoadout([]),
+                0,
+                targetIndex: 1
+            );
+            secondaryHit.SetAttackRoll(10);
+            secondaryHit.SetDamageRoll(10);
+            allied.ApplyAttacks([sameSideHit, secondaryHit], alliedRoster);
+            Check(
+                allied.ActionFor(1).ActionsResolved
+                    && allied.Hp(alliedOne) < Encounter.MaximumHp(alliedOne),
+                "Same-side attacks resolve and apply injury"
+            );
+        }
         Console.WriteLine(
             "Auto modes, Aim/Scope suppression, Burst damage, per-target Full Auto resolution, persistence and Cast privacy passed."
         );

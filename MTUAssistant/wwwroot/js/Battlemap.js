@@ -252,7 +252,7 @@ export class Battlemap {
     }
     tokenDisplaySize() {
         const scale=this.view?.scale > 0 ? this.view.scale : 1;
-        return Math.max(this.scene.gridSize,48/scale);
+        return Math.max(this.scene.gridSize,36/scale);
     }
     layoutToken(token) {
         const cell=this.scene.gridSize, size=this.tokenDisplaySize(), offset=(cell-size)/2;
@@ -544,7 +544,7 @@ export class Battlemap {
         }
         bar.visible = this.combatMode === true && Number.isFinite(token.healthWidth);
         if (!bar.visible) return;
-        const scale = this.view.scale, width = Math.max(this.scene.gridSize*.8,48/scale);
+        const scale = this.view.scale, width = Math.max(this.scene.gridSize*.8,36/scale);
         const x = (this.scene.gridSize-width)/2, y = (this.scene.gridSize-this.tokenDisplaySize())/2-10/scale, height = 5/scale;
         bar.rect(x,y,width,height).fill({color:0x000000,alpha:.75});
         const colour = {red:0xff0000,orange:0xffa500,green:0x008000}[token.healthColour] ?? 0xff0000;
@@ -562,6 +562,7 @@ export class Battlemap {
         token.halo.clear();
         if (this.combatMode) token.halo.circle(size/2,size/2,this.tokenDisplaySize()*.57).fill({color:token.isNpc ? 0xff0000 : 0x00ff00,alpha:.25});
         token.labelText.text = token.name;
+        token.labelText.style.fontSize = this.scene.gridSize * this.view.scale <= 36 ? 10 : 14;
         token.labelText.style.fill = token.isNpc ? 0xffb3b3 : 0xb3ffb3;
         token.label.scale.set(1/this.view.scale);
         const width = token.labelText.width + 10, height = token.labelText.height + 4;

@@ -39,6 +39,8 @@ public static class AttackModifierCalculator
             return null;
         if (state.ActionsResolved && state.ResolvedAttackModifiers is { } resolved)
             return resolved;
+        if (melee && actor.IsAnimal && (actor.NaturalAttacks?.Count ?? 0) == 0)
+            return new([], "No natural attacks recorded.");
         var weapon = loadout?.WeaponFor(state) ?? (melee ? CombatLoadout.UnarmedWeapon : null);
         if (weapon is null)
             return new(
@@ -50,8 +52,8 @@ public static class AttackModifierCalculator
         rows.Add(
             new(
                 required ?? "Weapon skill",
-                string.IsNullOrWhiteSpace(required)
-                    ? 0
+                string.IsNullOrWhiteSpace(required) ? 0
+                    : actor.IsAnimal && melee ? SkillRules.Rank(actor.Skills ?? [], required) ?? 0
                     : SkillRules.Dm(actor.Skills ?? [], required)
             )
         );
@@ -64,11 +66,12 @@ public static class AttackModifierCalculator
                 required.Trim().Equals("Melee", StringComparison.OrdinalIgnoreCase)
                 || required.TrimStart().StartsWith("Melee (", StringComparison.OrdinalIgnoreCase)
             );
-        rows.Add(
-            usesMeleeSkill && strengthDm > dexterityDm
-                ? new("STR", strengthDm)
-                : new("DEX", dexterityDm)
-        );
+        if (!actor.IsAnimal)
+            rows.Add(
+                usesMeleeSkill && strengthDm > dexterityDm
+                    ? new("STR", strengthDm)
+                    : new("DEX", dexterityDm)
+            );
         var aim =
             melee || state.AutomaticFire ? 0
             : state.MajorAction == "Ranged Attack" ? state.RangedAimBonus
@@ -86,13 +89,25 @@ public static class AttackModifierCalculator
             var carried = carriesAim ? Math.Min(Math.Max(0, state.CarriedAimBonus), aim) : 0;
             rows.Add(new(carried > 0 ? $"Aim (+{carried} carried over)" : "Aim", aim));
         }
-        if (state.SelectedElevated)
-            rows.Add(new("Elevated", 1));
         if (state.ReactionCount > 0)
             rows.Add(new("Reactions Made", -state.ReactionCount));
         var target = entries.FirstOrDefault(e => e.Id == state.TargetId);
         if (target is null)
             return new(rows, "Select a target to calculate attack modifiers.");
+        if (
+            state.SelectedElevated
+            || (state.SelectedFlying && !encounter.ActionFor(target.Id).SelectedFlying)
+        )
+            rows.Add(new("Elevated", 1));
+        if (target.IsAnimal)
+        {
+            var large = AnimalCombat.Trait(target.AnimalTraits, "Large");
+            var small = AnimalCombat.Trait(target.AnimalTraits, "Small");
+            if (large > 0)
+                rows.Add(new("Target Large", large));
+            if (small > 0)
+                rows.Add(new("Target Small", -small));
+        }
         if (!melee && (!actor.OnMap || !target.OnMap))
             return new(rows, "Place both tokens to calculate range and sight modifiers.");
         var distance = melee
@@ -138,11 +153,7 @@ public static class AttackModifierCalculator
             rows.Add(new("Target Dodge", -Math.Max(1, Math.Max(dex, athletics))));
         }
         // All eight neighbouring squares count as adjacent, including diagonals.
-        var closeCombat =
-            actor.OnMap
-            && target.OnMap
-            && Math.Abs(actor.Column!.Value - target.Column!.Value) <= 1
-            && Math.Abs(actor.Row!.Value - target.Row!.Value) <= 1;
+        var closeCombat = AnimalCombat.InMeleeReach(actor, target);
         if (melee && closeCombat && state.TargetReaction == "Parry")
         {
             var bestMelee = CharacterSkillCatalogue

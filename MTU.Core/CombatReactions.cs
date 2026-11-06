@@ -32,7 +32,7 @@ public sealed partial class Encounter
         var state = ActionFor(id);
         if (!state.NeedsReaction)
             throw new ArgumentException("Select a Melee Attack or Ranged Attack first.");
-        var target = entries.FirstOrDefault(e => e.Id == state.TargetId && e.IsNpc != actor.IsNpc);
+        var target = entries.FirstOrDefault(e => e.Id == state.TargetId && e.Id != actor.Id);
         if (target is null || IsDead(target))
             throw new ArgumentException("Choose a living target first.");
         if (state.TargetReaction == reaction)

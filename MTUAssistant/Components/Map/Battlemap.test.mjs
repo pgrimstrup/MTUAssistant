@@ -84,7 +84,7 @@ globalThis.PIXI={Texture:{from:()=>({destroy(){this.destroyed=true;}})},Sprite:c
 const smallGrid=new Battlemap({style:{}},{gridSize:10},'small-grid');
 const smallToken={name:'Mercenary 1',isNpc:true};
 smallGrid.refreshFallback(smallToken);
-assert.equal(smallToken.fallback.width,48); assert.equal(smallToken.fallback.height,48);
+assert.equal(smallToken.fallback.width,36); assert.equal(smallToken.fallback.height,36);
 const initialTexture=smallToken.fallbackTexture;
 smallGrid.refreshFallback(smallToken); assert.equal(smallToken.fallbackTexture,initialTexture,'unchanged labels reuse their texture');
 smallToken.name='Squad Leader'; smallGrid.refreshFallback(smallToken);
@@ -117,8 +117,9 @@ const marker={id:1,container:{},fallback:{},name:'Enemy 1',isNpc:true,halo:graph
 decorationMap.characterTokens.set(1,marker);
 for (const scale of [.25,1,4]) {
     decorationMap.view={scale}; decorationMap.setCombatMode(true);
-    assert.equal(marker.label.scale.value*scale,1,'labels keep the same screen size');
-    assert.ok(Math.abs(marker.halo.radius-Math.max(100,48/scale)*.57)<.0001);
+    assert.equal(marker.label.scale.value*scale,1,'labels keep a constant scale');
+    assert.equal(marker.labelText.style.fontSize,100*scale <= 36 ? 10 : 14,'minimum-sized tokens use smaller labels');
+    assert.ok(Math.abs(marker.halo.radius-Math.max(100,36/scale)*.57)<.0001);
     assert.deepEqual(fills.at(-2),{color:0xff0000,alpha:.25});
     assert.deepEqual(fills.at(-1),{color:0x000000,alpha:.5});
 }
@@ -324,9 +325,9 @@ const minimumToken={id:1,column:3,row:4,container:{position:{set(){}}},fallback:
 minimumMap.characterTokens.set(1,minimumToken);
 for(const scale of [.1,.25,1,4]) {
     minimumMap.view={scale}; minimumMap.layoutToken(minimumToken);
-    const size=Math.max(20,48/scale);
-    assert.equal(minimumToken.fallback.width*scale,Math.max(20*scale,48));
-    assert.equal(minimumToken.fallback.height*scale,Math.max(20*scale,48));
+    const size=Math.max(20,36/scale);
+    assert.equal(minimumToken.fallback.width*scale,Math.max(20*scale,36));
+    assert.equal(minimumToken.fallback.height*scale,Math.max(20*scale,36));
     assert.equal(fallbackPosition.x+minimumToken.fallback.width/2,10,'minimum token remains centred on its grid cell');
     assert.equal(fallbackPosition.y+minimumToken.fallback.height/2,10);
     assert.equal(portraitPosition.x+minimumToken.imageSprite.width/2,10);
@@ -344,8 +345,8 @@ assert.deepEqual([minimumToken.column,minimumToken.row],[5,6],'enlargement prese
 for(const scale of [.1,.25,1,4]) {
     healthBarMap.combatMode=true;healthBarMap.view={scale};healthBarMap.scene.gridSize=20;healthBarMap.tokenHealth.set(1,{id:1,healthWidth:50,healthColour:'green'});
     healthBarMap.drawTokenHealth(enemyMarker);
-    assert.ok(barRects[0].width*scale>=48,'full health bar stays at least 48 screen pixels');
+    assert.ok(barRects[0].width*scale>=36,'full health bar stays at least 36 screen pixels');
     assert.equal(barRects[0].x+barRects[0].width/2,10,'health bar is centred on the cell');
     assert.equal(barRects[1].width,barRects[0].width*.5,'health fill retains its percentage');
 }
-console.log('48px token/health-bar minimums, centred portraits, aspect ratio, overlapping hit tests and grid snapping passed.');
+console.log('36px token/health-bar minimums, centred portraits, aspect ratio, overlapping hit tests and grid snapping passed.');

@@ -21,11 +21,15 @@ public sealed partial class SceneService
         var isNpc =
             await db
                 .Characters.Where(c =>
-                    c.Id == characterId && c.CampaignId == campaignId && (c.IsNpc || !c.Inactive)
+                    c.Id == characterId
+                    && c.CampaignId == campaignId
+                    && (c.IsNpc || c.IsAnimal || !c.Inactive)
                 )
-                .Select(c => (bool?)c.IsNpc)
+                .Select(c => (bool?)(c.IsNpc || c.IsAnimal))
                 .SingleOrDefaultAsync()
-            ?? throw new ArgumentException("Choose an NPC or active Traveller from this campaign.");
+            ?? throw new ArgumentException(
+                "Choose an NPC, Animal or active Traveller from this campaign."
+            );
         if (isNpc)
             return await AddNpcInstanceAsync(campaignId, sceneId, characterId);
         await AssignTravellersAsync(campaignId, sceneId, characterId);
@@ -58,6 +62,7 @@ public sealed partial class SceneService
             .Characters.Where(c =>
                 c.CampaignId == campaignId
                 && !c.IsNpc
+                && !c.IsAnimal
                 && !c.Inactive
                 && (characterId == null || c.Id == characterId)
             )
@@ -103,7 +108,10 @@ public sealed partial class SceneService
                 var source = states.GetValueOrDefault(keep.SceneId);
                 target.Actions!.Remove(keep.Id);
                 if (source?.Actions?.TryGetValue(keep.Id, out var actionState) == true)
-                    target.Actions[keep.Id] = new CombatantActionState(Stance: actionState.Stance);
+                    target.Actions[keep.Id] = new CombatantActionState(
+                        Stance: actionState.Stance,
+                        Flying: actionState.Flying
+                    );
                 if (source?.Attributes?.TryGetValue(keep.Id, out var health) == true)
                     target.Attributes[keep.Id] = health;
                 else if (source?.HitPoints?.TryGetValue(keep.Id, out var hp) == true)

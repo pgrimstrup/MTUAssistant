@@ -5,7 +5,18 @@ namespace MTU.Core;
 
 public static class AnimalTypes
 {
-    public static readonly string[] All = ["Herbivores", "Omnivores", "Carnivores", "Scavengers"];
+    public static readonly string[] All = ["Herbivore", "Omnivore", "Carnivore", "Scavenger"];
+
+    public static string Normalize(string type) =>
+        type switch
+        {
+            "Herbivores" => "Herbivore",
+            "Omnivores" => "Omnivore",
+            "Carnivores" => "Carnivore",
+            "Scavengers" => "Scavenger",
+            _ => type,
+        };
+
     public static readonly string[] Behaviours =
     [
         "Carrion-Eater",
@@ -92,7 +103,7 @@ public sealed class AnimalService(MtuDbContext db)
                     a.Character.Speed
                 ),
                 a.Hits,
-                a.AnimalType,
+                AnimalTypes.Normalize(a.AnimalType),
                 a.Behaviour,
                 a.Traits,
                 attacks
@@ -112,7 +123,7 @@ public sealed class AnimalService(MtuDbContext db)
             throw new ArgumentException("Enter an animal name of up to 120 characters.");
         if (animal.Hits < 1)
             throw new ArgumentException("Hits must be at least 1.");
-        if (!AnimalTypes.All.Contains(animal.AnimalType))
+        if (!AnimalTypes.All.Contains(AnimalTypes.Normalize(animal.AnimalType)))
             throw new ArgumentException("Select a valid animal type.");
         if (!AnimalTypes.Behaviours.Contains(animal.Behaviour))
             throw new ArgumentException("Select a valid behaviour.");
@@ -195,7 +206,7 @@ public sealed class AnimalService(MtuDbContext db)
                 );
         }
         details.Hits = animal.Hits;
-        details.AnimalType = animal.AnimalType;
+        details.AnimalType = AnimalTypes.Normalize(animal.AnimalType);
         details.Behaviour = animal.Behaviour;
         details.Traits = animal.Traits.Trim();
         details.Description = animal.Description;

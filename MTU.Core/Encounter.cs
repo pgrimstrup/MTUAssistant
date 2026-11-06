@@ -12,7 +12,9 @@ public sealed record EncounterSnapshot(
         Dictionary<int, int>? HitPoints,
     Dictionary<int, int> Ambush,
     Dictionary<int, CombatHealth>? Attributes = null,
-    Dictionary<int, CombatantActionState>? Actions = null
+    Dictionary<int, CombatantActionState>? Actions = null,
+    Dictionary<string, int>? AnimalTactics = null,
+    bool EnemyAware = true
 );
 
 public sealed record PlayerCombatant(
@@ -55,6 +57,8 @@ public sealed partial class Encounter
         }
     }
     public int EnemyTactics { get; private set; }
+    private readonly Dictionary<string, int> animalTactics = new(StringComparer.OrdinalIgnoreCase);
+    private bool enemyAwareForEncounter = true;
 
     public static int Stat(SceneCombatant e, int i) =>
         e.Upp.Length > i
@@ -76,10 +80,11 @@ public sealed partial class Encounter
             _ => 3,
         };
 
-    public static int MaximumHp(SceneCombatant e) => Stat(e, 0) + Stat(e, 1) + Stat(e, 2);
+    public static int MaximumHp(SceneCombatant e) =>
+        e.IsAnimal ? e.AnimalHits : Stat(e, 0) + Stat(e, 1) + Stat(e, 2);
 
     public static CombatHealth MaximumHealth(SceneCombatant e) =>
-        new(Stat(e, 0), Stat(e, 1), Stat(e, 2));
+        e.IsAnimal ? new(0, 0, e.AnimalHits) : new(Stat(e, 0), Stat(e, 1), Stat(e, 2));
 
     public CombatHealth Health(SceneCombatant e) =>
         attributes.GetValueOrDefault(e.Id) ?? MaximumHealth(e);
@@ -109,7 +114,13 @@ public sealed partial class Encounter
     }
 
     public string HealthColour(SceneCombatant e) =>
-        Hp(e) > Stat(e, 0) + Stat(e, 1) ? "green"
+        e.IsAnimal
+            ? (
+                Hp(e) > e.AnimalHits / 2.0 ? "green"
+                : Hp(e) > e.AnimalHits / 4.0 ? "orange"
+                : "red"
+            )
+        : Hp(e) > Stat(e, 0) + Stat(e, 1) ? "green"
         : Hp(e) > (Stat(e, 0) + Stat(e, 1)) / 2.0 ? "orange"
         : "red";
 
@@ -171,7 +182,7 @@ public sealed partial class Encounter
         ambush.Clear();
         ResetTurnActions();
         var leader = entries
-            .Where(e => e.IsNpc && TravellerTacticsLevel(e).HasValue)
+            .Where(e => e.IsNpc && !e.IsAnimal && TravellerTacticsLevel(e).HasValue)
             .OrderByDescending(e => TravellerTacticsLevel(e) + Dm(Math.Max(Stat(e, 3), Stat(e, 4))))
             .FirstOrDefault();
         EnemyTactics =
@@ -181,6 +192,22 @@ public sealed partial class Encounter
                     + Dm(Math.Max(Stat(leader, 3), Stat(leader, 4)))
                     - 8
                 : 0;
+        enemyAwareForEncounter = enemyAware;
+        animalTactics.Clear();
+        var speciesTactics = entries
+            .Where(e => e.IsAnimal)
+            .GroupBy(e => e.AnimalName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                {
+                    var rank = AnimalCombat.TacticsRank(g);
+                    return enemyAware && rank.HasValue ? dice() + rank.Value - 8 : 0;
+                },
+                StringComparer.OrdinalIgnoreCase
+            );
+        foreach (var pair in speciesTactics)
+            animalTactics[pair.Key] = pair.Value;
         foreach (var e in entries)
         {
             var aware = e.IsNpc ? enemyAware : travellersAware;
@@ -188,14 +215,16 @@ public sealed partial class Encounter
                 enemyAware == travellersAware ? 0
                 : aware ? 6
                 : -6;
-            var roll = e.IsNpc
-                ? dice() + Dm(Math.Max(Stat(e, 1), Stat(e, 3)))
+            var roll =
+                e.IsAnimal ? dice() + AnimalCombat.InitiativeDm(e)
+                : e.IsNpc ? dice() + Dm(Math.Max(Stat(e, 1), Stat(e, 3)))
                 : rolls.GetValueOrDefault(e.Id);
             Initiative[e.Id] =
                 roll
                 + ambush[e.Id]
                 + (
-                    e.IsNpc ? EnemyTactics
+                    e.IsAnimal ? animalTactics.GetValueOrDefault(e.AnimalName)
+                    : e.IsNpc ? EnemyTactics
                     : travellersAware ? tactics
                     : 0
                 );
@@ -206,6 +235,49 @@ public sealed partial class Encounter
         foreach (var entry in entries)
             EnsureTurnOrigin(entry.Id, entries, true);
     }
+
+    public void AddCombatant(
+        SceneCombatant entry,
+        IReadOnlyList<SceneCombatant> entries,
+        Func<int>? dice = null
+    )
+    {
+        if (!Active || !entry.IsNpc || !entries.Any(e => e.Id == entry.Id))
+            throw new ArgumentException("Choose an NPC or Animal joining this encounter.");
+        if (Initiative.ContainsKey(entry.Id))
+            return;
+        dice ??= () => Random.Shared.Next(1, 7) + Random.Shared.Next(1, 7);
+        var tactics = EnemyTactics;
+        if (entry.IsAnimal)
+        {
+            if (!animalTactics.TryGetValue(entry.AnimalName, out tactics))
+            {
+                var rank = AnimalCombat.TacticsRank(
+                    entries.Where(e =>
+                        e.IsAnimal
+                        && e.AnimalName.Equals(entry.AnimalName, StringComparison.OrdinalIgnoreCase)
+                    )
+                );
+                tactics = enemyAwareForEncounter && rank.HasValue ? dice() + rank.Value - 8 : 0;
+                animalTactics[entry.AnimalName] = tactics;
+            }
+        }
+        Initiative[entry.Id] =
+            dice()
+            + (
+                entry.IsAnimal
+                    ? AnimalCombat.InitiativeDm(entry)
+                    : Dm(Math.Max(Stat(entry, 1), Stat(entry, 3)))
+            )
+            + tactics;
+        ambush[entry.Id] = 0;
+        EnsureTurnOrigin(entry.Id, entries, true);
+        if (SelectedId is null && !IsDead(entry))
+            SelectedId = entry.Id;
+    }
+
+    public int SpeedFor(SceneCombatant entry) =>
+        AnimalCombat.Speed(entry, ActionFor(entry.Id).SelectedFlying);
 
     public void Next(IReadOnlyList<SceneCombatant> entries)
     {
@@ -278,11 +350,17 @@ public sealed partial class Encounter
             null,
             new(ambush),
             new(attributes),
-            new(actions)
+            new(actions),
+            new(animalTactics, StringComparer.OrdinalIgnoreCase),
+            enemyAwareForEncounter
         );
 
     public void Restore(EncounterSnapshot state, IReadOnlyList<SceneCombatant> entries)
     {
+        animalTactics.Clear();
+        foreach (var pair in state.AnimalTactics ?? [])
+            animalTactics[pair.Key] = pair.Value;
+        enemyAwareForEncounter = state.EnemyAware;
         var ids = entries.Select(e => e.Id).ToHashSet();
         actions.Clear();
         foreach (var pair in state.Actions ?? [])
@@ -290,7 +368,10 @@ public sealed partial class Encounter
                 actions[pair.Key] = NormalizeActions(
                     pair.Value with
                     {
-                        Speed = entries.First(e => e.Id == pair.Key).Speed,
+                        Speed = AnimalCombat.Speed(
+                            entries.First(e => e.Id == pair.Key),
+                            pair.Value.SelectedFlying
+                        ),
                     }
                 ) with
                 {

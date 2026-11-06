@@ -219,7 +219,7 @@ public class AnimalEntity
     public int CharacterId { get; set; }
     public CharacterEntity Character { get; set; } = null!;
     public int Hits { get; set; }
-    public string AnimalType { get; set; } = "Herbivores";
+    public string AnimalType { get; set; } = "Herbivore";
     public string Behaviour { get; set; } = "Eater";
     public string Traits { get; set; } = "";
     public string Description { get; set; } = "";
