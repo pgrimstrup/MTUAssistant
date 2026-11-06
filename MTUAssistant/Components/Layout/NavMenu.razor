@@ -5,7 +5,7 @@
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">MTUAssistant</a>
+        <a class="navbar-brand" href=""><img class="brand-wordmark" src="images/traveller-mtu-transparent.png" alt="Traveller MTU" /></a>
     </div>
 </div>
 
@@ -14,52 +14,36 @@
 <div class="nav-scrollable">
     <nav class="nav flex-column">
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Galaxy Map
-            </NavLink>
+            <NavLink title="Galaxy Map" class="nav-link" href="" Match="NavLinkMatch.All"><span class="nav-glyph nav-glyph-galaxy-map" aria-hidden="true"></span><span class="nav-label">Galaxy Map</span></NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="trading">
-                <span class="bi bi-arrow-left-right-nav-menu" aria-hidden="true"></span> Trading
-            </NavLink>
+            <NavLink title="Trading" class="nav-link" href="trading"><span class="nav-glyph nav-glyph-trading" aria-hidden="true"></span><span class="nav-label">Trading</span></NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="passengers-cargo">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Passengers and Cargo
-            </NavLink>
+            <NavLink title="Passengers and Cargo" class="nav-link" href="passengers-cargo"><span class="nav-glyph nav-glyph-passengers-cargo" aria-hidden="true"></span><span class="nav-label">Passengers and Cargo</span></NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="equipment">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Supply Catalog
-            </NavLink>
+            <NavLink title="Supply Catalog" class="nav-link" href="equipment"><span class="nav-glyph nav-glyph-supply-catalog" aria-hidden="true"></span><span class="nav-label">Supply Catalog</span></NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="cover-protection">Cover Protection</NavLink>
+            <NavLink title="Cover Protection" class="nav-link" href="cover-protection"><span class="nav-glyph nav-glyph-cover-protection" aria-hidden="true"></span><span class="nav-label">Cover Protection</span></NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="travellers">
-                <span class="bi bi-person-nav-menu" aria-hidden="true"></span> Travellers
-            </NavLink>
+            <NavLink title="Travellers" class="nav-link" href="travellers"><span class="nav-glyph nav-glyph-travellers" aria-hidden="true"></span><span class="nav-label">Travellers</span></NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="patrons-enemies">
-                <span class="bi bi-person-nav-menu" aria-hidden="true"></span> Patrons and Enemies
-            </NavLink>
+            <NavLink title="Patrons and Enemies" class="nav-link" href="patrons-enemies"><span class="nav-glyph nav-glyph-patrons-enemies" aria-hidden="true"></span><span class="nav-label">Patrons and Enemies</span></NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="animals-creatures">
-                <span class="bi bi-paw-nav-menu" aria-hidden="true"></span> Animals and Creatures
-            </NavLink>
+            <NavLink title="Animals and Creatures" class="nav-link" href="animals-creatures"><span class="nav-glyph nav-glyph-animals-creatures" aria-hidden="true"></span><span class="nav-label">Animals and Creatures</span></NavLink>
         </div>
-        <div class="nav-item px-3"><NavLink class="nav-link" href="scenes"><span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>Scenes</NavLink></div>
+        <div class="nav-item px-3"><NavLink title="Scenes" class="nav-link" href="scenes"><span class="nav-glyph nav-glyph-scenes" aria-hidden="true"></span><span class="nav-label">Scenes</span></NavLink></div>
         <div class="nav-item px-3">
-            @if (Battlemap.Current is not null) { <NavLink class="nav-link" href="battlemap"><span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>Battlemap</NavLink> }
-            else { <span class="nav-link disabled-link" aria-disabled="true"><span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span>Battlemap</span> }
+            @if (Battlemap.Current is not null) { <NavLink title="Battlemap" class="nav-link" href="battlemap"><span class="nav-glyph nav-glyph-battlemap" aria-hidden="true"></span><span class="nav-label">Battlemap</span></NavLink> }
+            else { <span class="nav-link disabled-link" aria-disabled="true" title="Battlemap"><span class="nav-glyph nav-glyph-battlemap" aria-hidden="true"></span><span class="nav-label">Battlemap</span></span> }
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="sector-data">
-                <span class="bi bi-arrow-repeat-nav-menu" aria-hidden="true"></span> Refresh Sector Data
-            </NavLink>
+            <NavLink title="Refresh Sector Data" class="nav-link" href="sector-data"><span class="nav-glyph nav-glyph-sector-refresh" aria-hidden="true"></span><span class="nav-label">Refresh Sector Data</span></NavLink>
         </div>
     </nav>
 </div>

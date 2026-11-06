@@ -191,12 +191,30 @@ public sealed class CombatLoadout(
             );
     }
 
+    internal static SceneCombatant AttackPosition(
+        CombatantActionState state,
+        SceneCombatant actor
+    ) =>
+        state.MajorAction is "Ranged Attack" or "Melee Attack"
+        && state.ColumnActions(3).Contains("Move")
+        && !state.ColumnActions(1).Contains("Move")
+        && state.TurnOriginColumn is int column
+        && state.TurnOriginRow is int row
+            ? actor with
+            {
+                Column = column,
+                Row = row,
+            }
+            : actor;
+
     public string? TargetBand(
         CombatantActionState state,
         SceneCombatant actor,
         SceneCombatant? target
-    ) =>
-        state.MajorAction == "Ranged Attack" && actor.OnMap && target is { OnMap: true }
+    )
+    {
+        actor = AttackPosition(state, actor);
+        return state.MajorAction == "Ranged Attack" && actor.OnMap && target is { OnMap: true }
             ? RangeFor(state)
                 ?.Band(
                     Math.Sqrt(
@@ -205,4 +223,5 @@ public sealed class CombatLoadout(
                     ) * 1.5
                 )
             : null;
+    }
 }

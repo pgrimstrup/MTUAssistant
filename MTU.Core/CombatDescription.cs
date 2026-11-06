@@ -111,7 +111,16 @@ public sealed partial class SceneService
             foreach (var kind in new[] { EquipmentKind.Weapon, EquipmentKind.Armour })
             {
                 var names = gear.Where(e => e.Equipment.Kind == kind)
-                    .Select(e => e.Equipment.Name)
+                    .Select(e =>
+                    {
+                        var detail =
+                            kind == EquipmentKind.Weapon
+                                ? e.Equipment.Traits
+                                : e.Equipment.RequiredSkill;
+                        return string.IsNullOrWhiteSpace(detail)
+                            ? e.Equipment.Name
+                            : $"{e.Equipment.Name} ({detail.Trim()})";
+                    })
                     .Distinct()
                     .OrderBy(n => n)
                     .ToArray();

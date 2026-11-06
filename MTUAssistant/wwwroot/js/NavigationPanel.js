@@ -6,7 +6,8 @@ export function initialize(page, sidebar, button, storage) {
     let collapsed = false;
     try { storage ??= globalThis.localStorage; collapsed = storage.getItem(storageKey) === 'true'; } catch { }
     const render = () => {
-        sidebar.hidden = collapsed;
+        sidebar.hidden = false;
+        page.classList.toggle('navigation-collapsed', collapsed);
         button.setAttribute('aria-expanded', String(!collapsed));
         const label = collapsed ? 'Expand navigation' : 'Collapse navigation';
         button.setAttribute('aria-label', label);

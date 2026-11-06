@@ -4,35 +4,20 @@
 }
 
 .navbar-brand {
-    font-size: 1.15rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    background: linear-gradient(135deg, #7c8cff, #a78bfa);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    margin-right: 0;
+    padding: .5rem 0;
 }
 
-.bi {
-    display: inline-block;
-    position: relative;
-    width: 1.25rem;
-    height: 1.25rem;
-    margin-right: 0.75rem;
-    top: -1px;
-    background-size: cover;
-}
-
-.bi-house-door-fill-nav-menu {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' class='bi bi-house-door-fill' viewBox='0 0 16 16'%3E%3Cpath d='M6.5 14.5v-3.505c0-.245.25-.495.5-.495h2c.25 0 .5.25.5.5v3.5a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.146-.354L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.354 1.146a.5.5 0 0 0-.708 0l-6 6A.5.5 0 0 0 1.5 7.5v7a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5Z'/%3E%3C/svg%3E");
-}
-
-.bi-list-nested-nav-menu {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' class='bi bi-list-nested' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M4.5 11.5A.5.5 0 0 1 5 11h10a.5.5 0 0 1 0 1H5a.5.5 0 0 1-.5-.5zm-2-4A.5.5 0 0 1 3 7h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm-2-4A.5.5 0 0 1 1 3h10a.5.5 0 0 1 0 1H1a.5.5 0 0 1-.5-.5z'/%3E%3C/svg%3E");
-}
-
-.bi-arrow-repeat-nav-menu {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z'/%3E%3Cpath fill-rule='evenodd' d='M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z'/%3E%3C/svg%3E");
+.brand-wordmark {
+    display: block;
+    width: 100%;
+    max-width: 218px;
+    height: 30px;
+    object-fit: cover;
+    object-position: center;
 }
 
 .nav-item {
@@ -86,10 +71,26 @@
         overflow-y: auto;
     }
 }
-.bi-arrow-left-right-nav-menu {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M11.5 3.5a.5.5 0 0 1 .707 0l3 3a.5.5 0 0 1-.707.707L12.354 5.06H1a.5.5 0 0 1 0-1h11.354L11.5 4.207a.5.5 0 0 1 0-.707zM4.5 12.5a.5.5 0 0 1-.707 0l-3-3a.5.5 0 1 1 .707-.707l2.146 2.146H15a.5.5 0 0 1 0 1H3.646l.854.854a.5.5 0 0 1 0 .707z'/%3E%3C/svg%3E");
-}
-
-.bi-person-nav-menu { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.5 5c0-2 2.5-3.5 5.5-3.5s5.5 1.5 5.5 3.5v1h-11z'/%3E%3C/svg%3E"); }
-
 .disabled-link { color:var(--app-muted); opacity:.45; cursor:default; }
+
+.nav-glyph {
+    display: inline-block;
+    flex: 0 0 1.4rem;
+    width: 1.4rem;
+    height: 1.4rem;
+    margin-right: .75rem;
+    background-color: currentColor;
+    -webkit-mask: var(--nav-glyph) center / contain no-repeat;
+    mask: var(--nav-glyph) center / contain no-repeat;
+}
+.nav-glyph-galaxy-map { --nav-glyph: url("icons/navigation/galaxy-map.svg"); }
+.nav-glyph-trading { --nav-glyph: url("icons/navigation/trading.svg"); }
+.nav-glyph-passengers-cargo { --nav-glyph: url("icons/navigation/passengers-cargo.svg"); }
+.nav-glyph-supply-catalog { --nav-glyph: url("icons/navigation/supply-catalog.svg"); }
+.nav-glyph-cover-protection { --nav-glyph: url("icons/navigation/cover-protection.svg"); }
+.nav-glyph-travellers { --nav-glyph: url("icons/navigation/travellers.svg"); }
+.nav-glyph-patrons-enemies { --nav-glyph: url("icons/navigation/patrons-enemies.svg"); }
+.nav-glyph-animals-creatures { --nav-glyph: url("icons/navigation/animals-creatures.svg"); }
+.nav-glyph-scenes { --nav-glyph: url("icons/navigation/scenes.svg"); }
+.nav-glyph-battlemap { --nav-glyph: url("icons/navigation/battlemap.svg"); }
+.nav-glyph-sector-refresh { --nav-glyph: url("icons/navigation/sector-refresh.svg"); }

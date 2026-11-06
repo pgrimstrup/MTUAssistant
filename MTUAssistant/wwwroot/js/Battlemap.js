@@ -128,7 +128,14 @@ export class Battlemap {
         };
         this.app.ticker.add(this.animateTurn);
         this.down = event => {
-            if (this.readOnly || event.button !== 0 || this.dragging) return;
+            if (this.readOnly || this.dragging || this.targetDrag) return;
+            if (event.button === 2) {
+                if (!this.targetingContext || this.placement || this.targetSavePending) return;
+                event.preventDefault(); this.cancelPan();
+                this.targetDrag = {id:event.pointerId,context:this.targetingContext};
+                this.host.setPointerCapture(event.pointerId); this.previewTarget(event); return;
+            }
+            if (event.button !== 0) return;
             event.preventDefault();
             this.cancelPan();
             const point = this.pointerWorld(event);
@@ -157,6 +164,7 @@ export class Battlemap {
             this.pointerPosition = {clientX:event.clientX,clientY:event.clientY};
             this.publishPresentationPointer();
             const point = this.pointerWorld(event);
+            if (this.targetDrag) { if (this.targetDrag.id === event.pointerId) this.previewTarget(event); return; }
             if (!this.dragging) {
                 const token = this.hitToken(point);
                 this.host.title = token?.name ?? '';
@@ -177,6 +185,19 @@ export class Battlemap {
             this.dragging.x = event.clientX; this.dragging.y = event.clientY; this.apply();
         };
         this.up = event => {
+            if (this.targetDrag?.id === event.pointerId) {
+                const drag = this.targetDrag;
+                if (event.type === 'pointerup') this.previewTarget(event);
+                const target = this.targetDrag?.target;
+                this.cancelTargetDrag();
+                if (event.type === 'pointerup' && event.button === 2 && target) {
+                    this.targetSavePending = true;
+                    this.callback.invokeMethodAsync('SelectMapTarget',drag.context.actorId,drag.context.round,drag.context.slot,target.id)
+                        .catch(error => console.warn('Unable to select target.',error))
+                        .finally(() => { this.targetSavePending = false; });
+                }
+                return;
+            }
             if (this.dragging?.id !== event.pointerId) return;
             const drag = this.dragging;
             this.dragging = null;
@@ -209,7 +230,9 @@ export class Battlemap {
             event.preventDefault(); if (this.readOnly) return; const bounds = this.host.getBoundingClientRect();
             this.zoom(Math.exp(-event.deltaY * .0015), { x:event.clientX-bounds.left, y:event.clientY-bounds.top });
         };
-        this.pointerLeave = () => { this.pointerPosition = null; this.publishPresentationPointer(); };
+        this.contextMenu = event => { if (this.targetingContext && !this.readOnly) event.preventDefault(); };
+        this.host.addEventListener('contextmenu',this.contextMenu);
+        this.pointerLeave = () => { this.cancelTargetDrag(); this.pointerPosition = null; this.publishPresentationPointer(); };
         this.visibilityChange = () => { if (document.hidden) this.pointerLeave(); };
         this.host.addEventListener('pointerleave',this.pointerLeave);
         this.host.addEventListener('pointercancel',this.pointerLeave);
@@ -388,7 +411,8 @@ export class Battlemap {
     setCombatMode(active) {
         this.setEncounterState(active,this.selectedId,[...(this.deadIds ?? [])],this.combatRound,this.playerTracker ?? [],[...(this.tokenHealth?.values() ?? [])],this.movementRanges ?? [],this.targetIds ?? this.targetId ?? null,this.targetRange ?? null,this.actionSummary ?? null,[...(this.unconsciousIds ?? [])],this.automaticMoveContext ?? null);
     }
-    setEncounterState(active,selectedId,deadIds = [],round = 0,tracker = [],health = tracker,ranges = [],targetId = null,targetRange = null,actionSummary = null,unconsciousIds = [],automaticMoveContext = null) {
+    setEncounterState(active,selectedId,deadIds = [],round = 0,tracker = [],health = tracker,ranges = [],targetId = null,targetRange = null,actionSummary = null,unconsciousIds = [],automaticMoveContext = null,targetingContext = null) {
+        this.cancelTargetDrag(); this.targetingContext = targetingContext;
         const turnChanged = active === true && (!this.combatMode || selectedId !== this.selectedId || round !== this.combatRound);
         this.combatRound = round;
         this.playerTracker = playerCombatants(tracker);
@@ -436,25 +460,49 @@ export class Battlemap {
         this.targetActorId = selection?.actorId ?? null; this.targetIds = selection?.targetIds ?? (selection?.targetId == null ? [] : [selection.targetId]); this.targetId = this.targetIds[0] ?? null; this.targetRange = selection?.rangeProfile ?? null;
         this.drawMovementIndicators(); this.drawTargetRing();
     }
+    cancelTargetDrag() {
+        const drag = this.targetDrag; this.targetDrag = null;
+        if (drag && this.host.hasPointerCapture(drag.id)) this.host.releasePointerCapture(drag.id);
+        if (drag) { this.drawMovementIndicators(); this.drawTargetRing(); }
+    }
+    previewTarget(event) {
+        const drag = this.targetDrag;
+        if (!drag) return;
+        const bounds = this.host.getBoundingClientRect();
+        const inside = event.clientX >= bounds.left && event.clientX < bounds.right && event.clientY >= bounds.top && event.clientY < bounds.bottom;
+        const point = this.pointerWorld(event), token = inside ? this.hitToken(point) : null;
+        drag.target = token && drag.context.targetIds.includes(token.id) ? token : null;
+        drag.point = point;
+        this.drawMovementIndicators(); this.drawTargetRing();
+    }
     targetTrail() { return this.targetTrails()[0] ?? null; }
     targetTrails() {
         if (!this.combatMode) return [];
         const actor = this.characterTokens.get(this.targetActorId);
         if (!actor) return [];
-        return (this.targetIds ?? (this.targetId == null ? [] : [this.targetId])).flatMap((id,index) => {
+        const trails = (this.targetIds ?? (this.targetId == null ? [] : [this.targetId])).flatMap((id,index) => {
             const target = this.characterTokens.get(id);
             return !target || actor.id === id ? [] : [{id:index === 0 ? 'target' : 'target:'+id,fromColumn:actor.column,fromRow:actor.row,toColumn:target.column,toRow:target.row,isNpc:actor.isNpc,isTarget:true}];
         });
+        const drag = this.targetDrag;
+        if (drag?.point) {
+            const target = drag.target;
+            trails.push({id:'target-preview',fromColumn:actor.column,fromRow:actor.row,
+                toColumn:target?.column ?? drag.point.x/this.scene.gridSize-.5,
+                toRow:target?.row ?? drag.point.y/this.scene.gridSize-.5,isTarget:true,preview:true,snapped:!!target});
+        }
+        return trails;
     }
     drawTargetRing() {
         const graphics = this.targetRingGraphics;
         if (!graphics || !this.view) return;
         graphics.clear();
         for (const trail of this.targetTrails()) {
+        if (trail.preview && !trail.snapped) continue;
         const {end} = movementGeometry(trail,this.scene.gridSize,this.view);
         const wave = (Math.sin((this.pulseTime ?? 0)*Math.PI/700)+1)/2;
         graphics.circle(end.x,end.y,this.scene.gridSize*this.view.scale*(.64+.07*wave))
-            .stroke({color:trail.isNpc ? 0xff0000 : 0x00ff00,alpha:.5+.5*wave,width:3});
+            .stroke({color:0xff00ff,alpha:.5+.5*wave,width:3});
         }
     }
     drawMovementIndicators() {
@@ -465,7 +513,7 @@ export class Battlemap {
         const indicators = [...this.movementTrails.values(),...this.targetTrails()];
         if (this.combatMode) for (const trail of indicators) {
             const {start,end,midpoint,distance} = movementGeometry(trail,this.scene.gridSize,this.view);
-            const colour = trail.isTarget ? (trail.isNpc ? 0xff0000 : 0x00ff00) : 0xffffff;
+            const colour = trail.isTarget ? 0xff00ff : 0xffffff;
             graphics.moveTo(start.x,start.y).lineTo(end.x,end.y).stroke({color:colour,alpha:.25,width:6});
             graphics.circle(start.x,start.y,5).fill({color:colour,alpha:.25});
             let label = this.movementLabels.get(trail.id);
@@ -533,7 +581,7 @@ export class Battlemap {
         const size = this.scene.gridSize;
         const wave = (Math.sin((this.pulseTime ?? 0)*Math.PI/700)+1)/2;
         token.turnRing.circle(size/2,size/2,this.tokenDisplaySize()*(.61+.07*wave))
-            .stroke({color:token.isNpc ? 0xff0000 : 0x00ff00,alpha:.5+.5*wave,width:Math.max(this.tokenDisplaySize()*.035,2/this.view.scale)});
+            .stroke({color:0xffffff,alpha:.5+.5*wave,width:Math.max(this.tokenDisplaySize()*.035,2/this.view.scale)});
     }
     drawTokenHealth(token) {
         const bar = token.healthBar;
@@ -741,8 +789,9 @@ export class Battlemap {
         this.cancelPan();
         if (this.animateTurn) this.app?.ticker.remove(this.animateTurn);
         this.apply(); this.disposed = true; this.resizeObserver?.disconnect();
-        for (const [name, handler] of [['dblclick',this.doubleClick],['pointerdown',this.down],['pointermove',this.move],['pointerup',this.up],['pointercancel',this.up],['lostpointercapture',this.up],['wheel',this.wheel]])
+        for (const [name, handler] of [['contextmenu',this.contextMenu],['dblclick',this.doubleClick],['pointerdown',this.down],['pointermove',this.move],['pointerup',this.up],['pointercancel',this.up],['lostpointercapture',this.up],['wheel',this.wheel]])
             if (handler) this.host.removeEventListener(name, handler);
+        this.cancelTargetDrag();
         if(this.dragging && this.host.hasPointerCapture(this.dragging.id)) this.host.releasePointerCapture(this.dragging.id);
         this.dragging=null;
         for (const token of this.characterTokens.values()) { token.texture?.destroy(true); token.fallbackTexture?.destroy(true); token.filter?.destroy(); }

@@ -78,12 +78,14 @@ public static class CombatDescriptionChecks
             Kind = EquipmentKind.Weapon,
             Name = "Rifle",
             Damage = "3D+2",
+            Traits = "Auto 3, Bulky",
         };
         var armour = new EquipmentItem
         {
             Kind = EquipmentKind.Armour,
             Name = "Cloth",
             Protection = 8,
+            RequiredSkill = "Vacc Suit 1",
         };
         db.Equipment.AddRange(weapon, armour);
         await db.SaveChangesAsync();
@@ -120,8 +122,8 @@ public static class CombatDescriptionChecks
             "NPC stat block has instance name, demographics and attributes"
         );
         Check(
-            block.Rows.Single(f => f.Label == "Weapons").Value == "Rifle"
-                && block.Rows.Single(f => f.Label == "Armour").Value == "Cloth"
+            block.Rows.Single(f => f.Label == "Weapons").Value == "Rifle (Auto 3, Bulky)"
+                && block.Rows.Single(f => f.Label == "Armour").Value == "Cloth (Vacc Suit 1)"
                 && !JsonSerializer.Serialize(block).Contains("3D+2"),
             "Description payload excludes weapon damage and armour protection"
         );

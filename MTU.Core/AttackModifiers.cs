@@ -41,6 +41,7 @@ public static class AttackModifierCalculator
             return resolved;
         if (melee && actor.IsAnimal && (actor.NaturalAttacks?.Count ?? 0) == 0)
             return new([], "No natural attacks recorded.");
+        actor = CombatLoadout.AttackPosition(state, actor);
         var weapon = loadout?.WeaponFor(state) ?? (melee ? CombatLoadout.UnarmedWeapon : null);
         if (weapon is null)
             return new(

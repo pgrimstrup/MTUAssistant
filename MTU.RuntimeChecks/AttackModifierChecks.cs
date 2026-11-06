@@ -62,6 +62,32 @@ public static class AttackModifierChecks
         }
         int Dm(AttackModifierSummary summary, string name) =>
             summary.Rows.FirstOrDefault(r => r.Name == name)?.Dm ?? 0;
+        foreach (var moveFirst in new[] { false, true })
+        {
+            var ordered = Fresh();
+            ordered.ChooseAction(1, "Move", roster, moveFirst ? 1 : 3);
+            var movedActor = actor with { Column = 200, Row = 0 };
+            var movedRoster = new[] { movedActor, target };
+            var summary = AttackModifierCalculator.Calculate(
+                ordered,
+                movedActor,
+                movedRoster,
+                loadout
+            )!;
+            Check(
+                loadout.TargetBand(ordered.ActionFor(1), movedActor, target)
+                    == (moveFirst ? "Extreme Range" : "Short Range"),
+                "Attack range follows ordered movement"
+            );
+            Check(
+                Dm(summary, moveFirst ? "Extreme Range" : "Short Range") == (moveFirst ? -4 : 1),
+                "Resolution range modifier follows ordered movement"
+            );
+            Check(
+                Dm(summary, "Laser Sights") == (moveFirst ? 0 : 1),
+                "Sight modifiers use the attack position"
+            );
+        }
         var e = Fresh();
         var basic = AttackModifierCalculator.Calculate(e, actor, roster, loadout)!;
         Check(
