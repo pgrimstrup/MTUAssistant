@@ -1,0 +1,114 @@
+@page "/animals-creatures"
+@inject CampaignService Campaigns
+@inject AnimalService Animals
+@implements IDisposable
+
+<PageTitle>Animals and Creatures</PageTitle>
+<div class="characters-page">
+    <header class="page-header">
+        <div class="page-heading"><h1>Animals and Creatures</h1>@if (campaign is not null) { <p>@campaign.Name</p> }</div>
+        @if (campaign is not null) { <div class="header-actions">
+            <input class="form-control npc-filter" aria-label="Filter Animals" placeholder="Filter Animals…" @bind="filter" @bind:event="oninput" />
+            <button type="button" class="btn btn-outline-secondary" @onclick='() => filter = ""' disabled="@(string.IsNullOrEmpty(filter))">Clear</button>
+            <label>Animal Type <select class="form-select" @bind="typeFilter"><option value="">All</option>@foreach (var type in AnimalTypes.All) { <option value="@type">@type</option> }</select></label>
+            <button type="button" class="btn btn-outline-primary" @onclick="Add">Killer</button>
+            <button type="button" class="btn btn-outline-primary" @onclick="Add">Hunter</button>
+            <button type="button" class="btn btn-outline-primary" @onclick="Add">Prey</button>
+        </div> }
+    </header>
+    @if (campaign is null) { <p class="empty-message">Select a campaign to view its animals and creatures.</p> }
+    else {
+        @if (error is not null) { <p class="error" role="alert">@error</p> }
+        @if (editing) {
+            <section class="editor" aria-labelledby="animal-editor-heading">
+                <h2 id="animal-editor-heading">@(id == 0 ? "Add Animal" : "Edit Animal")</h2>
+                <div class="fields">
+                    <div class="field-row">
+                        <label>Name <input class="form-control" @bind="name" maxlength="120" disabled="@busy" /></label>
+                        <label>Hits <input class="form-control" type="number" min="1" @bind="hits" disabled="@busy" /></label>
+                        <label>Speed (m per Move) <input class="form-control" type="number" min="0" @bind="speed" disabled="@busy" /></label>
+                    </div>
+                    <div class="field-row">
+                        <label>Animal Type <select class="form-select" @bind="animalType" disabled="@busy">@foreach (var value in AnimalTypes.All) { <option value="@value">@value</option> }</select></label>
+                        <label>Behaviour <select class="form-select" @bind="behaviour" disabled="@busy">@foreach (var value in AnimalTypes.Behaviours) { <option value="@value">@value</option> }</select></label>
+                        <label>Traits <input class="form-control" @bind="traits" placeholder="Trait, Trait 2" maxlength="1000" disabled="@busy" /></label>
+                    </div>
+                </div>
+                <label class="description-field">Description <textarea class="form-control" rows="4" @bind="description" disabled="@busy"></textarea></label>
+                <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
+                <div class="token-editor">
+                    @if (CharacterToken.DataUri(tokenImage) is { } preview) { <img class="token-preview" src="@preview" alt="Token preview" /> }
+                    <label>Token image <InputFile @key="tokenInputKey" class="form-control" accept="image/png,image/jpeg,image/gif,image/webp" OnChange="SelectToken" disabled="@busy" /><span class="token-hint">PNG, JPEG, GIF or WebP, up to 2 MB</span></label>
+                    @if (tokenImage is not null) { <button type="button" class="btn btn-outline-secondary" @onclick="RemoveToken" disabled="@busy">Remove token</button> }
+                </div>
+                <div class="actions"><button type="button" class="btn btn-outline-secondary" @onclick="Cancel" disabled="@busy">Cancel</button><button type="button" class="btn btn-primary" @onclick="Save" disabled="@busy">Save</button></div>
+            </section>
+        }
+        @if (!items.Any()) { <p class="empty-message">No animals or creatures in this campaign yet.</p> }
+        else { <div class="table-wrap"><table class="table characters-table"><thead><tr><th>Token</th><th>Name</th><th>Type</th><th>Behaviour</th><th>Hits</th><th>Traits</th><th>Skills</th><th>Natural Attacks</th><th></th></tr></thead><tbody>
+            @foreach (var animal in Filtered) { <tr @key="animal.Character.Id"><td>@if (CharacterToken.DataUri(animal.Character.TokenImage) is { } token) { <img class="token-thumbnail" src="@token" alt="@($"{animal.Character.Name} token")" /> }</td><th scope="row">@animal.Character.Name</th><td>@animal.AnimalType</td><td>@animal.Behaviour</td><td>@animal.Hits</td><td>@animal.Traits</td><td>@Skills(animal)</td><td>@string.Join(", ", animal.NaturalAttacks.Select(a => $"{a.Name} ({a.Damage})"))</td><td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenSkills(animal.Character)">Skills</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenAttacks(animal)">Attacks</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(animal)">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => Delete(animal)">Delete</button></td></tr> }
+        </tbody></table></div> }
+        @if (selectedAttacks is { } attacker) { <AnimalAttacks @key="attacker.Character.Id" Animal="attacker" OnChanged="Reload" OnClose="CloseAttacks" /> }
+        @if (selectedSkills is { } skilled) { <CharacterSkills @key="skilled.Id" Character="skilled" OnChanged="Reload" OnClose="CloseSkills" /> }
+    }
+</div>
+
+@code {
+    private Campaign? campaign;
+    private IReadOnlyList<Animal> items = [];
+    private string filter = "", typeFilter = "", name = "", animalType = "Herbivores", behaviour = "Eater", traits = "";
+    private int id, hits = 1, speed = 6, tokenInputKey;
+    private string description = "";
+    private byte[]? tokenImage;
+    private InjuryTolerance injuryTolerance;
+    private Animal? editingAnimal;
+    private Character? selectedSkills;
+    private Animal? selectedAttacks;
+    private bool editing, busy;
+    private string? error;
+    private IEnumerable<Animal> Filtered => items.Where(a => (typeFilter.Length == 0 || a.AnimalType == typeFilter) && (filter.Length == 0 || a.Character.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || a.AnimalType.Contains(filter, StringComparison.OrdinalIgnoreCase) || a.Behaviour.Contains(filter, StringComparison.OrdinalIgnoreCase) || a.Traits.Contains(filter, StringComparison.OrdinalIgnoreCase)));
+    protected override async Task OnInitializedAsync() { Campaigns.Changed += CampaignChanged; await SetCampaign((await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive)); }
+    private void CampaignChanged(Campaign? value) => _ = InvokeAsync(async () => { await SetCampaign(value); StateHasChanged(); });
+    private async Task SetCampaign(Campaign? value) { Cancel(); selectedSkills = null; selectedAttacks = null; campaign = value; await Reload(); }
+    private async Task Reload() { if (campaign is null) { items = []; return; } try { items = await Animals.ListAsync(campaign.Id); error = null; } catch { error = "Unable to load animals and creatures."; } }
+    private static string Skills(Animal a) => string.Join(", ", (a.Character.Skills ?? []).Select(s => $"{s.Name} {s.Level}"));
+    private void Add() { id = 0; description = ""; injuryTolerance = InjuryTolerance.None; name = ""; hits = 1; speed = 6; animalType = "Herbivores"; behaviour = "Eater"; traits = ""; editingAnimal = null; selectedSkills = null; selectedAttacks = null; tokenImage = null; tokenInputKey++; error = null; editing = true; }
+    private void Edit(Animal a) { id = a.Character.Id; description = a.Description; injuryTolerance = a.Character.InjuryTolerance; name = a.Character.Name; hits = a.Hits; speed = a.Character.Speed; animalType = a.AnimalType; behaviour = a.Behaviour; traits = a.Traits; editingAnimal = a; selectedSkills = null; selectedAttacks = null; tokenImage = a.Character.TokenImage; tokenInputKey++; error = null; editing = true; }
+    private void OpenSkills(Character character) { editing = false; editingAnimal = null; tokenImage = null; selectedAttacks = null; selectedSkills = character; error = null; }
+    private void OpenAttacks(Animal animal) { Cancel(); selectedSkills = null; selectedAttacks = animal; }
+    private void CloseAttacks() => selectedAttacks = null;
+    private void CloseSkills() => selectedSkills = null;
+    private void Cancel() { editing = false; editingAnimal = null; tokenImage = null; error = null; }
+    private void RemoveToken() { tokenImage = null; tokenInputKey++; error = null; }
+    private async Task SelectToken(InputFileChangeEventArgs args)
+    {
+        busy = true;
+        try
+        {
+            if (args.File.Size > CharacterToken.MaxBytes) throw new ArgumentException("Choose an image no larger than 2 MB.");
+            await using var source = args.File.OpenReadStream(CharacterToken.MaxBytes);
+            using var memory = new MemoryStream();
+            await source.CopyToAsync(memory);
+            var bytes = memory.ToArray();
+            if (CharacterToken.ContentType(bytes) is null) throw new ArgumentException("Choose a PNG, JPEG, GIF or WebP image.");
+            tokenImage = bytes;
+            error = null;
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to read this image. Please choose it again."; }
+        finally { busy = false; }
+    }
+    private async Task Save() {
+        if (busy || campaign is null) return;
+        busy = true;
+        try {
+            var character = new Character(id, campaign.Id, "", name, "Animal", "", "0", 0, 0, 0, TokenImage: tokenImage, Skills: editingAnimal?.Character.Skills, Speed: speed, InjuryTolerance: injuryTolerance);
+            await Animals.SaveAsync(new Animal(character, hits, animalType, behaviour, traits, editingAnimal?.NaturalAttacks ?? [], description)); editing = false; editingAnimal = null; await Reload();
+        } catch (ArgumentException ex) { error = ex.Message; } catch { error = "Unable to save this animal."; } finally { busy = false; }
+    }
+    private async Task Delete(Animal animal) { if (campaign is null) return; try { await Animals.DeleteAsync(campaign.Id, animal.Character.Id); if (selectedAttacks?.Character.Id == animal.Character.Id) selectedAttacks = null; if (selectedSkills?.Id == animal.Character.Id) selectedSkills = null; await Reload(); } catch { error = "Unable to delete this animal."; } }
+    public void Dispose() => Campaigns.Changed -= CampaignChanged;
+}
+
+
+

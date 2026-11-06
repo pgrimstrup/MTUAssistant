@@ -184,6 +184,83 @@ public static class InjuryToleranceChecks
                     == InjuryTolerance.None,
             "Both editors can clear tolerance flags"
         );
+        var animals = new AnimalService(db);
+        await animals.SaveAsync(
+            new Animal(
+                new Character(
+                    0,
+                    1,
+                    "",
+                    "Armoured Beast",
+                    "Animal",
+                    "",
+                    "0",
+                    0,
+                    0,
+                    0,
+                    InjuryTolerance: reductions | InjuryTolerance.Kinetic
+                ),
+                20,
+                "Carnivores",
+                "Hunter",
+                "",
+                []
+            )
+        );
+        var animal = (await animals.ListAsync(1)).Single();
+        Check(animal.Description == "", "Existing animal description defaults to empty");
+        await animals.SaveAsync(animal with { Description = "Striped hide.\nLong tail." });
+        animal = (await animals.ListAsync(1)).Single();
+        Check(
+            animal.Description == "Striped hide.\nLong tail.",
+            "Animal multiline description persists"
+        );
+        Check(
+            animal.Character.InjuryTolerance == (reductions | InjuryTolerance.Kinetic),
+            "Animal tolerance persists on creation"
+        );
+        Check(
+            InjuryToleranceRules.Apply(
+                13,
+                InjuryToleranceRules.Applicable(animal.Character.InjuryTolerance, slug, false),
+                3
+            ) == 5,
+            "Animal tolerance uses the same injury reductions as NPCs"
+        );
+        await animals.SaveAsync(
+            animal with
+            {
+                Character = animal.Character with
+                {
+                    InjuryTolerance = reductions | InjuryTolerance.Energy | InjuryTolerance.Laser,
+                },
+            }
+        );
+        animal = (await animals.ListAsync(1)).Single();
+        Check(
+            animal.Character.InjuryTolerance
+                == (reductions | InjuryTolerance.Energy | InjuryTolerance.Laser),
+            "Animal tolerance can be updated"
+        );
+        await animals.SaveAsync(
+            animal with
+            {
+                Character = animal.Character with { InjuryTolerance = InjuryTolerance.None },
+            }
+        );
+        Check(
+            (await animals.ListAsync(1)).Single().Character.InjuryTolerance == InjuryTolerance.None,
+            "Animal tolerance can be cleared"
+        );
+        Check(
+            (await animals.ListAsync(1)).Single().Description == "Striped hide.\nLong tail.",
+            "Editing animal preserves description"
+        );
+        await animals.SaveAsync(animal with { Description = "" });
+        Check(
+            (await animals.ListAsync(1)).Single().Description == "",
+            "Animal description can be cleared"
+        );
         var actor = new SceneCombatant(1, 1, "Hero", false, false, true, 0, 0, "777777");
         var target = new SceneCombatant(2, 2, "Creature", true, false, true, 1, 0, "777777");
         var roster = new[] { actor, target };

@@ -1,0 +1,11 @@
+.attacks-panel { margin-top:1rem; padding:1.2rem; border:1px solid var(--app-border); border-radius:var(--app-radius); background:var(--app-surface); }
+.attacks-heading { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:1rem; }
+h2 { font-size:1.15rem; margin:0; }
+.attacks-list { overflow-x:auto; }
+.table { max-width:40rem; font-size:.86rem; }
+.table td, .table th { vertical-align:middle; }
+.attack-actions { text-align:right; white-space:nowrap; }
+.attack-editor { display:flex; flex-wrap:wrap; align-items:end; gap:.7rem; margin-top:1rem; }
+.attack-editor label { display:grid; gap:.3rem; color:var(--app-muted); font-size:.8rem; }
+.empty-message { color:var(--app-muted); }
+.error { color:#ffaaaa; }

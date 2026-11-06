@@ -155,6 +155,7 @@ public class CampaignEntity
 public class CharacterEntity
 {
     public bool IsNpc { get; set; }
+    public bool IsAnimal { get; set; }
 
     public int Id { get; set; }
     public int CampaignId { get; set; }
@@ -211,4 +212,24 @@ public class NpcEntity
     public string Quirks1 { get; set; } = "";
     public string Quirks2 { get; set; } = "";
     public NpcSkillLevel SkillLevel { get; set; } = NpcSkillLevel.Novice;
+}
+
+public class AnimalEntity
+{
+    public int CharacterId { get; set; }
+    public CharacterEntity Character { get; set; } = null!;
+    public int Hits { get; set; }
+    public string AnimalType { get; set; } = "Herbivores";
+    public string Behaviour { get; set; } = "Eater";
+    public string Traits { get; set; } = "";
+    public string Description { get; set; } = "";
+}
+
+public class AnimalAttackEntity
+{
+    public int Id { get; set; }
+    public int CharacterId { get; set; }
+    public AnimalEntity Animal { get; set; } = null!;
+    public string Name { get; set; } = "";
+    public string Damage { get; set; } = "";
 }

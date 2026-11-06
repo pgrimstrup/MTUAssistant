@@ -17,6 +17,8 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
     public DbSet<SceneEntity> Scenes => Set<SceneEntity>();
     public DbSet<SceneTokenEntity> SceneTokens => Set<SceneTokenEntity>();
     public DbSet<NpcEntity> NPCs => Set<NpcEntity>();
+    public DbSet<AnimalEntity> Animals => Set<AnimalEntity>();
+    public DbSet<AnimalAttackEntity> AnimalAttacks => Set<AnimalAttackEntity>();
     public DbSet<CharacterEntity> Characters => Set<CharacterEntity>();
     public DbSet<EquipmentItem> Equipment => Set<EquipmentItem>();
     public DbSet<CharacterEquipmentEntity> CharacterEquipment => Set<CharacterEquipmentEntity>();
@@ -92,6 +94,19 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
             .HasOne(p => p.Character)
             .WithOne()
             .HasForeignKey<NpcEntity>(p => p.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<AnimalEntity>().HasKey(a => a.CharacterId);
+        modelBuilder
+            .Entity<AnimalEntity>()
+            .HasOne(a => a.Character)
+            .WithOne()
+            .HasForeignKey<AnimalEntity>(a => a.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder
+            .Entity<AnimalAttackEntity>()
+            .HasOne(a => a.Animal)
+            .WithMany()
+            .HasForeignKey(a => a.CharacterId)
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<SectorEntity>(e =>

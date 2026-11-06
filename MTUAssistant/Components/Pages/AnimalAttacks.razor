@@ -1,0 +1,67 @@
+@inject AnimalService Animals
+
+<section class="attacks-panel" aria-labelledby="attacks-heading">
+    <div class="attacks-heading"><h2 id="attacks-heading">@Animal.Character.Name · Natural Attacks</h2><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="OnClose" disabled="@busy">Close</button></div>
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    @if (attacks.Count == 0) { <p class="empty-message">No natural attacks recorded.</p> }
+    else
+    {
+        <div class="attacks-list"><table class="table"><thead><tr><th>Name</th><th>Damage</th><th><span class="visually-hidden">Actions</span></th></tr></thead><tbody>
+        @for (var i = 0; i < attacks.Count; i++)
+        {
+            var index = i;
+            var attack = attacks[index];
+            <tr><td>@attack.Name</td><td>@attack.Damage</td><td class="attack-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(index)" disabled="@busy">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => Remove(index)" disabled="@busy">Remove</button></td></tr>
+        }
+        </tbody></table></div>
+    }
+    <div class="attack-editor">
+        <label>Name <input class="form-control" maxlength="120" @bind="name" disabled="@busy" /></label>
+        <label>Damage <input class="form-control" maxlength="120" @bind="damage" disabled="@busy" /></label>
+        <button type="button" class="btn btn-primary" @onclick="Save" disabled="@busy">@(editingIndex < 0 ? "Add Attack" : "Save Attack")</button>
+        @if (editingIndex >= 0) { <button type="button" class="btn btn-outline-secondary" @onclick="CancelEdit" disabled="@busy">Cancel</button> }
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public Animal Animal { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    private List<NaturalAttack> attacks = [];
+    private string name = "", damage = "";
+    private int editingIndex = -1;
+    private bool busy;
+    private string? error;
+    protected override void OnInitialized() => attacks = Animal.NaturalAttacks.ToList();
+    private void Edit(int index) { editingIndex = index; name = attacks[index].Name; damage = attacks[index].Damage; error = null; }
+    private void CancelEdit() { editingIndex = -1; name = ""; damage = ""; error = null; }
+    private async Task Save()
+    {
+        if (busy) return;
+        var updated = attacks.ToList();
+        var attack = new NaturalAttack(name.Trim(), NaturalAttack.FormatDamage(damage));
+        if (editingIndex < 0) updated.Add(attack); else updated[editingIndex] = attack;
+        await Persist(updated);
+    }
+    private async Task Remove(int index)
+    {
+        if (busy) return;
+        var updated = attacks.ToList();
+        updated.RemoveAt(index);
+        await Persist(updated);
+    }
+    private async Task Persist(List<NaturalAttack> updated)
+    {
+        busy = true;
+        try {
+            await Animals.SaveAttacksAsync(Animal.Character.CampaignId, Animal.Character.Id, updated);
+            attacks = updated;
+            CancelEdit();
+            await OnChanged.InvokeAsync();
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch { error = "Unable to save natural attacks."; }
+        finally { busy = false; }
+    }
+}
+

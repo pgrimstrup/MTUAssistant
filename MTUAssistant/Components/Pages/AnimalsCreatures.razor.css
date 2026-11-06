@@ -1,0 +1,28 @@
+.characters-page { max-width:100rem; margin:0 auto; }
+.page-header { display:flex; flex-wrap:nowrap; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.5rem; }
+.page-heading { flex:0 0 auto; }
+.page-heading h1 { margin:0; font-size:1.8rem; }
+.page-heading p { color:var(--app-muted); margin:.4rem 0; }
+.header-actions { display:flex; flex:1 1 auto; flex-wrap:nowrap; align-items:center; justify-content:flex-end; gap:.5rem; }
+.header-actions label { display:flex; align-items:center; gap:.4rem; margin:0; white-space:nowrap; }
+.npc-filter { width:13rem; }
+.editor { margin-bottom:1rem; padding:1.2rem; border:1px solid var(--app-border); border-radius:var(--app-radius); background:var(--app-surface); }
+.editor h2 { font-size:1.15rem; margin:0 0 1rem; }
+.fields { display:flex; flex-direction:column; gap:.8rem; }
+.field-row { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.8rem; }
+.fields label, .token-editor label { display:grid; min-width:0; gap:.3rem; color:var(--app-muted); font-size:.8rem; }
+.token-editor { display:flex; flex-wrap:wrap; align-items:end; gap:.8rem; margin-top:1rem; }
+.token-hint { font-size:.75rem; }
+.token-preview { width:4rem; height:4rem; object-fit:cover; border:1px solid var(--app-border); border-radius:50%; background:var(--app-surface); }
+.actions { display:flex; justify-content:flex-end; gap:.5rem; margin-top:1rem; }
+.error { color:#ffaaaa; }
+.empty-message { color:var(--app-muted); margin:.4rem 0; }
+.table-wrap { overflow-x:auto; border:1px solid var(--app-border); border-radius:var(--app-radius); }
+.characters-table { margin:0; font-size:.86rem; }
+.characters-table td, .characters-table th { vertical-align:middle; }
+.row-actions { text-align:right; white-space:nowrap; }
+@media (max-width:800px) { .field-row { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:520px) { .field-row { grid-template-columns:minmax(0,1fr); } }
+.token-thumbnail { width:2.75rem; height:2.75rem; object-fit:cover; border-radius:50%; border:1px solid var(--app-border); background:var(--app-surface); }
+.characters-table th:nth-child(n+2):nth-child(-n+5), .characters-table td:nth-child(n+2):nth-child(-n+5) { white-space:nowrap; }
+.description-field { display:grid; width:100%; gap:.3rem; margin-top:.8rem; color:var(--app-muted); font-size:.8rem; }

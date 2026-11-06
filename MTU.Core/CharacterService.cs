@@ -37,7 +37,7 @@ public sealed class CharacterService(MtuDbContext db)
     {
         var characters = await db
             .Characters.AsNoTracking()
-            .Where(t => t.CampaignId == campaignId && t.IsNpc == npcs)
+            .Where(t => t.CampaignId == campaignId && t.IsNpc == npcs && !t.IsAnimal)
             .OrderBy(t => t.Name)
             .ThenBy(t => t.Id)
             .Select(t => new Character(

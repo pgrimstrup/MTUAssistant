@@ -25,6 +25,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SceneService>();
         services.AddScoped<CharacterService>();
         services.AddScoped<NpcService>();
+        services.AddScoped<AnimalService>();
         services.AddScoped<EquipmentService>();
         services.AddScoped<CoverProtectionService>();
         services.AddScoped<PassengerMarketService>();
