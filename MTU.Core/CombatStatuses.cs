@@ -11,6 +11,8 @@ public sealed partial class Encounter
     {
         RequireActor(id, entries);
         RequireUnresolved(id);
+        if (hiding)
+            behindCover = true;
         var state = ActionFor(id) with { PendingBehindCover = behindCover, PendingHiding = hiding };
         if (hiding && state.MajorAction is "Melee Attack" or "Ranged Attack")
             state = ReleaseTargetReaction(state with { MajorAction = null });

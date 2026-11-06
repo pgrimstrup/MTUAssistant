@@ -61,8 +61,8 @@ public sealed partial class Encounter
         RequireActor(id, entries);
         RequireUnresolved(id);
         var slot = ActionFor(id).AttackTargets.ElementAtOrDefault(index);
-        if (slot?.TargetId is null || slot.Reaction != "Dive to Hide")
-            throw new ArgumentException("Choose Dive to Hide for a target first.");
+        if (slot?.TargetId is null || slot.Reaction != "Dive for Cover")
+            throw new ArgumentException("Choose Dive for Cover for a target first.");
         if (
             cover is not null
             && (
@@ -253,11 +253,9 @@ public sealed partial class Encounter
             slot with
             {
                 Reaction = reaction,
-                Cover = reaction == "Dive to Hide" ? slot.Cover : null,
                 Stance =
                     reaction == "Dive for Prone" ? "Prone"
-                    : reaction is "Dive for Cover" or "Dive to Hide"
-                        ? slot.Stance ?? ActionFor(target.Id).Stance
+                    : reaction == "Dive for Cover" ? slot.Stance ?? ActionFor(target.Id).Stance
                     : null,
                 Column = reaction == "None" ? null : slot.Column ?? target.Column,
                 Row = reaction == "None" ? null : slot.Row ?? target.Row,
@@ -282,10 +280,10 @@ public sealed partial class Encounter
         var slot = ActionFor(id).AttackTargets.ElementAtOrDefault(index);
         if (
             slot is null
-            || slot.Reaction is not ("Dive for Cover" or "Dive to Hide")
+            || slot.Reaction != "Dive for Cover"
             || !CombatActionChoices.Stances.Contains(stance)
         )
-            throw new ArgumentException("Choose a Dive for Cover or Dive to Hide stance.");
+            throw new ArgumentException("Choose a Dive for Cover stance.");
         UpdateExtraTarget(id, index, slot with { Stance = stance });
     }
 

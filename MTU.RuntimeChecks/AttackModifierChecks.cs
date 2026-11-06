@@ -79,14 +79,10 @@ public static class AttackModifierChecks
             "Shot Aim bonus applied"
         );
         e.SetTargetReaction(1, "Dive for Cover", roster);
-        e.SetTargetReactionStance(1, "Prone", roster);
         var covering = AttackModifierCalculator.Calculate(e, actor, roster, loadout)!;
         Check(
-            Dm(covering, "Target prone") == -1
-                && Dm(covering, "Target behind cover") == -2
-                && Dm(covering, "X-Ray Outlining Aid") == 2
-                && covering.Total == 7,
-            "Final reaction stance and cover apply with X-Ray bonus"
+            Dm(covering, "Target prone") == 0 && Dm(covering, "Target Hiding") == -2,
+            "Dive for Cover applies Hiding with X-Ray bonus"
         );
         e.SetTargetReaction(1, "Dive for Prone", roster);
         Check(

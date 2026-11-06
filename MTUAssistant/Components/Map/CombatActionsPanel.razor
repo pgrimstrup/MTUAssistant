@@ -47,6 +47,19 @@
                     </label>
                     @if (coverError is not null) { <p role="alert">@coverError</p> }
                 }
+                @if (state.TargetReaction == "Dive for Cover")
+                {
+                    <label>Reaction Cover Protection
+                        <select class="form-select" value="@(state.TargetReactionCover?.Id.ToString() ?? "")" disabled="@(Disabled || state.ActionsResolved || coverError is not null)" @onchange="ChangeTargetReactionCover">
+                            <option value="">None</option>
+                            @if (state.TargetReactionCover is { } savedReactionCover && !covers.Any(c => c.Id == savedReactionCover.Id && c.Name == savedReactionCover.Name && c.Protection == savedReactionCover.Protection && c.Hits == savedReactionCover.Hits))
+                            { <option value="@savedReactionCover.Id">@savedReactionCover.Name (+@savedReactionCover.Protection protection; @savedReactionCover.Hits Hits; saved values)</option> }
+                            @foreach (var cover in covers.Where(c => state.TargetReactionCover is not { } selected || c.Id != selected.Id || (c.Name == selected.Name && c.Protection == selected.Protection && c.Hits == selected.Hits)))
+                            { <option value="@cover.Id">@cover.Name (+@cover.Protection protection; @cover.Hits Hits)</option> }
+                        </select>
+                    </label>
+                    @if (coverError is not null) { <p role="alert">@coverError</p> }
+                }
                 @if (state.MajorAction == "Ranged Attack" && Loadout?.AutoScore > 0)
                 {
                     <label class="inline-option"><span>Auto Attack</span><select class="form-select" value="@state.AutoAttack" disabled="@(Disabled || state.ActionsResolved)" @onchange="ChangeAutoAttack">
@@ -76,17 +89,7 @@
                                         @foreach (var reaction in Encounter.TargetReactions) { <option value="@reaction" selected="@(slot.Reaction == reaction)">@reaction</option> }
                                     </select>
                                 </label>
-                                @if (slot.Reaction == "Dive to Hide")
-                                {
-                                    <label class="inline-option reaction-stance"><span>Cover Protection</span>
-                                        <select class="form-select" value="@(slot.Cover?.Id.ToString() ?? "")" disabled="@(Disabled || state.ActionsResolved || coverError is not null)" @onchange="e => ChangeReactionCover(index, e)">
-                                            <option value="" selected="@(slot.Cover is null)">None</option>
-                                            @if (slot.Cover is { } savedCover && !covers.Any(c => c.Id == savedCover.Id)) { <option value="@savedCover.Id">@savedCover.Name</option> }
-                                            @foreach (var cover in covers) { <option value="@cover.Id" selected="@(slot.Cover?.Id == cover.Id)">@cover.Name (+@cover.Protection protection)</option> }
-                                        </select>
-                                    </label>
-                                }
-                                @if (slot.Reaction is ("Dive for Cover" or "Dive to Hide") && Entries.FirstOrDefault(e => e.Id == slot.TargetId) is { } reactingTarget)
+                                @if (slot.Reaction == "Dive for Cover" && Entries.FirstOrDefault(e => e.Id == slot.TargetId) is { } reactingTarget)
                                 {
                                     <label class="inline-option reaction-stance"><span>Reaction Stance</span>
                                         <select class="form-select" value="@(slot.Stance ?? Encounter.ActionFor(reactingTarget.Id).Stance)" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => ChangeAttackReactionStance(index, e)">
@@ -147,6 +150,7 @@
 @code {
     [Parameter] public EventCallback<(int Index, CombatCover? Cover)> AttackReactionCoverChanged { get; set; }
     private Task ChangeReactionCover(int index, ChangeEventArgs e) => AttackReactionCoverChanged.InvokeAsync((index, int.TryParse(e.Value?.ToString(), out var id) && covers.FirstOrDefault(c => c.Id == id) is { } cover ? new CombatCover(cover.Id, cover.Name, cover.Protection, cover.Hits) : null));
+    private Task ChangeTargetReactionCover(ChangeEventArgs e) => TargetReactionCoverChanged.InvokeAsync(int.TryParse(e.Value?.ToString(), out var id) && covers.FirstOrDefault(c => c.Id == id) is { } cover ? new CombatCover(cover.Id, cover.Name, cover.Protection, cover.Hits) : null);
     [Parameter] public EventCallback<string> AutoAttackChanged { get; set; }
     [Parameter] public EventCallback<(int Index, int? TargetId)> AttackTargetChanged { get; set; }
     [Parameter] public EventCallback<(int Index, string Reaction)> AttackReactionChanged { get; set; }
@@ -191,6 +195,7 @@
     [Parameter] public EventCallback<string> StanceChanged { get; set; }
     [Parameter] public EventCallback<string> TargetReactionChanged { get; set; }
     [Parameter] public EventCallback<string> TargetReactionStanceChanged { get; set; }
+    [Parameter] public EventCallback<CombatCover?> TargetReactionCoverChanged { get; set; }
     private static readonly (int Column, string Title, string[] Actions)[] Groups = [(1, "Minor Before", CombatActionChoices.Minor), (2, "Major Action", CombatActionChoices.Major), (3, "Minor After", CombatActionChoices.Minor)];
     private Task ChangeStance(ChangeEventArgs e) => StanceChanged.InvokeAsync(e.Value?.ToString() ?? "Standing");
     private Task ChangeReaction(ChangeEventArgs e) => TargetReactionChanged.InvokeAsync(e.Value?.ToString() ?? "None");

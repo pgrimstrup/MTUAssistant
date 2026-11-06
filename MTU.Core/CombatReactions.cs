@@ -8,7 +8,6 @@ public sealed partial class Encounter
         "Dodge",
         "Parry",
         "Dive for Cover",
-        "Dive to Hide",
         "Dive for Prone",
     ];
 
@@ -46,15 +45,39 @@ public sealed partial class Encounter
         actions[id] = state with
         {
             TargetReaction = reaction,
-            TargetReactionCover = reaction == "Dive to Hide" ? state.TargetReactionCover : null,
+            TargetReactionCover = reaction == "Dive for Cover" ? state.TargetReactionCover : null,
             TargetReactionStance =
                 reaction == "Dive for Prone" ? "Prone"
-                : reaction is "Dive for Cover" or "Dive to Hide"
+                : reaction == "Dive for Cover"
                     ? state.TargetReactionStance ?? ActionFor(target.Id).Stance
                 : null,
             ReactionColumn = state.IsDive ? state.ReactionColumn ?? target.Column : target.Column,
             ReactionRow = state.IsDive ? state.ReactionRow ?? target.Row : target.Row,
         };
+    }
+
+    public void SetTargetReactionCover(
+        int id,
+        CombatCover? cover,
+        IReadOnlyList<SceneCombatant> entries
+    )
+    {
+        RequireActor(id, entries);
+        RequireUnresolved(id);
+        var state = ActionFor(id);
+        if (!state.NeedsReaction || state.TargetReaction != "Dive for Cover")
+            throw new ArgumentException("Choose Dive for Cover before selecting cover protection.");
+        if (
+            cover is not null
+            && (
+                cover.Id <= 0
+                || string.IsNullOrWhiteSpace(cover.Name)
+                || cover.Protection < 0
+                || cover.Hits <= 0
+            )
+        )
+            throw new ArgumentException("Choose valid cover protection.");
+        actions[id] = state with { TargetReactionCover = cover };
     }
 
     public void SetTargetReactionStance(
@@ -68,11 +91,11 @@ public sealed partial class Encounter
         var state = ActionFor(id);
         if (
             !state.NeedsReaction
-            || state.TargetReaction is not ("Dive for Cover" or "Dive to Hide")
+            || state.TargetReaction != "Dive for Cover"
             || state.TargetId is not int target
         )
             throw new ArgumentException(
-                "Select Dive for Cover or Dive to Hide to choose the target's reaction stance."
+                "Select Dive for Cover to choose the target's reaction stance."
             );
         if (!CombatActionChoices.Stances.Contains(stance))
             throw new ArgumentException("Choose Standing, Crouching or Prone.");

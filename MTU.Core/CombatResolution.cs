@@ -9,7 +9,7 @@ public sealed partial class Encounter
         var defence = ActionFor(target.Id);
         var stance =
             state.TargetReaction == "Dive for Prone" ? "Prone"
-            : state.TargetReaction is "Dive for Cover" or "Dive to Hide"
+            : state.TargetReaction == "Dive for Cover"
                 ? state.TargetReactionStance ?? defence.Stance
             : defence.Stance;
         defence = defence with
@@ -17,13 +17,13 @@ public sealed partial class Encounter
             ReactionCount = defence.ReactionCount + 1,
             Stance = stance,
             BehindCover = defence.BehindCover || state.TargetReaction == "Dive for Cover",
-            Hiding = defence.Hiding || state.TargetReaction == "Dive to Hide",
+            Hiding = defence.Hiding || state.TargetReaction == "Dive for Cover",
             CoverProtection =
-                state.TargetReaction == "Dive to Hide"
+                state.TargetReaction == "Dive for Cover"
                     ? state.TargetReactionCover
                     : defence.CoverProtection,
         };
-        if (state.TargetReaction == "Dive to Hide")
+        if (state.TargetReaction == "Dive for Cover")
             defence = ClearTargets(defence);
         actions[target.Id] = defence with { MovementDiameter = MovementDiameterFor(defence) };
     }

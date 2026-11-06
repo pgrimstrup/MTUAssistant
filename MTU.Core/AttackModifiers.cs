@@ -120,12 +120,11 @@ public static class AttackModifierCalculator
             targetState.SelectedStance == "Prone"
             || state.TargetReaction == "Dive for Prone"
             || (
-                state.TargetReaction is "Dive for Cover" or "Dive to Hide"
+                state.TargetReaction == "Dive for Cover"
                 && (state.TargetReactionStance ?? targetState.SelectedStance) == "Prone"
             );
-        var hiding = targetState.Hiding || state.TargetReaction == "Dive to Hide";
-        var cover =
-            targetState.BehindCover || state.TargetReaction is "Dive for Cover" or "Dive to Hide";
+        var hiding = targetState.Hiding || state.TargetReaction == "Dive for Cover";
+        var cover = hiding || targetState.BehindCover || state.TargetReaction == "Dive for Cover";
         if (targetProne)
             rows.Add(new("Target prone", -1));
         if (cover && !hiding)

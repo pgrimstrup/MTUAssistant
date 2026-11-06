@@ -355,11 +355,12 @@ public sealed partial class Encounter
         if (naturalDr > 0)
             protectionParts.Add(new(naturalDr, "Natural"));
         var selectedCover =
-            state.TargetReaction == "Dive to Hide"
+            state.TargetReaction == "Dive for Cover"
                 ? state.TargetReactionCover
                 : defence.CoverProtection;
         if (
-            (defence.Hiding || state.TargetReaction == "Dive to Hide") && selectedCover is { } cover
+            (defence.Hiding || state.TargetReaction == "Dive for Cover")
+            && selectedCover is { } cover
         )
             protectionParts.Add(new(cover.Protection, cover.Name));
         var protection = protectionParts.Sum(part => part.Value);

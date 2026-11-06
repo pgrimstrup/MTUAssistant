@@ -145,7 +145,7 @@ public sealed record CombatantActionState(
     public bool NeedsReaction => MajorAction is "Melee Attack" or "Ranged Attack";
 
     [JsonIgnore]
-    public bool IsDive => TargetReaction is "Dive for Cover" or "Dive for Prone" or "Dive to Hide";
+    public bool IsDive => TargetReaction is "Dive for Cover" or "Dive for Prone";
 
     [JsonIgnore]
     public string SelectedStance => PendingStance ?? Stance;

@@ -890,6 +890,11 @@ public static class CombatActionChecks
         var statusEncounter = Fresh();
         statusEncounter.SetCoverStatus(1, true, true, roster);
         Check(
+            statusEncounter.ActionFor(1).SelectedBehindCover
+                && statusEncounter.ActionFor(1).SelectedHiding,
+            "Selecting Hiding also selects Behind Cover"
+        );
+        Check(
             !statusEncounter.ActionFor(1).Hiding && statusEncounter.ActionFor(1).SelectedHiding,
             "Hiding is pending until resolved"
         );
@@ -961,8 +966,8 @@ public static class CombatActionChecks
         Check(!covering.ActionFor(2).BehindCover, "Dive selection does not apply cover early");
         covering.ResolveActions(1, roster);
         Check(
-            covering.ActionFor(2).BehindCover && !covering.ActionFor(2).Hiding,
-            "Dive for Cover sets cover automatically"
+            covering.ActionFor(2).BehindCover && covering.ActionFor(2).Hiding,
+            "Dive for Cover sets hiding automatically"
         );
         var trackerWeapon = new CharacterEquipmentDetails
         {
@@ -1048,7 +1053,7 @@ public static class CombatActionChecks
         manual.SetElevated(1, true, roster);
         manual.ResolveActions(1, roster);
         Check(
-            !manual.ActionFor(1).BehindCover
+            manual.ActionFor(1).BehindCover
                 && manual.ActionFor(1).Hiding
                 && manual.ActionFor(1).Elevated,
             "Hiding and Elevated are independent GM flags"

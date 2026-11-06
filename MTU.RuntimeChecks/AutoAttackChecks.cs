@@ -242,7 +242,8 @@ public static class AutoAttackChecks
             "Full Auto result labels use attack numbers"
         );
         var hidingEncounter = Start();
-        hidingEncounter.SetTargetReaction(1, "Dive to Hide", roster);
+        hidingEncounter.SetTargetReaction(1, "Dive for Cover", roster);
+        hidingEncounter.SetTargetReactionCover(1, new CombatCover(1, "Vegetation", 2, 1), roster);
         hidingEncounter.SetTargetReactionStance(1, "Prone", roster);
         var hidingModifiers = AttackModifierCalculator.Calculate(
             hidingEncounter,
@@ -253,47 +254,39 @@ public static class AutoAttackChecks
         Check(
             hidingModifiers.Rows.Any(r => r.Name == "Target Hiding" && r.Dm == -2)
                 && hidingModifiers.Rows.Any(r => r.Name == "Target prone" && r.Dm == -1),
-            "Dive to Hide previews Hiding and reaction stance modifiers"
+            "Dive for Cover previews Hiding and reaction stance modifiers"
         );
         Check(
             hidingEncounter.MovementRanges(roster).Any(r => r.Id == 2 && r.Diameter == 4.5),
-            "Dive to Hide displays the same 1.5m movement circle as Dive for Cover"
+            "Dive for Cover displays the same 1.5m movement circle as its reaction"
         );
-        var hideSnapshot = hidingEncounter.Snapshot();
-        hideSnapshot.Actions![2] = hidingEncounter.ActionFor(2) with
-        {
-            CoverProtection = new CombatCover(1, "Vegetation", 2, 1),
-        };
-        hidingEncounter.Restore(hideSnapshot, roster);
-        hidingEncounter.SetAttackReactionCover(1, 0, new CombatCover(2, "Wall", 8, 24), roster);
         var hideAttack = hidingEncounter.BeginAttack(1, roster, loadout, null, 0);
         Check(
-            hideAttack.OverallProtection == 8,
-            "Dive to Hide applies cover protection immediately during attack resolution"
+            hideAttack.OverallProtection == 2,
+            "Dive for Cover applies cover protection immediately during attack resolution"
         );
         hideAttack.SetAttackRoll(3);
         hidingEncounter.ApplyAttack(hideAttack, roster);
         Check(
             hidingEncounter.ActionFor(2).Hiding
-                && !hidingEncounter.ActionFor(2).BehindCover
+                && hidingEncounter.ActionFor(2).BehindCover
                 && hidingEncounter.ActionFor(2).Stance == "Prone",
-            "Dive to Hide commits Hiding instead of Behind Cover and the chosen stance"
+            "Dive for Cover commits Hiding instead of Behind Cover and the chosen stance"
         );
         var extraHide = Start();
         extraHide.SetAutoAttack(1, "Full Auto", 3, roster);
         extraHide.SetAttackTarget(1, 1, 3, roster);
-        extraHide.SetAttackReaction(1, 1, "Dive to Hide", roster);
+        extraHide.SetAttackReaction(1, 1, "Dive for Cover", roster);
         extraHide.SetAttackReactionStance(1, 1, "Crouching", roster);
         Check(
             extraHide.AttackStateFor(1, 1).IsDive
                 && extraHide.AttackStateFor(1, 1).TargetReactionStance == "Crouching",
-            "Secondary Dive to Hide supports stance selection"
+            "Secondary Dive for Cover supports stance selection"
         );
-        extraHide.SetAttackReactionCover(1, 1, new CombatCover(3, "Tree", 6, 8), roster);
         Check(
             extraHide.BeginAttack(1, roster, loadout, null, 0, targetIndex: 1).OverallProtection
-                == 6,
-            "Secondary target uses its own reaction cover"
+                == 0,
+            "Secondary dive uses the target's existing cover protection"
         );
         foreach (var status in new[] { "Hiding", "Unconscious", "Death" })
         {
@@ -325,7 +318,7 @@ public static class AutoAttackChecks
         var retainedTargets = Start();
         retainedTargets.SetAutoAttack(1, "Full Auto", 3, roster);
         retainedTargets.SetAttackTarget(1, 1, 3, roster);
-        retainedTargets.SetAttackReaction(1, 1, "Dive to Hide", roster);
+        retainedTargets.SetAttackReaction(1, 1, "Dive for Cover", roster);
         retainedTargets.ResetActions(1, roster);
         retainedTargets.RefreshAutoWeapon(1, loadout.AutoScore, roster);
         Check(
