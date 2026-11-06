@@ -1,3 +1,4 @@
+import { fogKey, fogCells, fogVisible, paintFog, fogRectangles, fogPublicState } from './FogOfWar.js';
 import { DescriptionDialog, playerDescription } from './CombatDescription.js';
 import { automaticMoveRange } from './AutomaticMovement.js';
 import { movementGeometry, weaponRangeBand } from './MovementIndicators.js';
@@ -49,6 +50,8 @@ export function drawFallbackToken(canvas, name, isNpc) {
 export async function createBattlemap(host, url, scene, key, tokens = [], callback = null, options = {}, presentationLink = null) {
     const map = new Battlemap(host, scene, key);
     map.callback = callback; map.readOnly = !!options.readOnly;
+    map.revealedFog = options.fog == null ? null : new Set(options.fog.map(c=>fogKey(c.column,c.row)));
+    map.fogHistory = []; map.fogMode = 'Navigate'; map.fogBrush = 3;
     try { await map.start(url); await Promise.all(tokens.filter(t => t.column != null && t.row != null).map(token => map.upsertToken(token))); if (presentationLink) map.attachPresentation(presentationLink); return map; }
     catch (error) { await map.dispose(); throw error; }
 }
@@ -95,6 +98,7 @@ export class Battlemap {
         this.background = new PIXI.Container();
         this.tokens = new PIXI.Container();
         this.fog = new PIXI.Container();
+        this.fogGraphics = new PIXI.Graphics(); this.fog.addChild(this.fogGraphics);
         this.rangeGraphics = new PIXI.Graphics();
         this.grid = new PIXI.Graphics();
         this.movementOverlay = new PIXI.Container();
@@ -117,6 +121,7 @@ export class Battlemap {
         let saved; try { saved = JSON.parse(sessionStorage.getItem(this.key) ?? 'null'); } catch { }
         this.view = restoreView(saved, this.width, this.height, this.imageWidth, this.imageHeight)
             ?? fitView(this.width, this.height, this.imageWidth, this.imageHeight);
+        this.drawFog();
         this.apply();
         this.pulseTime = 0;
         this.animateTurn = ticker => {
@@ -128,7 +133,14 @@ export class Battlemap {
         };
         this.app.ticker.add(this.animateTurn);
         this.down = event => {
-            if (this.readOnly || this.dragging || this.targetDrag) return;
+            if (this.readOnly || this.dragging || this.targetDrag || this.fogStroke || this.fogSaving) return;
+            if (event.button === 0 && this.fogMode !== 'Navigate' && this.revealedFog != null) {
+                const point=this.pointerWorld(event);
+                if (!this.fogPointInside(point)) return;
+                event.preventDefault(); this.cancelPan();
+                this.fogStroke={id:event.pointerId,before:new Set(this.revealedFog),last:null};
+                this.host.setPointerCapture(event.pointerId); this.paintFogAt(event); return;
+            }
             if (event.button === 2) {
                 if (!this.targetingContext || this.placement || this.targetSavePending) return;
                 event.preventDefault(); this.cancelPan();
@@ -164,11 +176,12 @@ export class Battlemap {
             this.pointerPosition = {clientX:event.clientX,clientY:event.clientY};
             this.publishPresentationPointer();
             const point = this.pointerWorld(event);
+            if (this.fogStroke) { if(this.fogStroke.id === event.pointerId) this.paintFogAt(event); return; }
             if (this.targetDrag) { if (this.targetDrag.id === event.pointerId) this.previewTarget(event); return; }
             if (!this.dragging) {
                 const token = this.hitToken(point);
                 this.host.title = token?.name ?? '';
-                this.host.style.cursor = this.placement ? 'crosshair' : token ? 'move' : 'grab';
+                this.host.style.cursor = this.fogMode !== 'Navigate' || this.placement ? 'crosshair' : token ? 'move' : 'grab';
                 if (this.placement) this.previewPlacement(point);
                 return;
             }
@@ -185,6 +198,15 @@ export class Battlemap {
             this.dragging.x = event.clientX; this.dragging.y = event.clientY; this.apply();
         };
         this.up = event => {
+            if (this.fogStroke?.id === event.pointerId) {
+                if(event.type === 'pointerup' && event.button === 0) {
+                    this.paintFogAt(event);
+                    const stroke=this.fogStroke; this.fogStroke=null;
+                    if(this.host.hasPointerCapture(event.pointerId))this.host.releasePointerCapture(event.pointerId);
+                    this.trackSave(this.saveFogEdit(stroke.before));
+                } else this.cancelFogStroke();
+                return;
+            }
             if (this.targetDrag?.id === event.pointerId) {
                 const drag = this.targetDrag;
                 if (event.type === 'pointerup') this.previewTarget(event);
@@ -232,7 +254,7 @@ export class Battlemap {
         };
         this.contextMenu = event => { if (this.targetingContext && !this.readOnly) event.preventDefault(); };
         this.host.addEventListener('contextmenu',this.contextMenu);
-        this.pointerLeave = () => { this.cancelTargetDrag(); this.pointerPosition = null; this.publishPresentationPointer(); };
+        this.pointerLeave = () => { this.cancelFogStroke(); this.cancelTargetDrag(); this.pointerPosition = null; this.publishPresentationPointer(); };
         this.visibilityChange = () => { if (document.hidden) this.pointerLeave(); };
         this.host.addEventListener('pointerleave',this.pointerLeave);
         this.host.addEventListener('pointercancel',this.pointerLeave);
@@ -265,7 +287,7 @@ export class Battlemap {
             y:(event.clientY-rect.top-this.host.clientTop-this.view.y)/this.view.scale };
     }
     async selectTokenAt(event) {
-        if (this.readOnly || this.disposed || this.placement || !this.callback || event.button !== 0) return;
+        if (this.readOnly || this.disposed || this.placement || (this.fogMode && this.fogMode !== 'Navigate') || this.fogSaving || !this.callback || event.button !== 0) return;
         const token = this.hitToken(this.pointerWorld(event));
         if (!token) return;
         event.preventDefault();
@@ -460,6 +482,64 @@ export class Battlemap {
         this.targetActorId = selection?.actorId ?? null; this.targetIds = selection?.targetIds ?? (selection?.targetId == null ? [] : [selection.targetId]); this.targetId = this.targetIds[0] ?? null; this.targetRange = selection?.rangeProfile ?? null;
         this.drawMovementIndicators(); this.drawTargetRing();
     }
+    setFogTool(mode,brush) {
+        if(this.readOnly) return;
+        this.cancelFogStroke(); this.cancelTargetDrag();
+        this.fogMode=['Reveal','Hide'].includes(mode) ? mode : 'Navigate';
+        this.fogBrush=[1,3,5,9].includes(brush) ? brush : 3;
+        this.host.style.cursor=this.fogMode === 'Navigate' ? 'grab' : 'crosshair';
+    }
+    setFog(cells) {
+        this.revealedFog=cells == null ? null : new Set(cells.map(c=>fogKey(c.column,c.row)));
+        this.drawFog(); this.drawPresentationPointer();
+    }
+    fogPointInside(point) {
+        return point.x>=0 && point.y>=0 && point.x<this.imageWidth && point.y<this.imageHeight;
+    }
+    paintFogAt(event) {
+        const stroke=this.fogStroke, point=this.pointerWorld(event);
+        if(!stroke) return;
+        if(!this.fogPointInside(point)) { stroke.last=null; return; }
+        const cell={column:Math.floor(point.x/this.scene.gridSize),row:Math.floor(point.y/this.scene.gridSize)};
+        paintFog(this.revealedFog,stroke.last ?? cell,cell,this.fogBrush,this.fogMode === 'Reveal',
+            Math.ceil(this.imageWidth/this.scene.gridSize),Math.ceil(this.imageHeight/this.scene.gridSize));
+        stroke.last=cell; this.drawFog();
+    }
+    cancelFogStroke() {
+        const stroke=this.fogStroke; if(!stroke) return;
+        this.fogStroke=null; this.revealedFog=stroke.before;
+        if(this.host.hasPointerCapture(stroke.id))this.host.releasePointerCapture(stroke.id);
+        this.drawFog();
+    }
+    async saveFogEdit(before,undo=false) {
+        if(this.revealedFog.size === before.size && [...before].every(key=>this.revealedFog.has(key)))return;
+        this.fogSaving=true;
+        let saved=false;
+        try {
+            saved=await this.callback.invokeMethodAsync('SaveFog',this.scene.campaignId,this.scene.id,this.scene.revision,this.scene.gridSize,DotNet.createJSStreamReference(new TextEncoder().encode(JSON.stringify(fogCells(this.revealedFog)))));
+        } catch(error) { if(!this.disposed) console.warn('Unable to save fog.',error); }
+        finally {
+            if(!saved) this.revealedFog=before;
+            else if(undo) this.fogHistory.pop();
+            else { this.fogHistory.push(before); if(this.fogHistory.length>20)this.fogHistory.shift(); }
+            this.fogSaving=false;
+            if(!this.disposed) {this.drawFog();this.publishPresentation();this.publishPresentationPointer();}
+        }
+    }
+    async undoFog() {
+        if(this.readOnly || this.fogSaving || this.fogStroke || !this.fogHistory?.length)return;
+        const before=new Set(this.revealedFog);
+        this.revealedFog=new Set(this.fogHistory.at(-1)); this.drawFog();
+        const save=this.saveFogEdit(before,true); this.trackSave(save); await save;
+    }
+    drawFog() {
+        const graphics=this.fogGraphics;
+        if(!graphics) return;
+        graphics.clear();
+        for(const rect of fogRectangles(this.revealedFog,this.imageWidth,this.imageHeight,this.scene.gridSize))
+            graphics.rect(rect.x,rect.y,rect.width,rect.height);
+        graphics.fill({color:0x000000,alpha:this.readOnly ? 1 : .55});
+    }
     cancelTargetDrag() {
         const drag = this.targetDrag; this.targetDrag = null;
         if (drag && this.host.hasPointerCapture(drag.id)) this.host.releasePointerCapture(drag.id);
@@ -501,7 +581,7 @@ export class Battlemap {
         if (trail.preview && !trail.snapped) continue;
         const {end} = movementGeometry(trail,this.scene.gridSize,this.view);
         const wave = (Math.sin((this.pulseTime ?? 0)*Math.PI/700)+1)/2;
-        graphics.circle(end.x,end.y,this.scene.gridSize*this.view.scale*(.64+.07*wave))
+        graphics.circle(end.x,end.y,this.tokenDisplaySize()*this.view.scale*(.64+.07*wave))
             .stroke({color:0xff00ff,alpha:.5+.5*wave,width:3});
         }
     }
@@ -670,6 +750,8 @@ export class Battlemap {
         const oldSize = this.scene.gridSize;
         this.scene = {...this.scene, ...scene};
         if (this.scene.gridSize !== oldSize) {
+            this.cancelFogStroke();
+            if(this.revealedFog != null) {this.revealedFog=new Set();this.fogHistory=[];this.drawFog();}
             const size = this.scene.gridSize;
             this.placementPreview?.clear();
             for (const token of this.characterTokens.values()) {
@@ -692,9 +774,15 @@ export class Battlemap {
         this.publishPresentation();
     }
     publishPresentation() {
-        if (!this.presentation || this.disposed || this.readOnly || this.presentationCleared) return;
-        this.presentation.publish({description:playerDescription(this.description),combatMode:this.combatMode === true,round:this.combatRound ?? 0,actionSummary:this.combatMode && this.playerTracker?.some(e => e.id === this.actionSummary?.id && e.isVisible === true) ? this.actionSummary : null,tracker:this.playerTracker ?? [],movementRanges:playerMovementRanges(this.displayMovementRanges()),movementTrails:playerMovementTrails([...this.movementTrails.values()],[...this.characterTokens.values()]),targetSelection:this.combatMode ? playerTargetSelection(this.targetActorId,this.targetIds ?? this.targetId,[...this.characterTokens.values()],this.targetRange) : null,scene:this.scene, tokens:playerTokens([...this.characterTokens.values()]),
-            view:{...this.view, width:this.width,height:this.height,imageWidth:this.imageWidth,imageHeight:this.imageHeight}});
+        if (this.disposed || this.presentationCleared || this.readOnly || this.fogStroke || this.fogSaving || !this.presentation || !this.view) return;
+        const visible=fogPublicState(this);
+        this.presentation.publish({fog:this.revealedFog == null ? null : fogCells(this.revealedFog),description:playerDescription(visible.description),combatMode:this.combatMode === true,round:this.combatRound ?? 0,
+            actionSummary:this.combatMode && visible.tracker.some(e=>e.id === visible.summary?.id && e.isVisible === true) ? visible.summary : null,
+            tracker:visible.tracker,movementRanges:playerMovementRanges(visible.ranges),
+            movementTrails:playerMovementTrails(visible.trails,visible.tokens),
+            targetSelection:this.combatMode ? playerTargetSelection(this.targetActorId,this.targetIds ?? this.targetId,visible.tokens,this.targetRange) : null,
+            scene:this.scene,tokens:playerTokens(visible.tokens),
+            view:{...this.view,width:this.width,height:this.height,imageWidth:this.imageWidth,imageHeight:this.imageHeight}});
     }
     publishPresentationPointer() {
         if (this.disposed || this.presentationCleared || this.readOnly || !this.presentation?.publishPointer || !this.view) return;
@@ -706,6 +794,8 @@ export class Battlemap {
             if (x >= 0 && y >= 0 && x <= this.width && y <= this.height)
                 point = {x:(x-this.view.x)/this.view.scale,y:(y-this.view.y)/this.view.scale};
         }
+        if(this.fogStroke || this.fogSaving)point=null;
+        if(point && !fogVisible(this.revealedFog,Math.floor(point.x/this.scene.gridSize),Math.floor(point.y/this.scene.gridSize)))point=null;
         const key = JSON.stringify(point);
         if (key === this.publishedPointerKey) return;
         this.publishedPointerKey = key;
@@ -715,7 +805,7 @@ export class Battlemap {
     drawPresentationPointer() {
         const marker = this.presentationPointer, point = this.presentedPointer;
         if (!marker) return;
-        if (!point || !this.view) { marker.hidden = true; return; }
+        if (!point || !this.view || !fogVisible(this.revealedFog,Math.floor(point.x/this.scene.gridSize),Math.floor(point.y/this.scene.gridSize))) { marker.hidden = true; return; }
         const x = this.view.x+point.x*this.view.scale, y = this.view.y+point.y*this.view.scale;
         marker.hidden = x < 0 || y < 0 || x > this.width || y > this.height;
         marker.style.left = `${x}px`; marker.style.top = `${y}px`;
@@ -791,7 +881,7 @@ export class Battlemap {
         this.apply(); this.disposed = true; this.resizeObserver?.disconnect();
         for (const [name, handler] of [['contextmenu',this.contextMenu],['dblclick',this.doubleClick],['pointerdown',this.down],['pointermove',this.move],['pointerup',this.up],['pointercancel',this.up],['lostpointercapture',this.up],['wheel',this.wheel]])
             if (handler) this.host.removeEventListener(name, handler);
-        this.cancelTargetDrag();
+        this.cancelFogStroke(); this.cancelTargetDrag();
         if(this.dragging && this.host.hasPointerCapture(this.dragging.id)) this.host.releasePointerCapture(this.dragging.id);
         this.dragging=null;
         for (const token of this.characterTokens.values()) { token.texture?.destroy(true); token.fallbackTexture?.destroy(true); token.filter?.destroy(); }

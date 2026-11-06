@@ -12,6 +12,7 @@ public sealed class SceneEntity
     public string GridColour { get; set; } = "#000000";
     public int GridOpacity { get; set; } = 50;
     public double GridlineWidth { get; set; } = 2;
+    public string? FogState { get; set; }
     public string? EncounterState { get; set; }
     public long Revision { get; set; } = 1;
 }

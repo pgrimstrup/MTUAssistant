@@ -78,8 +78,10 @@ public static class AnimalCombatChecks
         var first = await scenes.AddCharacterAsync(1, scene.Id, animal.Character.Id);
         var second = await scenes.AddCharacterAsync(1, scene.Id, animal.Character.Id);
         Check(
-            first.Id != second.Id && first.Name.EndsWith(" 1") && second.Name.EndsWith(" 2"),
-            "Animal instances are independently numbered"
+            first.Id != second.Id
+                && first.Name == animal.Character.Name
+                && second.Name == animal.Character.Name + " 2",
+            "Animal tracker instances have independent identities and automatic suffixes"
         );
         Check(
             first.IsAnimal
@@ -441,7 +443,7 @@ public static class AnimalCombatChecks
         );
         var third = await scenes.AddCharacterAsync(1, scene.Id, animal.Character.Id);
         Check(
-            third.IsAnimal && third.Name.EndsWith(" 3"),
+            third.IsAnimal && third.Name == animal.Character.Name + " 3",
             "Animals can be instanced during active encounters"
         );
         await scenes.RemoveNpcInstanceAsync(1, scene.Id, third.Id);

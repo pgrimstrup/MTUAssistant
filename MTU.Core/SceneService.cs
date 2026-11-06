@@ -148,6 +148,8 @@ public sealed partial class SceneService(IServiceScopeFactory scopes)
         if (input.Id == 0)
             db.Scenes.Add(entity);
         entity.Name = name;
+        if (entity.GridSize != input.GridSize || image is not null)
+            entity.FogState = null;
         entity.GridSize = input.GridSize;
         entity.GridColour = input.GridColour;
         entity.GridOpacity = input.GridOpacity;

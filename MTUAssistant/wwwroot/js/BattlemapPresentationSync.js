@@ -1,3 +1,4 @@
+import { validFog, fogKey, fogVisible } from './FogOfWar.js';
 import { validDescription } from './CombatDescription.js';
 import { validSession, validPointer } from './PresentationSync.js';
 
@@ -64,7 +65,8 @@ function validAttackModifiers(modifiers,isNpc) {
 export function validBattlemapSnapshot(state) {
     if (state === null) return true;
     const scene = state?.scene, view = state?.view;
-    return validDescription(state.description) && (state.actionSummary == null || (state.combatMode === true && state.tracker?.some(e => e.id === state.actionSummary.id && e.isVisible === true) && validAttackModifiers(state.actionSummary.attackModifiers,state.actionSummary.isNpc) && (state.actionSummary.targetAttackModifiers == null || (Array.isArray(state.actionSummary.targetAttackModifiers) && state.actionSummary.targetAttackModifiers.every(t => typeof t.name === "string" && state.tracker?.some(e => e.id === t.targetId && e.isVisible === true) && validAttackModifiers(t.modifiers,state.actionSummary.isNpc)))) && Array.isArray(state.actionSummary.columns) && state.actionSummary.columns.every(c => typeof c.title === "string" && Array.isArray(c.buttons) && c.buttons.every(b => typeof b.text === "string" && typeof b.selected === "boolean")) && Array.isArray(state.actionSummary.rows) && state.actionSummary.rows.every(r => typeof r.label === "string" && typeof r.value === "string" && (!state.actionSummary.isNpc || !["Armour","Weapon"].includes(r.label)))))
+    const revealed=validFog(state?.fog) ? new Set(state.fog.map(c=>fogKey(c.column,c.row))) : null;
+    return (state.fog == null || validFog(state.fog)) && validDescription(state.description) && (state.actionSummary == null || (state.combatMode === true && state.tracker?.some(e => e.id === state.actionSummary.id && e.isVisible === true) && validAttackModifiers(state.actionSummary.attackModifiers,state.actionSummary.isNpc) && (state.actionSummary.targetAttackModifiers == null || (Array.isArray(state.actionSummary.targetAttackModifiers) && state.actionSummary.targetAttackModifiers.every(t => typeof t.name === "string" && state.tracker?.some(e => e.id === t.targetId && e.isVisible === true) && validAttackModifiers(t.modifiers,state.actionSummary.isNpc)))) && Array.isArray(state.actionSummary.columns) && state.actionSummary.columns.every(c => typeof c.title === "string" && Array.isArray(c.buttons) && c.buttons.every(b => typeof b.text === "string" && typeof b.selected === "boolean")) && Array.isArray(state.actionSummary.rows) && state.actionSummary.rows.every(r => typeof r.label === "string" && typeof r.value === "string" && (!state.actionSummary.isNpc || !["Armour","Weapon"].includes(r.label)))))
         && (state.round === undefined || (Number.isInteger(state.round) && state.round >= 0))
         && (state.movementTrails === undefined || (Array.isArray(state.movementTrails) && state.movementTrails.every(validMovementTrail)))
         && (state.movementRanges === undefined || (Array.isArray(state.movementRanges) && state.movementRanges.every(validMovementRange)))
@@ -81,7 +83,8 @@ export function validBattlemapSnapshot(state) {
             && state.targetSelection.actorId !== state.targetSelection.targetId
             && state.tokens.some(t => t.id === state.targetSelection.actorId && t.isVisible === true)
             && state.tokens.some(t => t.id === state.targetSelection.targetId && t.isVisible === true)))
-        && state.tokens.every(t => Number.isInteger(t.id) && t.id > 0
+        && (state.fog == null || state.fog.every(c=>c.column*scene.gridSize < view.imageWidth && c.row*scene.gridSize < view.imageHeight))
+        && state.tokens.every(t => fogVisible(revealed,t.column,t.row) && Number.isInteger(t.id) && t.id > 0
             && Number.isInteger(t.characterId) && t.characterId > 0 && t.isVisible === true
             && (t.isUnconscious === undefined || typeof t.isUnconscious === 'boolean')
             && Number.isInteger(t.column) && t.column >= 0 && Number.isInteger(t.row) && t.row >= 0 && typeof t.name === 'string');

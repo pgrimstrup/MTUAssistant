@@ -83,4 +83,15 @@ assert.equal(map.targetDrag,null);assert.equal(map.targetTrails().length,1,'canc
 actor.turnRing=new Graphics();map.drawTurnRing(actor);
 assert.equal(actor.turnRing.strokes[0].color,0xffffff,'current combatant ring is white');
 console.log('Target preview snapping, eligibility, cancellation and white turn ring passed.');
+for (const gridSize of [10,100]) for (const scale of [.125,.5,1,4]) {
+    map.scene.gridSize=gridSize;map.view.scale=scale;
+    const tokenDiameter=Math.max(gridSize*scale,36);
+    for (const pulseTime of [0,350,1050]) {
+        map.pulseTime=pulseTime;map.drawTargetRing();
+        const ring=map.targetRingGraphics.circleValue;
+        assert.ok(ring.radius-1.5>tokenDiameter/2,'entire target stroke stays outside the displayed token at every zoom and pulse phase');
+        assert.equal(ring.x,map.view.x+(target.column+.5)*gridSize*scale,'ring remains centred on the target cell');
+    }
+}
+console.log('Target rings respect minimum token size across grid sizes, zoom levels and pulse phases.');
 globalThis.PIXI=oldPixi;

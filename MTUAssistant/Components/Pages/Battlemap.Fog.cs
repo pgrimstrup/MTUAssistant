@@ -1,0 +1,65 @@
+using System.Text.Json;
+using Microsoft.JSInterop;
+using MTU.Core;
+
+namespace MTUAssistant.Components.Pages;
+
+public partial class Battlemap
+{
+    private string fogMode = "Navigate";
+    private int fogBrush = 3;
+
+    private async Task SetFogMode()
+    {
+        if (map is null)
+            return;
+        await CancelPlacement();
+        await map.InvokeVoidAsync("setFogTool", fogMode, fogBrush);
+    }
+
+    private Task UndoFog() =>
+        map is null ? Task.CompletedTask : map.InvokeVoidAsync("undoFog").AsTask();
+
+    [JSInvokable]
+    public async Task<bool> SaveFog(
+        int campaignId,
+        int sceneId,
+        long revision,
+        int gridSize,
+        IJSStreamReference data
+    )
+    {
+        await using var reference = data;
+        if (
+            disposed
+            || BattlemapState.Current is not { } scene
+            || scene.Id != sceneId
+            || scene.CampaignId != campaignId
+            || scene.Revision != revision
+            || scene.GridSize != gridSize
+        )
+            return false;
+        try
+        {
+            await using var stream = await data.OpenReadStreamAsync(64 * 1024 * 1024);
+            var cells =
+                await JsonSerializer.DeserializeAsync<FogCell[]>(
+                    stream,
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                ) ?? throw new ArgumentException("Invalid fog data.");
+            await ScenesStore.SaveFogAsync(campaignId, sceneId, revision, gridSize, cells);
+            error = null;
+            return true;
+        }
+        catch (Exception)
+        {
+            error = "Unable to save fog. Please try again.";
+            return false;
+        }
+        finally
+        {
+            if (!disposed)
+                StateHasChanged();
+        }
+    }
+}

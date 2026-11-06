@@ -23,6 +23,9 @@
                 <label>Width (px)<input class="form-control grid-number" type="number" min="0.25" max="@scene.GridSize" step="0.25" @bind="gridWidth" @bind:after="SaveGrid" disabled="@(map is null || busy)" /></label>
                 <label>Opacity (%)<input class="form-control grid-number" type="number" min="0" max="100" @bind="gridOpacity" @bind:after="SaveGrid" disabled="@(map is null || busy)" /></label>
                 }
+                <label>Fog<select class="form-select" @bind="fogMode" @bind:after="SetFogMode" disabled="@(map is null || busy)"><option>Navigate</option><option>Reveal</option><option>Hide</option></select></label>
+                <label>Brush<select class="form-select" @bind="fogBrush" @bind:after="SetFogMode" disabled="@(map is null || fogMode == "Navigate")"><option value="1">1</option><option value="3">3</option><option value="5">5</option><option value="9">9</option></select></label>
+                <button class="btn btn-outline-secondary" @onclick="UndoFog" disabled="@(map is null || busy)">Undo fog</button>
                 <button class="btn btn-outline-secondary" aria-label="Zoom in" title="Zoom in" @onclick='() => Command("zoomIn")' disabled="@(map is null)">+</button>
                 <button class="btn btn-outline-secondary" aria-label="Zoom out" title="Zoom out" @onclick='() => Command("zoomOut")' disabled="@(map is null)">−</button>
                 <button class="btn btn-outline-secondary" @onclick='() => Command("fit")' disabled="@(map is null)">Fit</button>
@@ -360,7 +363,8 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
             module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/Battlemap.js");
             callback ??= DotNetObjectReference.Create(this);
             map = await module.InvokeAsync<IJSObjectReference>("createBattlemap", host,
-                $"api/scenes/{scene.CampaignId}/{scene.Id}/image?v={scene.Revision}", scene, key, entries.Where(e => e.OnMap), callback, new { readOnly = false }, presentationLink);
+                $"api/scenes/{scene.CampaignId}/{scene.Id}/image?v={scene.Revision}", scene, key, entries.Where(e => e.OnMap), callback, new { readOnly = false, fog = await ScenesStore.LoadFogAsync(scene.CampaignId, scene.Id) }, presentationLink);
+            fogMode = "Navigate";
             await SyncEncounterMap();
             loadedKey = key;
             if (disposed) { await map.InvokeVoidAsync("dispose"); await map.DisposeAsync(); map = null; }
@@ -378,7 +382,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         if (!disposed) StateHasChanged();
     });
     private async Task Command(string action) { if (map is not null) await map.InvokeVoidAsync(action); }
-    private async Task BeginPlacement(int id) { if (map is null) return; placingId = id; error = null; await map.InvokeVoidAsync("beginPlacement", id); }
+    private async Task BeginPlacement(int id) { if (map is null) return; fogMode = "Navigate"; await map.InvokeVoidAsync("setFogTool", fogMode, fogBrush); placingId = id; error = null; await map.InvokeVoidAsync("beginPlacement", id); }
     private async Task CancelPlacement() { placingId = null; if (map is not null) await map.InvokeVoidAsync("cancelPlacement"); }
     private async Task Run(Func<SceneSummary, Task> action)
     {
@@ -412,6 +416,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         if (entry.IsNpc)
         {
             entries.Add(entry);
+            await RefreshInstanceNames();
             if (encounter.Active)
             {
                 encounter.AddCombatant(entry, entries);
@@ -430,6 +435,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
     {
         var index = entries.FindIndex(e => e.Id == entry.Id);
         if (index >= 0) entries[index] = entry;
+        await RefreshInstanceNames();
         if (map is not null) { await map.InvokeVoidAsync("updateCombatant", entry); await SyncEncounterMap(); }
     }
     private Task SetVisibility((int Id, bool Visible) change) => Run(async scene =>
@@ -446,7 +452,12 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
     {
         if (placingId == id) await CancelPlacement();
         if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
-        await UpdateEntry(await ScenesStore.PositionCombatantAsync(scene.CampaignId, scene.Id, id, null, null));
+        var cleared = Encounter.ClearMapState(encounter.Snapshot(), id);
+        var token = await ScenesStore.PositionCombatantAsync(scene.CampaignId, scene.Id, id, null, null, cleared);
+        var index = entries.FindIndex(e => e.Id == id); if (index >= 0) entries[index] = token;
+        encounter.Restore(cleared, entries);
+        automaticMoveBefore = null;
+        await UpdateEntry(token);
     });
     private Task RemoveInstance(int id) => Run(async scene =>
     {
@@ -454,6 +465,8 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
         await ScenesStore.RemoveNpcInstanceAsync(scene.CampaignId, scene.Id, id);
         entries.RemoveAll(e => e.Id == id);
+        encounter.Restore(Encounter.ClearMapState(encounter.Snapshot(), id), entries);
+        await RefreshInstanceNames();
         if (map is not null) { await map.InvokeVoidAsync("removeToken", id); await SyncEncounterMap(); }
     });
     [JSInvokable]
@@ -466,6 +479,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
             var token = await ScenesStore.PositionCombatantAsync(scene.CampaignId, scene.Id, id, column, row);
             if (disposed) return token;
             var index = entries.FindIndex(e => e.Id == id); if (index >= 0) entries[index] = token;
+            await RefreshInstanceNames();
             if (encounter.AnchorMovement(id, column, row)) await ScenesStore.SaveEncounterAsync(scene.CampaignId, scene.Id, encounter.Snapshot());
             await SyncEncounterMap();
             error = null; StateHasChanged(); return token;

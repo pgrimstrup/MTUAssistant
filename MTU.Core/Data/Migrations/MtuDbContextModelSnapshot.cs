@@ -525,6 +525,8 @@ namespace MTU.Core.Data.Migrations
 
                     b.Property<string>("EncounterState").HasColumnType("TEXT");
 
+                    b.Property<string>("FogState").HasColumnType("TEXT");
+
                     b.Property<string>("GridColour").IsRequired().HasColumnType("TEXT");
 
                     b.Property<int>("GridOpacity").HasColumnType("INTEGER");
@@ -554,6 +556,8 @@ namespace MTU.Core.Data.Migrations
                     b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("INTEGER");
 
                     b.Property<int>("CharacterId").HasColumnType("INTEGER");
+
+                    b.Property<bool>("HasCustomName").HasColumnType("INTEGER");
 
                     b.Property<int?>("Column").HasColumnType("INTEGER");
 

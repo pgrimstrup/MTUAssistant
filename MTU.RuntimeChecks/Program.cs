@@ -7,6 +7,8 @@ using MTU.Core;
 using MTU.Core.Data;
 using MTU.Core.Models;
 
+await InstanceNameChecks.RunAsync();
+await FogChecks.RunAsync();
 await CoverProtectionChecks.RunAsync();
 await WeaponSkillChecks.RunAsync();
 WeaponAttackChecks.Run();

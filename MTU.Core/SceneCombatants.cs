@@ -166,10 +166,14 @@ public sealed partial class SceneService
             SceneId = sceneId,
             CharacterId = characterId,
             InstanceNumber = number,
-            Name = $"{character.Name} {number}",
+            Name = character.Name,
         };
+        await using var transaction = await db.Database.BeginTransactionAsync();
         db.SceneTokens.Add(token);
         await db.SaveChangesAsync();
+        await NormalizeInstanceNames(db, sceneId, characterId, addedId: token.Id);
+        await db.SaveChangesAsync();
+        await transaction.CommitAsync();
         var entry = new SceneCombatant(
             token.Id,
             characterId,
@@ -252,6 +256,7 @@ public sealed partial class SceneService
                 if (trimmed.Length is 0 or > 160)
                     throw new ArgumentException("Enter a name of up to 160 characters.");
                 t.Name = trimmed;
+                t.HasCustomName = true;
             }
         );
 
@@ -266,6 +271,17 @@ public sealed partial class SceneService
                 )
             ?? throw new ArgumentException("Choose an NPC or Animal instance from this scene.");
         db.SceneTokens.Remove(token);
+        var scene = await db.Scenes.SingleAsync(s => s.Id == sceneId && s.CampaignId == campaignId);
+        if (scene.EncounterState is not null)
+            scene.EncounterState = System.Text.Json.JsonSerializer.Serialize(
+                Encounter.ClearMapState(
+                    System.Text.Json.JsonSerializer.Deserialize<EncounterSnapshot>(
+                        scene.EncounterState
+                    )!,
+                    id
+                )
+            );
+        await NormalizeInstanceNames(db, sceneId, token.CharacterId, removedId: id);
         await db.SaveChangesAsync();
     }
 
@@ -284,7 +300,21 @@ public sealed partial class SceneService
                 .Include(t => t.Character)
                 .SingleOrDefaultAsync(t => t.Id == id)
             ?? throw new ArgumentException("This combatant is no longer in this scene.");
+        var wasOnMap = token.Column.HasValue && token.Row.HasValue;
         edit(token);
+        if (wasOnMap && !token.Column.HasValue)
+        {
+            var scene = await db.Scenes.SingleAsync(s =>
+                s.Id == sceneId && s.CampaignId == campaignId
+            );
+            encounter ??= scene.EncounterState is null
+                ? null
+                : System.Text.Json.JsonSerializer.Deserialize<EncounterSnapshot>(
+                    scene.EncounterState
+                );
+            if (encounter is not null)
+                encounter = Encounter.ClearMapState(encounter, id);
+        }
         if (encounter is not null)
         {
             var scene = await db.Scenes.SingleAsync(s =>
@@ -441,7 +471,8 @@ public sealed partial class SceneService
         var changed = await db
             .Scenes.Where(s => s.Id == sceneId && s.CampaignId == campaignId)
             .ExecuteUpdateAsync(s =>
-                s.SetProperty(s => s.GridSize, size)
+                s.SetProperty(s => s.FogState, s => s.GridSize == size ? s.FogState : null)
+                    .SetProperty(s => s.GridSize, size)
                     .SetProperty(s => s.GridColour, colour)
                     .SetProperty(s => s.GridlineWidth, width)
                     .SetProperty(s => s.GridOpacity, opacity)

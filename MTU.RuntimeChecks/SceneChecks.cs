@@ -236,7 +236,7 @@ public static class SceneChecks
             legacyEntries.Count == 2
                 && legacyEntries.Select(t => t.Id).Distinct().Count() == 2
                 && legacyEntries.Single(t => t.CharacterId == 302)
-                    is { Name: "Legacy Mercenary 1", Column: 4, Row: 5, IsVisible: true }
+                    is { Name: "Legacy Mercenary", Column: 4, Row: 5, IsVisible: true }
                 && legacyEntries.Single(t => t.CharacterId == 301) is { Column: 2, Row: 3 },
             "Migration preserves placements and allocates independent instance IDs"
         );
@@ -318,12 +318,13 @@ public static class SceneChecks
             squad.Add(await store.AddNpcInstanceAsync(1, saved.Id, 102));
         Check(
             squad.Select(t => t.Id).Distinct().Count() == 4
-                && squad
+                && (await store.CombatantsAsync(1, saved.Id))
+                    .Where(t => squad.Any(n => n.Id == t.Id))
                     .Select(t => t.Name)
                     .SequenceEqual(
                         new[] { "Mercenary 1", "Mercenary 2", "Mercenary 3", "Mercenary 4" }
                     ),
-            "Repeated NPCs have unique identities and numbered names"
+            "Tracker instances have unique identities and numbered names"
         );
         await store.RenameNpcInstanceAsync(1, saved.Id, squad[1].Id, "Squad leader");
         Check(
@@ -355,7 +356,7 @@ public static class SceneChecks
         );
         Check(
             (await store.AddNpcInstanceAsync(1, saved.Id, 102)).Name == "Mercenary 5",
-            "Numbering is independent of edited names"
+            "New unplaced instances keep their base name"
         );
         await Reject(() => store.AddNpcInstanceAsync(1, saved.Id, 101));
         await Reject(() => store.AddNpcInstanceAsync(1, saved.Id, 103));

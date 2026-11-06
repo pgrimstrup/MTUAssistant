@@ -4,6 +4,7 @@ h1 { font-size:1.4rem; margin:0; } .muted { color:var(--app-muted); font-size:.7
 .controls label { color:var(--app-muted); font-size:.65rem; display:flex; flex-direction:column; gap:.15rem; }
 .controls .form-control-color { height:34px; width:3rem; padding:.25rem; }
 .controls .grid-number { width:4.6rem; padding:.35rem .4rem; font-size:.8rem; }
+.controls .form-select { height:34px; width:auto; padding:.3rem 1.8rem .3rem .5rem; font-size:.8rem; line-height:1.25; background-position:right .5rem center; }
 .controls .btn { min-height:34px; padding:.3rem .6rem; font-size:.8rem; }
 .present-link { display:flex; align-items:center; justify-content:center; } .present-link svg { width:20px; height:20px; fill:currentColor; }
 .battlemap-workspace { display:grid; grid-template-columns:17.5rem minmax(0,1fr) 24rem; gap:.6rem; height:calc(100dvh - 10rem); min-height:360px; }

@@ -8,6 +8,7 @@ public sealed class SceneTokenEntity
     public int CharacterId { get; set; }
     public CharacterEntity Character { get; set; } = null!;
     public string Name { get; set; } = "";
+    public bool HasCustomName { get; set; }
     public int? InstanceNumber { get; set; }
     public bool IsVisible { get; set; } = true;
     public int? Column { get; set; }

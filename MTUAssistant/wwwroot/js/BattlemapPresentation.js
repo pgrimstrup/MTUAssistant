@@ -36,15 +36,17 @@ class PresentedBattlemap {
                     await this.map?.dispose(); this.map=null;
                     const scene=state.scene;
                     const map=await createBattlemap(this.host,`api/scenes/${scene.campaignId}/${scene.id}/image?v=${scene.revision}`,
-                        scene,`presentation.${key}`,state.tokens,null,{readOnly:true});
+                        scene,`presentation.${key}`,state.tokens,null,{readOnly:true,fog:state.fog});
                     if (this.disposed) { await map.dispose(); return; }
                     this.map=map; this.key=key;
                 } else {
+                    this.map.setFog(state.fog ?? null);
                     const wanted=new Set(state.tokens.map(t => t.id));
                     for (const id of this.map.characterTokens.keys()) if (!wanted.has(id)) this.map.removeToken(id);
                     await Promise.all(state.tokens.map(token => this.map.updateCombatant(token)));
                     this.map.setGrid(state.scene);
                 }
+                this.map.setFog(state.fog ?? null);
                 this.map.setEncounterState(state.combatMode === true,state.tokens.find(t => t.isCurrent === true)?.id ?? null,state.tokens.filter(t => t.isDead === true).map(t => t.id),0,[],[],[],null,null,null,state.tokens.filter(t => t.isUnconscious === true).map(t => t.id));
                 this.map.setMovementRanges(state.movementRanges ?? []);
                 this.map.setMovementTrails(state.movementTrails ?? []);
