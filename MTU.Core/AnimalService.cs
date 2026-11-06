@@ -56,7 +56,8 @@ public sealed record Animal(
     string Behaviour,
     string Traits,
     IReadOnlyList<NaturalAttack> NaturalAttacks,
-    string Description = ""
+    string Description = "",
+    bool Shared = false
 );
 
 public sealed class AnimalService(MtuDbContext db)
@@ -66,7 +67,7 @@ public sealed class AnimalService(MtuDbContext db)
         var rows = await db
             .Animals.AsNoTracking()
             .Include(a => a.Character)
-            .Where(a => a.Character.CampaignId == campaignId)
+            .Where(a => a.Character.CampaignId == campaignId || a.Shared)
             .OrderBy(a => a.Character.Name)
             .ThenBy(a => a.CharacterId)
             .ToArrayAsync();
@@ -110,7 +111,8 @@ public sealed class AnimalService(MtuDbContext db)
                     .Where(n => n.CharacterId == a.CharacterId)
                     .Select(n => new NaturalAttack(n.Name, NaturalAttack.FormatDamage(n.Damage)))
                     .ToArray(),
-                a.Description
+                a.Description,
+                a.Shared
             ))
             .ToArray();
     }
@@ -183,7 +185,7 @@ public sealed class AnimalService(MtuDbContext db)
                 .Animals.Include(a => a.Character)
                 .SingleAsync(a =>
                     a.CharacterId == animal.Character.Id
-                    && a.Character.CampaignId == animal.Character.CampaignId
+                    && (a.Character.CampaignId == animal.Character.CampaignId || a.Shared)
                 );
             character = details.Character;
             character.Name = name;
@@ -205,6 +207,7 @@ public sealed class AnimalService(MtuDbContext db)
                     }
                 );
         }
+        details.Shared = animal.Shared;
         details.Hits = animal.Hits;
         details.AnimalType = AnimalTypes.Normalize(animal.AnimalType);
         details.Behaviour = animal.Behaviour;
@@ -245,17 +248,14 @@ public sealed class AnimalService(MtuDbContext db)
                 throw new ArgumentException("Enter an attack name of up to 120 characters.");
             if (
                 attack.Damage.Length is 0 or > 120
-                || !attack.Damage.Contains("d", StringComparison.OrdinalIgnoreCase)
                 || !AttackResolution.TryRollDamage(attack.Damage, sides => sides, out _)
             )
-                throw new ArgumentException(
-                    "Enter damage in dice notation, such as 1D, 2D or 2D+3."
-                );
+                throw new ArgumentException("Enter valid attack damage.");
         }
         await using var tx = await db.Database.BeginTransactionAsync();
         var animal =
             await db.Animals.SingleOrDefaultAsync(a =>
-                a.CharacterId == characterId && a.Character.CampaignId == campaignId
+                a.CharacterId == characterId && (a.Character.CampaignId == campaignId || a.Shared)
             ) ?? throw new ArgumentException("Choose an animal in this campaign.");
         var existing = await db
             .AnimalAttacks.Where(a => a.CharacterId == characterId)
@@ -280,7 +280,8 @@ public sealed class AnimalService(MtuDbContext db)
             await db
                 .Animals.Include(a => a.Character)
                 .SingleOrDefaultAsync(a =>
-                    a.CharacterId == characterId && a.Character.CampaignId == campaignId
+                    a.CharacterId == characterId
+                    && (a.Character.CampaignId == campaignId || a.Shared)
                 )
             ?? throw new ArgumentException("Choose an animal in this campaign.");
         db.Characters.Remove(animal.Character);

@@ -324,6 +324,7 @@ namespace MTU.Core.Data.Migrations
 
                     b.HasIndex("CampaignId", "Name");
 
+                    b.Property<string>("Description").IsRequired().HasColumnType("TEXT");
                     b.ToTable("Characters");
                 }
             );
@@ -401,6 +402,7 @@ namespace MTU.Core.Data.Migrations
                     b.Property<string>("Traits").IsRequired().HasColumnType("TEXT");
                     b.Property<string>("Description").IsRequired().HasColumnType("TEXT");
                     b.HasKey("CharacterId");
+                    b.Property<bool>("Shared").HasColumnType("INTEGER");
                     b.ToTable("Animals");
                 }
             );

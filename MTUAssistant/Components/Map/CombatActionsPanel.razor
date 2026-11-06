@@ -3,7 +3,7 @@
 
 <aside class="combat-actions" aria-label="Combat actions">
     <div class="action-top">
-        <div class="actions-heading"><h2>Combat Actions</h2><span class="character-tools"><button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(EquipDisabled || Actor is null)" @onclick="() => SkillsRequested.InvokeAsync()">Skills</button><button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(EquipDisabled || Actor is null || Actor.IsAnimal)" @onclick="() => EquipRequested.InvokeAsync()">Equip</button></span></div>
+        <div class="actions-heading"><h2>Combat Actions</h2><span class="character-tools"><button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(EquipDisabled || Actor is null)" @onclick="() => DescribeRequested.InvokeAsync()">Describe</button><button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(EquipDisabled || Actor is null)" @onclick="() => SkillsRequested.InvokeAsync()">Skills</button><button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(EquipDisabled || Actor is null || Actor.IsAnimal)" @onclick="() => EquipRequested.InvokeAsync()">Equip</button></span></div>
         @if (Actor is { } actor)
         {
             var state = Encounter.ActionFor(actor.Id);
@@ -189,6 +189,7 @@
     [Parameter] public IReadOnlyList<SceneCombatant> Entries { get; set; } = [];
     [Parameter] public bool Disabled { get; set; }
     [Parameter] public bool EquipDisabled { get; set; }
+    [Parameter] public EventCallback DescribeRequested { get; set; }
     [Parameter] public EventCallback EquipRequested { get; set; }
     [Parameter] public EventCallback SkillsRequested { get; set; }
     [Parameter] public EventCallback<bool> CoverChanged { get; set; }

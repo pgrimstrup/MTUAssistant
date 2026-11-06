@@ -27,6 +27,7 @@
                     <label>Speed (m per Move) <input class="form-control" type="number" min="0" step="1" @bind="speed" disabled="@busy" /></label>
                     <label>Natural DR <input class="form-control" type="number" min="0" @bind="naturalDr" disabled="@busy" /></label>
                 </div>
+                <label class="character-description-field">Description <textarea class="form-control" rows="4" @bind="description" disabled="@busy"></textarea></label>
                 <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
                 <label class="inactive-toggle"><input type="checkbox" @bind="inactive" disabled="@busy" /> Inactive</label>
                 <div class="token-editor">
@@ -58,6 +59,7 @@
 </div>
 
 @code {
+    private string description = "";
     private Campaign? campaign;
     private IReadOnlyList<Character> items = [];
     private Character? editing, pendingDelete, selectedSkills, selectedEquipment;
@@ -111,6 +113,7 @@
         terms = item.TermsServed; naval = item.HighestNavalRank; scout = item.HighestScoutRank; naturalDr = item.NaturalDr;
         injuryTolerance = item.InjuryTolerance;
         speed = item.Speed;
+        description = item.Description;
         tokenImage = item.TokenImage; inactive = item.Inactive; tokenInputKey++;
     }
     private void Cancel() { editing = null; tokenImage = null; error = null; }
@@ -143,7 +146,7 @@
         try
         {
             await CharacterStore.SaveAsync(current with { PlayerName = playerName, Name = travellerName, Race = race, Upp = upp,
-                TermsServed = terms, HighestNavalRank = naval, HighestScoutRank = scout, NaturalDr = naturalDr, Speed = speed, InjuryTolerance = injuryTolerance, TokenImage = tokenImage, Inactive = inactive });
+                TermsServed = terms, HighestNavalRank = naval, HighestScoutRank = scout, NaturalDr = naturalDr, Speed = speed, InjuryTolerance = injuryTolerance, TokenImage = tokenImage, Inactive = inactive, Description = description });
             if (campaign?.Id == current.CampaignId) { items = await CharacterStore.ListAsync(current.CampaignId, equippedOnly: true); editing = null; error = null; }
         }
         catch (ArgumentException ex) { error = ex.Message; }

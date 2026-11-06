@@ -46,7 +46,7 @@
                 }
                 <div class="battlemap-host" @ref="host" aria-label="Battlemap image with square grid"></div>
             </div>
-            <div class="action-column"><CombatActionsPanel CampaignId="scene.CampaignId" Actor="SelectedActor" Loadout="SelectedLoadout" Entries="entries" Encounter="encounter" Disabled="@(map is null || busy || !encounter.Active || SelectedActor is null || encounter.IsDead(SelectedActor))" CoverChanged="SetBehindCover" HidingChanged="SetHiding" CoverProtectionChanged="SetCoverProtection" ElevatedChanged="SetElevated" FlyingChanged="SetFlying" NaturalAttackChanged="SetNaturalAttack" UnconsciousChanged="SetUnconscious" SkillsRequested="OpenSkills" EquipRequested="OpenEquipment" EquipDisabled="@(busy || SelectedActor is null)" ResolveRequested="ResolveActions" ResetRequested="ResetActions" ActionSelected="ChooseAction" AutoAttackChanged="SetAutoAttack" AttackTargetChanged="SetAttackTarget" AttackReactionChanged="SetAttackReaction" AttackReactionStanceChanged="SetAttackReactionStance" AttackReactionCoverChanged="SetAttackReactionCover" TargetReactionChanged="SetTargetReaction" TargetReactionStanceChanged="SetTargetReactionStance" TargetReactionCoverChanged="SetTargetReactionCover" TargetChanged="SetTarget" StanceChanged="SetStance" /></div>
+            <div class="action-column"><CombatActionsPanel CampaignId="scene.CampaignId" Actor="SelectedActor" Loadout="SelectedLoadout" Entries="entries" Encounter="encounter" Disabled="@(map is null || busy || !encounter.Active || SelectedActor is null || encounter.IsDead(SelectedActor))" CoverChanged="SetBehindCover" HidingChanged="SetHiding" CoverProtectionChanged="SetCoverProtection" ElevatedChanged="SetElevated" FlyingChanged="SetFlying" NaturalAttackChanged="SetNaturalAttack" UnconsciousChanged="SetUnconscious" DescribeRequested="DescribeCombatant" SkillsRequested="OpenSkills" EquipRequested="OpenEquipment" EquipDisabled="@(busy || SelectedActor is null)" ResolveRequested="ResolveActions" ResetRequested="ResetActions" ActionSelected="ChooseAction" AutoAttackChanged="SetAutoAttack" AttackTargetChanged="SetAttackTarget" AttackReactionChanged="SetAttackReaction" AttackReactionStanceChanged="SetAttackReactionStance" AttackReactionCoverChanged="SetAttackReactionCover" TargetReactionChanged="SetTargetReaction" TargetReactionStanceChanged="SetTargetReactionStance" TargetReactionCoverChanged="SetTargetReactionCover" TargetChanged="SetTarget" StanceChanged="SetStance" /></div>
         </div>
         @if (editingSkills is { } skilled) { <CombatSkillsDialog @key="skilled.Id" Character="skilled" OnChanged="SkillsChanged" OnClose="() => editingSkills = null" /> }
         @if (equipping is { } equipped) { <CombatEquipmentDialog @key="equipped.Id" Character="equipped" OnChanged="EquipmentChanged" OnClose="() => equipping = null" /> }
@@ -113,6 +113,12 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
     private Task SelectCombatant(int id) => encounter.Active && entries.Any(e => e.Id == id && encounter.IsDead(e)) ? Task.CompletedTask : ChangeEncounter(() => encounter.SelectCombatant(id, entries));
     private SceneCombatant? SelectedActor => entries.FirstOrDefault(e => e.Id == encounter.SelectedId);
     private Task ChooseAction((int Column, string Action) choice) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.ChooseAction(actor.Id, choice.Action, entries, choice.Column, SelectedLoadout?.HasSmartTracker == true)) : Task.CompletedTask;
+    private Task DescribeCombatant() => Run(async scene =>
+    {
+        if (SelectedActor is not { } actor || map is null) return;
+        var description = await ScenesStore.DescribeCombatantAsync(scene.CampaignId, scene.Id, actor.Id);
+        await map.InvokeVoidAsync("showDescription", description);
+    });
     private Character? editingSkills;
     private Character? equipping;
     private Task OpenEquipment() => Run(async scene =>

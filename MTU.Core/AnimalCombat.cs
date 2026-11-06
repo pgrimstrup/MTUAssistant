@@ -11,18 +11,20 @@ public static class AnimalCombat
             traits ?? "",
             @"(?:^|[,;\r\n]|\s)"
                 + Regex.Escape(name)
-                + @"\s*(?:\(\s*|:\s*|=\s*)?\+?(?<score>\d+)\b",
+                + @"\s*(?:\(\s*|:\s*|=\s*)?(?<score>[+-]?\d+)\b",
             RegexOptions.IgnoreCase
         );
         return
             match.Success
             && int.TryParse(
                 match.Groups["score"].Value,
-                NumberStyles.None,
+                NumberStyles.AllowLeadingSign,
                 CultureInfo.InvariantCulture,
                 out var score
             )
-            ? score
+            ? name.Equals("Small", StringComparison.OrdinalIgnoreCase)
+                ? (score == int.MinValue ? 0 : Math.Abs(score))
+                : Math.Max(0, score)
             : 0;
     }
 

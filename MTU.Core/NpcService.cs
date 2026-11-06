@@ -223,6 +223,7 @@ public sealed class NpcService(MtuDbContext db, CharacterService characterStore)
             }
         }
         entity.Name = name;
+        entity.Description = actor.Description;
         entity.Race = race;
         entity.Upp = upp;
         entity.TokenImage = actor.TokenImage;

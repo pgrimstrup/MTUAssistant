@@ -20,6 +20,9 @@ await SkillChecks.RunAsync();
 await NpcGenerationChecks.RunAsync();
 await SceneChecks.RunAsync();
 await AnimalCombatChecks.RunAsync();
+await AnimalGenerationChecks.RunAsync();
+await SharedAnimalChecks.RunAsync();
+await CombatDescriptionChecks.RunAsync();
 
 static void Check(bool condition, string message)
 {

@@ -58,6 +58,7 @@
                     </div>
                 </div>
 
+                <label class="character-description-field">Description <textarea class="form-control" rows="4" @bind="description" disabled="@busy"></textarea></label>
                 <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
                 @if (generatedArchetype is not null)
                 {
@@ -120,6 +121,7 @@
     private IReadOnlyList<Npc> items = [];
     private IReadOnlyList<EquipmentItem> catalogue = [];
     private string filter = "";
+    private string description = "";
     private IEnumerable<Npc> FilteredItems => items.Where(n => NpcFilter.Matches(n, filter));
     private NpcType npcType;
     private Npc? editing, pendingDelete;
@@ -230,6 +232,7 @@
         quirks1 = item.Quirks1; quirks2 = item.Quirks2; Upp = item.Character.Upp; skillLevel = item.SkillLevel;
         age = item.Age;
         injuryTolerance = item.Character.InjuryTolerance;
+        description = item.Character.Description;
         speed = item.Character.Speed;
         npcType = item.Type;
         tokenImage = item.Character.TokenImage; tokenInputKey++;
@@ -263,7 +266,7 @@
         busy = true;
         try
         {
-            await Characters.SaveAsync(current with { Character = current.Character with { Name = name, Race = race, Upp = upp, Speed = speed, InjuryTolerance = injuryTolerance, TokenImage = tokenImage }, Occupation = occupation, Gender = gender, Quirks1 = quirks1, Quirks2 = quirks2, SkillLevel = skillLevel, Age = age, Type = npcType }, replaceSkills: skillsRerolled);
+            await Characters.SaveAsync(current with { Character = current.Character with { Name = name, Race = race, Upp = upp, Speed = speed, InjuryTolerance = injuryTolerance, TokenImage = tokenImage, Description = description }, Occupation = occupation, Gender = gender, Quirks1 = quirks1, Quirks2 = quirks2, SkillLevel = skillLevel, Age = age, Type = npcType }, replaceSkills: skillsRerolled);
             if (campaign?.Id == current.Character.CampaignId) { await Reload(); editing = null; }
         }
         catch (ArgumentException ex) { error = ex.Message; }

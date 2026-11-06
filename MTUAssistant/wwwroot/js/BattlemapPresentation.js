@@ -1,3 +1,4 @@
+import { DescriptionDialog } from './CombatDescription.js';
 import { renderPlayerActions } from './PlayerCombatActions.js';
 import { switchCastView } from './CastWindow.js';
 import { createBattlemap, restoreView } from './Battlemap.js';
@@ -11,7 +12,9 @@ class PresentedBattlemap {
     constructor(host,status,session,tracker,actions) {
         Object.assign(this,{host,status,tracker,actions,disposed:false,busy:false,pending:undefined,map:null,key:null});
         this.session = session;
+        this.descriptionDialog = new DescriptionDialog(true);
         this.connection = connectBattlemapPresentation({session,readOnly:true,onPointer:point => { this.pointer = point; this.map?.setPresentedPointer(point); },onState:state => {
+            this.descriptionDialog.show(state?.description ?? null);
             renderPlayerTracker(this.tracker,state); renderPlayerActions(this.actions,state);
             this.pending=state; void this.pump();
         }});
@@ -55,6 +58,7 @@ class PresentedBattlemap {
         } finally { this.busy=false; }
     }
     async dispose() {
+        this.descriptionDialog.dispose();
         this.disposed=true; this.connection.close();
         renderPlayerTracker(this.tracker,null); renderPlayerActions(this.actions,null);
         await this.map?.dispose(); this.map=null;

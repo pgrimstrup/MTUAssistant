@@ -20,7 +20,8 @@ public sealed record Character(
     IReadOnlyList<EquipmentItem>? Equipment = null,
     bool IsNpc = false,
     InjuryTolerance InjuryTolerance = InjuryTolerance.None,
-    int Speed = 6
+    int Speed = 6,
+    string Description = ""
 );
 
 public sealed record CharacterSkill(int Id, int CharacterId, string Name, int Level);
@@ -57,7 +58,8 @@ public sealed class CharacterService(MtuDbContext db)
                 null,
                 t.IsNpc,
                 t.InjuryTolerance,
-                t.Speed
+                t.Speed,
+                t.Description
             ))
             .ToArrayAsync();
         var skills = await db
@@ -220,6 +222,7 @@ public sealed class CharacterService(MtuDbContext db)
             db.Characters.Add(entity);
         entity.PlayerName = player;
         entity.Name = name;
+        entity.Description = character.Description;
         entity.Race = race;
         entity.Upp = upp;
         entity.TermsServed = terms;
@@ -239,7 +242,13 @@ public sealed class CharacterService(MtuDbContext db)
     ) =>
         await db
             .CharacterSkills.AsNoTracking()
-            .Where(s => s.CharacterId == characterId && s.Character.CampaignId == campaignId)
+            .Where(s =>
+                s.CharacterId == characterId
+                && (
+                    s.Character.CampaignId == campaignId
+                    || db.Animals.Any(a => a.CharacterId == s.Character.Id && a.Shared)
+                )
+            )
             .OrderBy(s => s.Name)
             .ThenBy(s => s.Id)
             .Select(s => new CharacterSkill(s.Id, s.CharacterId, s.Name, s.Level))
@@ -253,7 +262,11 @@ public sealed class CharacterService(MtuDbContext db)
         name = SkillRules.Validate(name, skill.Level);
         if (
             !await db.Characters.AnyAsync(t =>
-                t.Id == skill.CharacterId && t.CampaignId == campaignId
+                t.Id == skill.CharacterId
+                && (
+                    t.CampaignId == campaignId
+                    || db.Animals.Any(a => a.CharacterId == t.Id && a.Shared)
+                )
             )
         )
             throw new ArgumentException("This Traveller is not in the current campaign.");
@@ -269,7 +282,10 @@ public sealed class CharacterService(MtuDbContext db)
                 : await db.CharacterSkills.SingleAsync(s =>
                     s.Id == skill.Id
                     && s.CharacterId == skill.CharacterId
-                    && s.Character.CampaignId == campaignId
+                    && (
+                        s.Character.CampaignId == campaignId
+                        || db.Animals.Any(a => a.CharacterId == s.Character.Id && a.Shared)
+                    )
                 );
         if (skill.Id == 0)
             db.CharacterSkills.Add(entity);
@@ -281,7 +297,12 @@ public sealed class CharacterService(MtuDbContext db)
     public async Task DeleteSkillAsync(int campaignId, int characterId, int skillId)
     {
         var entity = await db.CharacterSkills.SingleAsync(s =>
-            s.Id == skillId && s.CharacterId == characterId && s.Character.CampaignId == campaignId
+            s.Id == skillId
+            && s.CharacterId == characterId
+            && (
+                s.Character.CampaignId == campaignId
+                || db.Animals.Any(a => a.CharacterId == s.Character.Id && a.Shared)
+            )
         );
         db.CharacterSkills.Remove(entity);
         await db.SaveChangesAsync();

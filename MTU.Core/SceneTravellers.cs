@@ -22,7 +22,10 @@ public sealed partial class SceneService
             await db
                 .Characters.Where(c =>
                     c.Id == characterId
-                    && c.CampaignId == campaignId
+                    && (
+                        c.CampaignId == campaignId
+                        || db.Animals.Any(a => a.CharacterId == c.Id && a.Shared)
+                    )
                     && (c.IsNpc || c.IsAnimal || !c.Inactive)
                 )
                 .Select(c => (bool?)(c.IsNpc || c.IsAnimal))

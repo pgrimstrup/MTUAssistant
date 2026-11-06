@@ -154,6 +154,7 @@ public class CampaignEntity
 
 public class CharacterEntity
 {
+    public string Description { get; set; } = "";
     public bool IsNpc { get; set; }
     public bool IsAnimal { get; set; }
 
@@ -216,6 +217,7 @@ public class NpcEntity
 
 public class AnimalEntity
 {
+    public bool Shared { get; set; }
     public int CharacterId { get; set; }
     public CharacterEntity Character { get; set; } = null!;
     public int Hits { get; set; }

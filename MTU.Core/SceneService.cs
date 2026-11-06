@@ -41,7 +41,12 @@ public sealed partial class SceneService(IServiceScopeFactory scopes)
         var db = scope.ServiceProvider.GetRequiredService<MtuDbContext>();
         return await db
             .Characters.AsNoTracking()
-            .Where(c => c.CampaignId == campaignId)
+            .Where(c =>
+                (
+                    c.CampaignId == campaignId
+                    || db.Animals.Any(a => a.CharacterId == c.Id && a.Shared)
+                )
+            )
             .OrderBy(c => c.IsNpc)
             .ThenBy(c => c.Name)
             .ThenBy(c => c.Id)
@@ -55,7 +60,13 @@ public sealed partial class SceneService(IServiceScopeFactory scopes)
         var db = scope.ServiceProvider.GetRequiredService<MtuDbContext>();
         var bytes = await db
             .Characters.AsNoTracking()
-            .Where(c => c.Id == characterId && c.CampaignId == campaignId)
+            .Where(c =>
+                c.Id == characterId
+                && (
+                    c.CampaignId == campaignId
+                    || db.Animals.Any(a => a.CharacterId == c.Id && a.Shared)
+                )
+            )
             .Select(c => c.TokenImage)
             .SingleOrDefaultAsync();
         return bytes is not null && CharacterToken.ContentType(bytes) is { } type

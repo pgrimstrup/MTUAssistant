@@ -11,9 +11,9 @@
             <input class="form-control npc-filter" aria-label="Filter Animals" placeholder="Filter Animals…" @bind="filter" @bind:event="oninput" />
             <button type="button" class="btn btn-outline-secondary" @onclick='() => filter = ""' disabled="@(string.IsNullOrEmpty(filter))">Clear</button>
             <label>Animal Type <select class="form-select" @bind="typeFilter"><option value="">All</option>@foreach (var type in AnimalTypes.All) { <option value="@type">@type</option> }</select></label>
-            <button type="button" class="btn btn-outline-primary" @onclick="Add">Killer</button>
-            <button type="button" class="btn btn-outline-primary" @onclick="Add">Hunter</button>
-            <button type="button" class="btn btn-outline-primary" @onclick="Add">Prey</button>
+            <button type="button" class="btn btn-outline-primary" disabled="@busy" @onclick="() => Add(AnimalArchetype.Killer)">Killer</button>
+            <button type="button" class="btn btn-outline-primary" disabled="@busy" @onclick="() => Add(AnimalArchetype.Hunter)">Hunter</button>
+            <button type="button" class="btn btn-outline-primary" disabled="@busy" @onclick="() => Add(AnimalArchetype.Prey)">Prey</button>
         </div> }
     </header>
     @if (campaign is null) { <p class="empty-message">Select a campaign to view its animals and creatures.</p> }
@@ -34,8 +34,16 @@
                         <label>Traits <input class="form-control" @bind="traits" placeholder="Trait, Trait 2" maxlength="1000" disabled="@busy" /></label>
                     </div>
                 </div>
+                <label class="shared-field"><input type="checkbox" @bind="shared" disabled="@busy" /> Shared</label>
                 <label class="description-field">Description <textarea class="form-control" rows="4" @bind="description" disabled="@busy"></textarea></label>
                 <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
+                @if (id == 0 && editingAnimal is { } generated)
+                {
+                    <section class="generated-skills" aria-label="Generated skills">
+                        <h3>Generated skills</h3>
+                        <p>@(generated.Character.Skills is { Count: > 0 } skills ? string.Join(", ", skills.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).Select(s => $"{s.Name} {s.Level}")) : "None")</p>
+                    </section>
+                }
                 <div class="token-editor">
                     @if (CharacterToken.DataUri(tokenImage) is { } preview) { <img class="token-preview" src="@preview" alt="Token preview" /> }
                     <label>Token image <InputFile @key="tokenInputKey" class="form-control" accept="image/png,image/jpeg,image/gif,image/webp" OnChange="SelectToken" disabled="@busy" /><span class="token-hint">PNG, JPEG, GIF or WebP, up to 2 MB</span></label>
@@ -45,8 +53,8 @@
             </section>
         }
         @if (!items.Any()) { <p class="empty-message">No animals or creatures in this campaign yet.</p> }
-        else { <div class="table-wrap"><table class="table characters-table"><thead><tr><th>Token</th><th>Name</th><th>Type</th><th>Behaviour</th><th>Speed</th><th>Hits</th><th>Traits</th><th>Skills</th><th>Natural Attacks</th><th></th></tr></thead><tbody>
-            @foreach (var animal in Filtered) { <tr @key="animal.Character.Id"><td>@if (CharacterToken.DataUri(animal.Character.TokenImage) is { } token) { <img class="token-thumbnail" src="@token" alt="@($"{animal.Character.Name} token")" /> }</td><th scope="row">@animal.Character.Name</th><td>@animal.AnimalType</td><td>@animal.Behaviour</td><td>@animal.Character.Speed</td><td>@animal.Hits</td><td>@animal.Traits</td><td>@Skills(animal)</td><td>@string.Join(", ", animal.NaturalAttacks.Select(a => $"{a.Name} ({a.Damage})"))</td><td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenSkills(animal.Character)">Skills</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenAttacks(animal)">Attacks</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(animal)">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => Delete(animal)">Delete</button></td></tr> }
+        else { <div class="table-wrap"><table class="table characters-table"><thead><tr><th>Token</th><th>Name</th><th>Scope</th><th>Type</th><th>Behaviour</th><th>Speed</th><th>Hits</th><th>Traits</th><th>Skills</th><th>Natural Attacks</th><th></th></tr></thead><tbody>
+            @foreach (var animal in Filtered) { <tr @key="animal.Character.Id"><td>@if (CharacterToken.DataUri(animal.Character.TokenImage) is { } token) { <img class="token-thumbnail" src="@token" alt="@($"{animal.Character.Name} token")" /> }</td><th scope="row">@animal.Character.Name</th><td>@(animal.Shared ? "Shared" : "Campaign")</td><td>@animal.AnimalType</td><td>@animal.Behaviour</td><td>@animal.Character.Speed</td><td>@animal.Hits</td><td>@animal.Traits</td><td>@Skills(animal)</td><td>@string.Join(", ", animal.NaturalAttacks.Select(a => $"{a.Name} ({a.Damage})"))</td><td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenSkills(animal.Character)">Skills</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenAttacks(animal)">Attacks</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(animal)">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => Delete(animal)">Delete</button></td></tr> }
         </tbody></table></div> }
         @if (selectedAttacks is { } attacker) { <AnimalAttacks @key="attacker.Character.Id" Animal="attacker" OnChanged="Reload" OnClose="CloseAttacks" /> }
         @if (selectedSkills is { } skilled) { <CharacterSkills @key="skilled.Id" Character="skilled" OnChanged="Reload" OnClose="CloseSkills" /> }
@@ -64,7 +72,7 @@
     private Animal? editingAnimal;
     private Character? selectedSkills;
     private Animal? selectedAttacks;
-    private bool editing, busy;
+    private bool editing, busy, shared;
     private string? error;
     private IEnumerable<Animal> Filtered => items.Where(a => (typeFilter.Length == 0 || a.AnimalType == typeFilter) && (filter.Length == 0 || a.Character.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || a.AnimalType.Contains(filter, StringComparison.OrdinalIgnoreCase) || a.Behaviour.Contains(filter, StringComparison.OrdinalIgnoreCase) || a.Traits.Contains(filter, StringComparison.OrdinalIgnoreCase)));
     protected override async Task OnInitializedAsync() { Campaigns.Changed += CampaignChanged; await SetCampaign((await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive)); }
@@ -72,8 +80,8 @@
     private async Task SetCampaign(Campaign? value) { Cancel(); selectedSkills = null; selectedAttacks = null; campaign = value; await Reload(); }
     private async Task Reload() { if (campaign is null) { items = []; return; } try { items = await Animals.ListAsync(campaign.Id); error = null; } catch { error = "Unable to load animals and creatures."; } }
     private static string Skills(Animal a) => string.Join(", ", (a.Character.Skills ?? []).Select(s => $"{s.Name} {s.Level}"));
-    private void Add() { id = 0; description = ""; injuryTolerance = InjuryTolerance.None; name = ""; hits = 1; speed = 6; animalType = "Herbivore"; behaviour = "Eater"; traits = ""; editingAnimal = null; selectedSkills = null; selectedAttacks = null; tokenImage = null; tokenInputKey++; error = null; editing = true; }
-    private void Edit(Animal a) { id = a.Character.Id; description = a.Description; injuryTolerance = a.Character.InjuryTolerance; name = a.Character.Name; hits = a.Hits; speed = a.Character.Speed; animalType = a.AnimalType; behaviour = a.Behaviour; traits = a.Traits; editingAnimal = a; selectedSkills = null; selectedAttacks = null; tokenImage = a.Character.TokenImage; tokenInputKey++; error = null; editing = true; }
+    private void Add(AnimalArchetype archetype) { if (busy || campaign is null) return; Edit(AnimalGenerator.Generate(campaign.Id, archetype)); }
+    private void Edit(Animal a) { id = a.Character.Id; shared = a.Shared; description = a.Description; injuryTolerance = a.Character.InjuryTolerance; name = a.Character.Name; hits = a.Hits; speed = a.Character.Speed; animalType = a.AnimalType; behaviour = a.Behaviour; traits = a.Traits; editingAnimal = a; selectedSkills = null; selectedAttacks = null; tokenImage = a.Character.TokenImage; tokenInputKey++; error = null; editing = true; }
     private void OpenSkills(Character character) { editing = false; editingAnimal = null; tokenImage = null; selectedAttacks = null; selectedSkills = character; error = null; }
     private void OpenAttacks(Animal animal) { Cancel(); selectedSkills = null; selectedAttacks = animal; }
     private void CloseAttacks() => selectedAttacks = null;
@@ -103,7 +111,7 @@
         busy = true;
         try {
             var character = new Character(id, campaign.Id, "", name, "Animal", "", "0", 0, 0, 0, TokenImage: tokenImage, Skills: editingAnimal?.Character.Skills, Speed: speed, InjuryTolerance: injuryTolerance);
-            await Animals.SaveAsync(new Animal(character, hits, animalType, behaviour, traits, editingAnimal?.NaturalAttacks ?? [], description)); editing = false; editingAnimal = null; await Reload();
+            await Animals.SaveAsync(new Animal(character, hits, animalType, behaviour, traits, editingAnimal?.NaturalAttacks ?? [], description, shared)); editing = false; editingAnimal = null; await Reload();
         } catch (ArgumentException ex) { error = ex.Message; } catch { error = "Unable to save this animal."; } finally { busy = false; }
     }
     private async Task Delete(Animal animal) { if (campaign is null) return; try { await Animals.DeleteAsync(campaign.Id, animal.Character.Id); if (selectedAttacks?.Character.Id == animal.Character.Id) selectedAttacks = null; if (selectedSkills?.Id == animal.Character.Id) selectedSkills = null; await Reload(); } catch { error = "Unable to delete this animal."; } }

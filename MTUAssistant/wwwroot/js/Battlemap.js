@@ -1,3 +1,4 @@
+import { DescriptionDialog, playerDescription } from './CombatDescription.js';
 import { automaticMoveRange } from './AutomaticMovement.js';
 import { movementGeometry, weaponRangeBand } from './MovementIndicators.js';
 import { attachCastWindow } from './CastWindow.js';
@@ -630,6 +631,12 @@ export class Battlemap {
         }
         this.apply();
     }
+    showDescription(data) {
+        this.description = data;
+        this.descriptionDialog ??= new DescriptionDialog(false, () => { this.description=null; this.publishPresentation(); });
+        this.descriptionDialog.show(data);
+        this.publishPresentation();
+    }
     attachPresentation(link) {
         const session = presentationSession();
         this.detachCastWindow = attachCastWindow(link,session,true);
@@ -638,7 +645,7 @@ export class Battlemap {
     }
     publishPresentation() {
         if (!this.presentation || this.disposed || this.readOnly || this.presentationCleared) return;
-        this.presentation.publish({combatMode:this.combatMode === true,round:this.combatRound ?? 0,actionSummary:this.combatMode && this.playerTracker?.some(e => e.id === this.actionSummary?.id && e.isVisible === true) ? this.actionSummary : null,tracker:this.playerTracker ?? [],movementRanges:playerMovementRanges(this.displayMovementRanges()),movementTrails:playerMovementTrails([...this.movementTrails.values()],[...this.characterTokens.values()]),targetSelection:this.combatMode ? playerTargetSelection(this.targetActorId,this.targetIds ?? this.targetId,[...this.characterTokens.values()],this.targetRange) : null,scene:this.scene, tokens:playerTokens([...this.characterTokens.values()]),
+        this.presentation.publish({description:playerDescription(this.description),combatMode:this.combatMode === true,round:this.combatRound ?? 0,actionSummary:this.combatMode && this.playerTracker?.some(e => e.id === this.actionSummary?.id && e.isVisible === true) ? this.actionSummary : null,tracker:this.playerTracker ?? [],movementRanges:playerMovementRanges(this.displayMovementRanges()),movementTrails:playerMovementTrails([...this.movementTrails.values()],[...this.characterTokens.values()]),targetSelection:this.combatMode ? playerTargetSelection(this.targetActorId,this.targetIds ?? this.targetId,[...this.characterTokens.values()],this.targetRange) : null,scene:this.scene, tokens:playerTokens([...this.characterTokens.values()]),
             view:{...this.view, width:this.width,height:this.height,imageWidth:this.imageWidth,imageHeight:this.imageHeight}});
     }
     publishPresentationPointer() {
@@ -729,6 +736,7 @@ export class Battlemap {
     zoomOut() { this.zoom(.5); }
     fit() { this.cancelPan(); this.view = fitView(this.width, this.height, this.imageWidth, this.imageHeight); this.apply(); }
     async dispose() {
+        this.descriptionDialog?.dispose(); this.description=null;
         if (this.disposed) return;
         this.cancelPan();
         if (this.animateTurn) this.app?.ticker.remove(this.animateTurn);

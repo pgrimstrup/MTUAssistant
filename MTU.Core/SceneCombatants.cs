@@ -50,7 +50,12 @@ public sealed partial class SceneService
         var db = scope.ServiceProvider.GetRequiredService<MtuDbContext>();
         return await db
             .Characters.AsNoTracking()
-            .Where(c => c.CampaignId == campaignId && (c.IsNpc || c.IsAnimal || !c.Inactive))
+            .Where(c =>
+                (
+                    c.CampaignId == campaignId
+                    || db.Animals.Any(a => a.CharacterId == c.Id && a.Shared)
+                ) && (c.IsNpc || c.IsAnimal || !c.Inactive)
+            )
             .OrderBy(c => c.Name)
             .ThenBy(c => c.Id)
             .Select(c => new SceneNpcChoice(
@@ -141,7 +146,12 @@ public sealed partial class SceneService
             await db
                 .Characters.AsNoTracking()
                 .SingleOrDefaultAsync(c =>
-                    c.Id == characterId && c.CampaignId == campaignId && (c.IsNpc || c.IsAnimal)
+                    c.Id == characterId
+                    && (
+                        c.CampaignId == campaignId
+                        || db.Animals.Any(a => a.CharacterId == c.Id && a.Shared)
+                    )
+                    && (c.IsNpc || c.IsAnimal)
                 )
             ?? throw new ArgumentException("Choose an NPC or Animal from this campaign.");
         var number =
@@ -388,7 +398,10 @@ public sealed partial class SceneService
         db.SceneTokens.Where(t =>
             t.SceneId == sceneId
             && t.Scene.CampaignId == campaignId
-            && t.Character.CampaignId == campaignId
+            && (
+                t.Character.CampaignId == campaignId
+                || db.Animals.Any(a => a.CharacterId == t.Character.Id && a.Shared)
+            )
             && (t.Character.IsNpc || t.Character.IsAnimal || !t.Character.Inactive)
         );
 
