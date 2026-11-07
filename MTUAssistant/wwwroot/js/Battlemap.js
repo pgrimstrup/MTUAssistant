@@ -4,6 +4,7 @@ import { automaticMoveRange } from './AutomaticMovement.js';
 import { movementGeometry, weaponRangeBand, measureGeometry, measureLabel, measureCell } from './MovementIndicators.js';
 import { attachCastWindow } from './CastWindow.js';
 import { presentationSession } from './PresentationSync.js';
+import { createRingTextures, destroyRingTextures, ringRotation, ringSpriteScale, selectionRingPlacements, RING_OUTER_EXTENTS, RING_SPEEDS, RING_TINTS } from './SelectionRings.js';
 import { connectBattlemapPresentation, playerMeasure, playerTokens, playerCombatants, playerMovementRanges, playerMovementTrails, playerTargetSelection } from './BattlemapPresentationSync.js';
 export function fitView(width, height, imageWidth, imageHeight) {
     const scale = Math.min(width / imageWidth, height / imageHeight);
@@ -103,7 +104,8 @@ export class Battlemap {
         this.grid = new PIXI.Graphics();
         this.movementOverlay = new PIXI.Container();
         this.movementStroke = new PIXI.Graphics(); this.movementOverlay.addChild(this.movementStroke);
-        this.targetRingGraphics = new PIXI.Graphics();
+        this.ringLayer = new PIXI.Container();
+        this.ringTextures = createRingTextures(PIXI, this.app.renderer);
         this.measureOverlay = new PIXI.Container();
         this.measureGraphics = new PIXI.Graphics();
         this.measureLabelBackground = new PIXI.Graphics();
@@ -111,7 +113,7 @@ export class Battlemap {
         this.measureLabel = new PIXI.Container(); this.measureLabel.addChild(this.measureLabelBackground,this.measureLabelText); this.measureLabel.visible = false;
         this.measureOverlay.addChild(this.measureGraphics,this.measureLabel);
         this.world.addChild(this.background);
-        this.app.stage.addChild(this.world, this.grid, this.rangeGraphics, this.movementOverlay, this.targetRingGraphics, this.tokens, this.fog, this.measureOverlay);
+        this.app.stage.addChild(this.world, this.grid, this.rangeGraphics, this.movementOverlay, this.ringLayer, this.tokens, this.fog, this.measureOverlay);
         this.placementPreview = new PIXI.Graphics();
         this.tokens.addChild(this.placementPreview);
         this.tiles = new Map();
@@ -129,13 +131,12 @@ export class Battlemap {
             ?? fitView(this.width, this.height, this.imageWidth, this.imageHeight);
         this.drawFog();
         this.apply();
-        this.pulseTime = 0;
+        this.ringTime = 0;
+        this.reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)') ?? null;
         this.animateTurn = ticker => {
-            this.pulseTime += ticker.deltaMS;
+            this.ringTime += ticker.deltaMS;
             this.advancePan(ticker.deltaMS);
-            this.drawTargetRing();
-            const token = this.characterTokens.get(this.selectedId);
-            if (token && this.combatMode && !token.isDead) this.drawTurnRing(token);
+            this.drawSelectionRings();
         };
         this.app.ticker.add(this.animateTurn);
         this.down = event => {
@@ -345,7 +346,7 @@ export class Battlemap {
         }
         token.column = column; token.row = row;
         token.container.position.set(column*this.scene.gridSize, row*this.scene.gridSize);
-        this.drawMovementIndicators(); this.drawTargetRing();
+        this.drawMovementIndicators(); this.drawSelectionRings();
         this.publishPresentation();
     }
     clearAutomaticMovementPreview() {
@@ -403,7 +404,6 @@ export class Battlemap {
         const container = new PIXI.Container();
         const token = {...data, container};
         token.halo = new PIXI.Graphics(); container.addChild(token.halo);
-        token.turnRing = new PIXI.Graphics(); container.addChild(token.turnRing);
         token.label = new PIXI.Container();
         token.labelBackground = new PIXI.Graphics();
         token.labelText = new PIXI.Text({text:data.name,style:{fontFamily:'Arial',fontSize:14,fill:data.isNpc ? 0xffb3b3 : 0xb3ffb3}});
@@ -445,7 +445,7 @@ export class Battlemap {
         }
         token.container.destroy({children:true}); token.texture?.destroy(true); token.fallbackTexture?.destroy(true); token.filter?.destroy();
         this.characterTokens.delete(id);
-        this.movementTrails.delete(id); this.drawMovementIndicators(); this.drawTargetRing();
+        this.movementTrails.delete(id); this.drawMovementIndicators(); this.drawSelectionRings();
         if (publish) this.publishPresentation();
     }
     setCombatMode(active) {
@@ -469,7 +469,7 @@ export class Battlemap {
         this.deadIds = new Set(deadIds);
         this.unconsciousIds = new Set(unconsciousIds);
         for (const token of this.characterTokens.values()) this.tokenAppearance(token);
-        this.drawMovementIndicators(); this.drawTargetRing();
+        this.drawMovementIndicators(); this.drawSelectionRings();
         if (!this.combatMode || turnChanged) this.cancelPan();
         if (turnChanged && !this.readOnly) this.panToToken(selectedId);
         this.publishPresentation();
@@ -498,7 +498,7 @@ export class Battlemap {
     setMovementTrails(trails) { this.movementTrails = new Map(trails.map(t => [t.id,t])); this.drawMovementIndicators(); }
     setTargetSelection(selection) {
         this.targetActorId = selection?.actorId ?? null; this.targetIds = selection?.targetIds ?? (selection?.targetId == null ? [] : [selection.targetId]); this.targetId = this.targetIds[0] ?? null; this.targetRange = selection?.rangeProfile ?? null;
-        this.drawMovementIndicators(); this.drawTargetRing();
+        this.drawMovementIndicators(); this.drawSelectionRings();
     }
     setFogBrush(brush) {
         if(this.readOnly) return;
@@ -636,7 +636,7 @@ export class Battlemap {
     cancelTargetDrag() {
         const drag = this.targetDrag; this.targetDrag = null;
         if (drag && this.host.hasPointerCapture(drag.id)) this.host.releasePointerCapture(drag.id);
-        if (drag) { this.drawMovementIndicators(); this.drawTargetRing(); }
+        if (drag) { this.drawMovementIndicators(); this.drawSelectionRings(); }
     }
     previewTarget(event) {
         const drag = this.targetDrag;
@@ -646,7 +646,7 @@ export class Battlemap {
         const point = this.pointerWorld(event), token = inside ? this.hitToken(point) : null;
         drag.target = token && drag.context.targetIds.includes(token.id) ? token : null;
         drag.point = point;
-        this.drawMovementIndicators(); this.drawTargetRing();
+        this.drawMovementIndicators(); this.drawSelectionRings();
     }
     targetTrail() { return this.targetTrails()[0] ?? null; }
     targetTrails() {
@@ -666,17 +666,39 @@ export class Battlemap {
         }
         return trails;
     }
-    drawTargetRing() {
-        const graphics = this.targetRingGraphics;
-        if (!graphics || !this.view) return;
-        graphics.clear();
-        for (const trail of this.targetTrails()) {
-        if (trail.preview && !trail.snapped) continue;
-        const {end} = movementGeometry(trail,this.scene.gridSize,this.view);
-        const wave = (Math.sin((this.pulseTime ?? 0)*Math.PI/700)+1)/2;
-        graphics.circle(end.x,end.y,this.tokenDisplaySize()*this.view.scale*(.64+.07*wave))
-            .stroke({color:0xff00ff,alpha:.5+.5*wave,width:3});
+    // Screen-space ring sprites, pooled per design; recomputed on every frame and view change.
+    drawSelectionRings() {
+        if (!this.view) return;
+        const size = this.scene.gridSize, {x,y,scale} = this.view, tokenSize = this.tokenDisplaySize();
+        const reduced = this.reducedMotion?.matches === true;
+        const outerRotation = ringRotation(this.ringTime ?? 0,RING_SPEEDS.outer,reduced);
+        const innerRotation = ringRotation(this.ringTime ?? 0,RING_SPEEDS.inner,reduced);
+        const active = this.characterTokens.get(this.selectedId);
+        this.selectionRings = selectionRingPlacements({combatMode:this.combatMode,active,deadIds:this.deadIds,trails:this.targetTrails()})
+            .map(ring => ({...ring,x:x+(ring.column+.5)*size*scale,y:y+(ring.row+.5)*size*scale,
+                scale:ringSpriteScale(tokenSize,scale,RING_OUTER_EXTENTS[ring.design]),outerRotation,innerRotation}));
+        if (!this.ringLayer || !this.ringTextures) return;
+        this.ringPools ??= new Map();
+        const used = new Map();
+        for (const ring of this.selectionRings) {
+            const pool = this.ringPools.get(ring.design) ?? [];
+            this.ringPools.set(ring.design,pool);
+            const index = used.get(ring.design) ?? 0; used.set(ring.design,index+1);
+            let pair = pool[index];
+            if (!pair) {
+                const textures = this.ringTextures[ring.design];
+                pair = {outer:new PIXI.Sprite(textures.outer),inner:new PIXI.Sprite(textures.inner)};
+                for (const sprite of [pair.outer,pair.inner]) { sprite.anchor.set(.5); this.ringLayer.addChild(sprite); }
+                pool.push(pair);
+            }
+            for (const sprite of [pair.outer,pair.inner]) {
+                sprite.visible = true; sprite.tint = ring.tint; sprite.alpha = 1;
+                sprite.position.set(ring.x,ring.y); sprite.scale.set(ring.scale);
+            }
+            pair.outer.rotation = outerRotation; pair.inner.rotation = innerRotation;
         }
+        for (const [design,pool] of this.ringPools)
+            for (let i = used.get(design) ?? 0; i < pool.length; i++) pool[i].outer.visible = pool[i].inner.visible = false;
     }
     drawMovementIndicators() {
         const graphics = this.movementStroke;
@@ -686,9 +708,10 @@ export class Battlemap {
         const indicators = [...this.movementTrails.values(),...this.targetTrails()];
         if (this.combatMode) for (const trail of indicators) {
             const {start,end,midpoint,distance} = movementGeometry(trail,this.scene.gridSize,this.view);
-            const colour = trail.isTarget ? 0xff00ff : 0xffffff;
-            graphics.moveTo(start.x,start.y).lineTo(end.x,end.y).stroke({color:colour,alpha:.25,width:6});
-            graphics.circle(start.x,start.y,5).fill({color:colour,alpha:.25});
+            // Target lines are solid so they read clearly; movement trails stay translucent.
+            const colour = trail.isTarget ? RING_TINTS.target : 0xffffff, alpha = trail.isTarget ? 1 : .25;
+            graphics.moveTo(start.x,start.y).lineTo(end.x,end.y).stroke({color:colour,alpha,width:6});
+            graphics.circle(start.x,start.y,5).fill({color:colour,alpha});
             let label = this.movementLabels.get(trail.id);
             if (!label) {
                 const container = new PIXI.Container(), background = new PIXI.Graphics();
@@ -747,15 +770,6 @@ export class Battlemap {
         this.apply();
     }
     cancelPan() { this.panAnimation = null; }
-    drawTurnRing(token) {
-        if (!token.turnRing) return;
-        token.turnRing.clear();
-        if (!this.combatMode || token.id !== this.selectedId || token.isDead) return;
-        const size = this.scene.gridSize;
-        const wave = (Math.sin((this.pulseTime ?? 0)*Math.PI/700)+1)/2;
-        token.turnRing.circle(size/2,size/2,this.tokenDisplaySize()*(.61+.07*wave))
-            .stroke({color:0xffffff,alpha:.5+.5*wave,width:Math.max(this.tokenDisplaySize()*.035,2/this.view.scale)});
-    }
     drawTokenHealth(token) {
         const bar = token.healthBar;
         if (!bar) return;
@@ -779,7 +793,6 @@ export class Battlemap {
         token.isDead = this.deadIds?.has(token.id) ?? false;
         token.isUnconscious = this.unconsciousIds?.has(token.id) ?? false;
         token.isCurrent = token.id === this.selectedId && !token.isDead;
-        this.drawTurnRing(token);
         this.drawTokenHealth(token);
         token.halo.clear();
         if (this.combatMode) token.halo.circle(size/2,size/2,this.tokenDisplaySize()*.57).fill({color:token.isNpc ? 0xff0000 : 0x00ff00,alpha:.25});
@@ -907,7 +920,7 @@ export class Battlemap {
     draw() {
         const {x,y,scale} = this.view;
         this.drawMovementRanges();
-        this.drawMovementIndicators(); this.drawTargetRing(); this.drawMeasure();
+        this.drawMovementIndicators(); this.drawSelectionRings(); this.drawMeasure();
         this.world.position.set(x,y); this.world.scale.set(scale);
         for (const token of this.characterTokens.values()) this.decorateToken(token);
         this.tokens?.position.set(x,y); this.tokens?.scale.set(scale);
@@ -995,6 +1008,7 @@ export class Battlemap {
             globalThis.removeEventListener('keyup',this.modifierKey);
         }
         if(this.initialized) this.app.destroy(true,{children:true});
+        destroyRingTextures(this.ringTextures); this.ringTextures=null; this.ringPools?.clear();
         for(const tile of this.tiles?.values() ?? []) tile.texture.destroy(true);
         this.tiles?.clear(); this.overviewTexture?.destroy(true); this.image=null;
         if(this.preventDrag) {

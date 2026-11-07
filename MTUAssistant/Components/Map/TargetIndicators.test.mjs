@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {weaponRangeBand} from '../../wwwroot/js/MovementIndicators.js';
 import {Battlemap} from '../../wwwroot/js/Battlemap.js';
 import {playerTargetSelection,validBattlemapSnapshot} from '../../wwwroot/js/BattlemapPresentationSync.js';
+import {segmentedArcsSpec,hudBezelSpec,RING_OUTER_EXTENTS,RING_TEXTURE_HALF} from '../../wwwroot/js/SelectionRings.js';
 const oldPixi=globalThis.PIXI;
 const point=()=>({set(x,y){this.x=x;this.y=y;}});
 class Container {constructor(){this.position=point();this.children=[];}addChild(...children){this.children.push(...children);}destroy(){this.destroyed=true;}}
@@ -9,11 +10,13 @@ class Graphics {constructor(){this.strokes=[];}clear(){this.strokes=[];return th
 class Text {constructor({text,style}){this.text=text;this.style=style;this.position=point();}get width(){return this.text.length*8;}get height(){return 16;}}
 globalThis.PIXI={Container,Graphics,Text};
 const map=new Battlemap({style:{}},{gridSize:100},'target-indicator');map.view={x:10,y:20,scale:2};map.combatMode=true;map.selectedId=1;
-map.movementStroke=new Graphics();map.movementOverlay=new Container();map.targetRingGraphics=new Graphics();
+map.movementStroke=new Graphics();map.movementOverlay=new Container();
+const targetRings=()=>map.selectionRings.filter(ring=>ring.design==='hudBezel');
+const activeRing=()=>map.selectionRings.find(ring=>ring.key==='active');
 const actor={id:1,characterId:1,name:'Hero',column:1,row:2,isNpc:false,isVisible:true};
 const target={id:2,characterId:2,name:'Enemy',column:4,row:6,isNpc:true,isVisible:true};
 map.characterTokens.set(1,actor);map.characterTokens.set(2,target);map.setTargetSelection({actorId:1,targetId:2});
-assert.deepEqual(map.movementStroke.strokes[0],{color:0xff00ff,alpha:.25,width:6},'target line is magenta');
+assert.deepEqual(map.movementStroke.strokes[0],{color:0xffa500,alpha:1,width:6},'target line is solid orange');
 assert.deepEqual(map.movementStroke.start,{x:310,y:520});assert.deepEqual(map.movementStroke.end,{x:910,y:1320});
 assert.equal(map.movementLabels.get('target').text.text,'7.5 m');
 map.setTargetSelection({actorId:1,targetId:2,rangeProfile:{range:100,scope:false,aimBonus:0}});
@@ -26,14 +29,17 @@ assert.equal(weaponRangeBand(101,{range:1000,scope:true,aimBonus:0}),'Extreme Ra
 assert.equal(weaponRangeBand(101,{range:1000,scope:true,aimBonus:1}),'Short Range');
 assert.equal(weaponRangeBand(100,{range:1000,scope:false,aimBonus:0}),'Short Range');
 assert.equal(weaponRangeBand(1,{range:0,scope:false,aimBonus:0}),null);
-assert.equal(map.targetRingGraphics.strokes[0].color,0xff00ff);assert.equal(map.targetRingGraphics.circleValue.x,910);
-const firstRadius=map.targetRingGraphics.circleValue.radius;map.pulseTime=350;map.drawTargetRing();assert.notEqual(map.targetRingGraphics.circleValue.radius,firstRadius,'target circle pulses over time');
-actor.isNpc=true;map.drawMovementIndicators();map.drawTargetRing();assert.equal(map.movementStroke.strokes[0].color,0xff00ff);assert.equal(map.targetRingGraphics.strokes[0].color,0xff00ff);
+assert.equal(targetRings()[0].tint,0xffa500);assert.equal(targetRings()[0].x,910);assert.equal(targetRings()[0].y,1320);
+map.ringTime=0;map.drawSelectionRings();assert.equal(targetRings()[0].outerRotation,0);
+map.ringTime=1000;map.drawSelectionRings();assert.ok(targetRings()[0].outerRotation>0&&targetRings()[0].innerRotation<0,'target rings counter-rotate over time');
+map.reducedMotion={matches:true};map.drawSelectionRings();assert.equal(targetRings()[0].outerRotation,0,'reduced motion keeps rings static');map.reducedMotion=null;
+actor.isNpc=true;map.drawMovementIndicators();map.drawSelectionRings();assert.equal(map.movementStroke.strokes[0].color,0xffa500);assert.equal(targetRings()[0].tint,0xffa500);
 map.movementTrails.set(1,{id:1,fromColumn:0,fromRow:0,toColumn:1,toRow:2,isNpc:true});map.drawMovementIndicators();
-assert.equal(map.movementStroke.strokes[0].color,0xffffff,'movement is white even for enemies');assert.equal(map.movementStroke.strokes[1].color,0xff00ff,'target and movement lines retain distinct colours');
-target.column=5;map.drawMovementIndicators();map.drawTargetRing();assert.equal(map.targetRingGraphics.circleValue.x,1110,'target ring follows movement');
-map.setTargetSelection(null);assert.equal(map.movementLabels.has('target'),false);assert.equal(map.targetRingGraphics.strokes.length,0,'clearing the target clears the pulse');
-map.setTargetSelection({actorId:1,targetId:2});map.combatMode=false;map.drawMovementIndicators();map.drawTargetRing();assert.equal(map.targetRingGraphics.strokes.length,0,'target pulse is combat-only');
+assert.equal(map.movementStroke.strokes[0].color,0xffffff,'movement is white even for enemies');assert.equal(map.movementStroke.strokes[1].color,0xffa500,'target and movement lines retain distinct colours');
+assert.equal(map.movementStroke.strokes[0].alpha,.25,'movement trails stay translucent');assert.equal(map.movementStroke.strokes[1].alpha,1,'target lines are opaque');
+target.column=5;map.drawMovementIndicators();map.drawSelectionRings();assert.equal(targetRings()[0].x,1110,'target ring follows movement');
+map.setTargetSelection(null);assert.equal(map.movementLabels.has('target'),false);assert.equal(targetRings().length,0,'clearing the target clears its rings');
+map.setTargetSelection({actorId:1,targetId:2});map.combatMode=false;map.drawMovementIndicators();map.drawSelectionRings();assert.equal(map.selectionRings.length,0,'rings are combat-only');
 
 assert.deepEqual(playerTargetSelection(1,2,[actor,target]),{actorId:1,targetId:2});
 assert.equal(playerTargetSelection(1,2,[actor,{...target,isVisible:false}]),null,'hidden target IDs stay private');
@@ -41,7 +47,7 @@ assert.equal(playerTargetSelection(1,2,[{...actor,isVisible:false},target]),null
 assert.equal(playerTargetSelection(1,null,[actor,target]),null);
 const state={scene:{id:1,campaignId:1,gridSize:100,gridColour:'#000000',gridlineWidth:2,gridOpacity:50},tokens:[actor,target],view:{x:0,y:0,scale:1,width:1000,height:600,imageWidth:2000,imageHeight:2000},targetSelection:{actorId:1,targetId:2}};
 assert.ok(validBattlemapSnapshot(state));assert.equal(validBattlemapSnapshot({...state,targetSelection:{actorId:1,targetId:99}}),false);
-console.log('Faction target lines, pulsing circles, live positions, white movement, target clearing and cast privacy passed.');
+console.log('Faction target lines, rotating target rings, live positions, white movement, target clearing and cast privacy passed.');
 const scoped={range:1000,scope:true,aimBonus:1};
 const castSelection=playerTargetSelection(1,2,[actor,target],scoped);
 assert.deepEqual(castSelection.rangeProfile,scoped);
@@ -53,14 +59,14 @@ console.log('Range boundaries, Scope/Aim override and cast range labels passed.'
 const other={...target,id:3,name:'Second',column:7};
 map.characterTokens.set(3,other);
 map.setTargetSelection({actorId:1,targetId:2,targetIds:[2,3]});
-assert.equal(map.targetRingGraphics.strokes.length,2,'all Full Auto targets get pulsing highlights');
+assert.deepEqual(targetRings().map(ring=>ring.key),['target','target:3'],'all Full Auto targets get their own rings');
 assert.ok(map.movementLabels.has('target:3'),'each target gets its own distance line');
 assert.deepEqual(playerTargetSelection(1,[2,3],[actor,target,other]),{actorId:1,targetId:2,targetIds:[2,3]});
 assert.deepEqual(playerTargetSelection(1,[2,3],[actor,target,{...other,isVisible:false}]),{actorId:1,targetId:2},'hidden targets stay private within volleys');
 assert.ok(validBattlemapSnapshot({...state,tokens:[actor,target,other],targetSelection:{actorId:1,targetId:2,targetIds:[2,3]}}));
 assert.equal(validBattlemapSnapshot({...state,targetSelection:{actorId:1,targetId:2,targetIds:[2,3]}}),false,'hidden extra target rejected');
 map.setTargetSelection({actorId:1,targetId:2});
-assert.equal(map.targetRingGraphics.strokes.length,1);assert.equal(map.movementLabels.has('target:3'),false,'switching to Single clears extra highlights');
+assert.equal(targetRings().length,1);assert.equal(map.movementLabels.has('target:3'),false,'switching to Single clears extra highlights');
 console.log('Multiple target highlights, distance lines, clearing and Cast privacy passed.');
 
 map.host.getBoundingClientRect=()=>({left:0,top:0,right:2000,bottom:2000});
@@ -70,28 +76,35 @@ map.targetDrag={id:8,context:{targetIds:[2]}};
 map.previewTarget({clientX:1110,clientY:1320});
 assert.equal(map.targetDrag.target,target,'eligible token snaps');
 assert.equal(map.targetTrails().at(-1).toColumn,target.column);
-assert.equal(map.targetRingGraphics.strokes.length,2,'preview has a reticle');
+assert.equal(targetRings().length,2,'snapped preview has its own rings');assert.equal(targetRings().at(-1).key,'target-preview');
 map.previewTarget({clientX:1500,clientY:1000});
 assert.equal(map.targetDrag.target,null,'empty space does not select a target');
-assert.equal(map.targetRingGraphics.strokes.length,1,'free pointer has no reticle');
+assert.equal(targetRings().length,1,'free pointer has no rings');
 assert.equal(map.targetTrails().at(-1).preview,true,'free pointer retains targeting line');
 map.targetDrag.context.targetIds=[];
 map.previewTarget({clientX:1110,clientY:1320});
 assert.equal(map.targetDrag.target,null,'ineligible token cannot snap');
 map.cancelTargetDrag();
 assert.equal(map.targetDrag,null);assert.equal(map.targetTrails().length,1,'cancel preserves committed targets');
-actor.turnRing=new Graphics();map.drawTurnRing(actor);
-assert.equal(actor.turnRing.strokes[0].color,0xffffff,'current combatant ring is white');
-console.log('Target preview snapping, eligibility, cancellation and white turn ring passed.');
+map.drawSelectionRings();
+assert.equal(activeRing().design,'segmentedArcs');assert.equal(activeRing().tint,0xffffff,'current combatant ring is white');
+assert.equal(activeRing().x,map.view.x+(actor.column+.5)*100*map.view.scale,'active ring is centred on the current combatant');
+map.deadIds=new Set([1]);map.drawSelectionRings();assert.equal(activeRing(),undefined,'dead combatants get no ring');assert.equal(targetRings().length,1,'targets keep their rings');
+map.deadIds=new Set();map.characterTokens.delete(2);map.drawSelectionRings();assert.equal(targetRings().length,0,'removing a token removes its rings');map.characterTokens.set(2,target);
+console.log('Target preview snapping, eligibility, cancellation, white active ring and dead combatants passed.');
+// The innermost painted pixel of each design, as a fraction of the outer extent.
+const innermost=spec=>Math.min(...[spec.outer,spec.inner].flatMap(ring=>[...ring.arcs.map(arc=>arc.radius*RING_TEXTURE_HALF-arc.width/2),...ring.ticks.map(tick=>tick.inner*RING_TEXTURE_HALF)]));
+const innerFraction={segmentedArcs:innermost(segmentedArcsSpec())/RING_OUTER_EXTENTS.segmentedArcs,hudBezel:innermost(hudBezelSpec())/RING_OUTER_EXTENTS.hudBezel};
 for (const gridSize of [10,100]) for (const scale of [.125,.5,1,4]) {
     map.scene.gridSize=gridSize;map.view.scale=scale;
     const tokenDiameter=Math.max(gridSize*scale,36);
-    for (const pulseTime of [0,350,1050]) {
-        map.pulseTime=pulseTime;map.drawTargetRing();
-        const ring=map.targetRingGraphics.circleValue;
-        assert.ok(ring.radius-1.5>tokenDiameter/2,'entire target stroke stays outside the displayed token at every zoom and pulse phase');
-        assert.equal(ring.x,map.view.x+(target.column+.5)*gridSize*scale,'ring remains centred on the target cell');
+    map.drawSelectionRings();
+    for (const ring of [activeRing(),targetRings()[0]]) {
+        const outerDiameter=2*RING_OUTER_EXTENTS[ring.design]*ring.scale;
+        assert.ok(Math.abs(outerDiameter-1.6*tokenDiameter)<1e-9,'outer ring spans 1.6 displayed token widths');
+        assert.ok(outerDiameter/2*innerFraction[ring.design]>tokenDiameter/2,'both rings stay outside the displayed token at every zoom');
     }
+    assert.equal(targetRings()[0].x,map.view.x+(target.column+.5)*gridSize*scale,'ring remains centred on the target cell');
 }
-console.log('Target rings respect minimum token size across grid sizes, zoom levels and pulse phases.');
+console.log('Rings respect minimum token size across grid sizes and zoom levels.');
 globalThis.PIXI=oldPixi;
