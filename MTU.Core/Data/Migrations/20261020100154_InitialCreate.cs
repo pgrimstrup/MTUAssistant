@@ -15,7 +15,8 @@ namespace MTU.Core.Data.Migrations
                 name: "Sectors",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table
+                        .Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     X = table.Column<int>(type: "INTEGER", nullable: false),
                     Y = table.Column<int>(type: "INTEGER", nullable: false),
@@ -25,22 +26,24 @@ namespace MTU.Core.Data.Migrations
                     Tags = table.Column<string>(type: "TEXT", nullable: true),
                     Credits = table.Column<string>(type: "TEXT", nullable: true),
                     Source = table.Column<string>(type: "TEXT", nullable: true),
-                    DataImportedUtc = table.Column<DateTime>(type: "TEXT", nullable: true)
+                    DataImportedUtc = table.Column<DateTime>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Sectors", x => x.Id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "Allegiances",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table
+                        .Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     SectorId = table.Column<int>(type: "INTEGER", nullable: false),
                     Code = table.Column<string>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", nullable: false)
+                    Name = table.Column<string>(type: "TEXT", nullable: false),
                 },
                 constraints: table =>
                 {
@@ -50,19 +53,22 @@ namespace MTU.Core.Data.Migrations
                         column: x => x.SectorId,
                         principalTable: "Sectors",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                        onDelete: ReferentialAction.Cascade
+                    );
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "SectorNames",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table
+                        .Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     SectorId = table.Column<int>(type: "INTEGER", nullable: false),
                     Text = table.Column<string>(type: "TEXT", nullable: false),
                     Lang = table.Column<string>(type: "TEXT", nullable: true),
-                    Source = table.Column<string>(type: "TEXT", nullable: true)
+                    Source = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
@@ -72,18 +78,21 @@ namespace MTU.Core.Data.Migrations
                         column: x => x.SectorId,
                         principalTable: "Sectors",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                        onDelete: ReferentialAction.Cascade
+                    );
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "Subsectors",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table
+                        .Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     SectorId = table.Column<int>(type: "INTEGER", nullable: false),
                     Letter = table.Column<string>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", nullable: false)
+                    Name = table.Column<string>(type: "TEXT", nullable: false),
                 },
                 constraints: table =>
                 {
@@ -93,14 +102,17 @@ namespace MTU.Core.Data.Migrations
                         column: x => x.SectorId,
                         principalTable: "Sectors",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                        onDelete: ReferentialAction.Cascade
+                    );
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "Systems",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table
+                        .Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     SectorId = table.Column<int>(type: "INTEGER", nullable: false),
                     SubsectorLetter = table.Column<string>(type: "TEXT", nullable: false),
@@ -119,7 +131,7 @@ namespace MTU.Core.Data.Migrations
                     Pbg = table.Column<string>(type: "TEXT", nullable: false),
                     W = table.Column<string>(type: "TEXT", nullable: false),
                     A = table.Column<string>(type: "TEXT", nullable: false),
-                    Stellar = table.Column<string>(type: "TEXT", nullable: false)
+                    Stellar = table.Column<string>(type: "TEXT", nullable: false),
                 },
                 constraints: table =>
                 {
@@ -129,66 +141,62 @@ namespace MTU.Core.Data.Migrations
                         column: x => x.SectorId,
                         principalTable: "Sectors",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                        onDelete: ReferentialAction.Cascade
+                    );
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_Allegiances_SectorId_Code",
                 table: "Allegiances",
                 columns: new[] { "SectorId", "Code" },
-                unique: true);
+                unique: true
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_SectorNames_SectorId",
                 table: "SectorNames",
-                column: "SectorId");
+                column: "SectorId"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_Sectors_Milieu_X_Y",
                 table: "Sectors",
                 columns: new[] { "Milieu", "X", "Y" },
-                unique: true);
+                unique: true
+            );
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Sectors_Name",
-                table: "Sectors",
-                column: "Name");
+            migrationBuilder.CreateIndex(name: "IX_Sectors_Name", table: "Sectors", column: "Name");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Subsectors_SectorId_Letter",
                 table: "Subsectors",
                 columns: new[] { "SectorId", "Letter" },
-                unique: true);
+                unique: true
+            );
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Systems_Name",
-                table: "Systems",
-                column: "Name");
+            migrationBuilder.CreateIndex(name: "IX_Systems_Name", table: "Systems", column: "Name");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Systems_SectorId_Hex",
                 table: "Systems",
                 columns: new[] { "SectorId", "Hex" },
-                unique: true);
+                unique: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "Allegiances");
+            migrationBuilder.DropTable(name: "Allegiances");
 
-            migrationBuilder.DropTable(
-                name: "SectorNames");
+            migrationBuilder.DropTable(name: "SectorNames");
 
-            migrationBuilder.DropTable(
-                name: "Subsectors");
+            migrationBuilder.DropTable(name: "Subsectors");
 
-            migrationBuilder.DropTable(
-                name: "Systems");
+            migrationBuilder.DropTable(name: "Systems");
 
-            migrationBuilder.DropTable(
-                name: "Sectors");
+            migrationBuilder.DropTable(name: "Sectors");
         }
     }
 }

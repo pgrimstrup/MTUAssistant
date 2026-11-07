@@ -16,7 +16,8 @@ namespace MTU.Core.Data.Migrations
                 type: "TEXT",
                 nullable: false,
                 oldClrType: typeof(int),
-                oldType: "INTEGER");
+                oldType: "INTEGER"
+            );
         }
 
         /// <inheritdoc />
@@ -28,7 +29,8 @@ namespace MTU.Core.Data.Migrations
                 type: "INTEGER",
                 nullable: false,
                 oldClrType: typeof(string),
-                oldType: "TEXT");
+                oldType: "TEXT"
+            );
         }
     }
 }

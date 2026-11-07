@@ -14,15 +14,14 @@ namespace MTU.Core.Data.Migrations
                 name: "TokenImage",
                 table: "Travellers",
                 type: "BLOB",
-                nullable: true);
+                nullable: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "TokenImage",
-                table: "Travellers");
+            migrationBuilder.DropColumn(name: "TokenImage", table: "Travellers");
         }
     }
 }

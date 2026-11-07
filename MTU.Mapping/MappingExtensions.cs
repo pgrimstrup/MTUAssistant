@@ -14,9 +14,14 @@ public sealed class MappingOptions
 
 public static class MappingExtensions
 {
-    public static IServiceCollection AddMtuMapping(this IServiceCollection services, string? tileRoot = null)
+    public static IServiceCollection AddMtuMapping(
+        this IServiceCollection services,
+        string? tileRoot = null
+    )
     {
-        services.AddSingleton(new MappingOptions { TileRoot = tileRoot ?? TileRefreshWorker.DefaultRootFolder });
+        services.AddSingleton(
+            new MappingOptions { TileRoot = tileRoot ?? TileRefreshWorker.DefaultRootFolder }
+        );
         services.AddSingleton<ITileManifestService, TileManifestService>();
         return services;
     }
@@ -27,26 +32,40 @@ public static class MappingExtensions
         var root = app.ApplicationServices.GetRequiredService<MappingOptions>().TileRoot;
         Directory.CreateDirectory(root);
 
-        return app.UseStaticFiles(new StaticFileOptions
-        {
-            FileProvider = new PhysicalFileProvider(root),
-            RequestPath = "/tiles",
-            OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = "public,max-age=3600",
-        });
+        return app.UseStaticFiles(
+            new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(root),
+                RequestPath = "/tiles",
+                OnPrepareResponse = ctx =>
+                    ctx.Context.Response.Headers.CacheControl = "public,max-age=3600",
+            }
+        );
     }
 
     public static IEndpointRouteBuilder MapMtuTiles(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/map/manifest", (ITileManifestService service) => Results.Ok(service.GetManifest()));
+        endpoints.MapGet(
+            "/api/map/manifest",
+            (ITileManifestService service) => Results.Ok(service.GetManifest())
+        );
         return endpoints;
     }
 
     public static IEndpointRouteBuilder MapMtuMap(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapGet("/api/map/overview", async (MapDataService service, CancellationToken ct) =>
-            Results.Ok(await service.GetOverviewAsync(ct)));
-        endpoints.MapGet("/api/map/sectors/{sectorId:int}", async (int sectorId, MapDataService service, CancellationToken ct) =>
-            await service.GetSectorAsync(sectorId, ct) is { } worlds ? Results.Ok(worlds) : Results.NotFound());
+        endpoints.MapGet(
+            "/api/map/overview",
+            async (MapDataService service, CancellationToken ct) =>
+                Results.Ok(await service.GetOverviewAsync(ct))
+        );
+        endpoints.MapGet(
+            "/api/map/sectors/{sectorId:int}",
+            async (int sectorId, MapDataService service, CancellationToken ct) =>
+                await service.GetSectorAsync(sectorId, ct) is { } worlds
+                    ? Results.Ok(worlds)
+                    : Results.NotFound()
+        );
         return endpoints;
     }
 }

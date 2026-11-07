@@ -1,7 +1,12 @@
 namespace MTU.Core;
 
 /// <summary>2016 trade-good values and DMs based on the credited trade-goods aid.</summary>
-public sealed record TradePriceInfo(long? BasePrice, string PurchaseModifiers, string SaleModifiers);
+public sealed record TradePriceInfo(
+    long? BasePrice,
+    string PurchaseModifiers,
+    string SaleModifiers
+);
+
 public static class TradePricing
 {
     private static readonly Dictionary<int, TradePriceInfo> Data = new()
@@ -43,74 +48,189 @@ public static class TradePricing
         [65] = new(150000, "HT:2", "PO:6 AmberZone:8 RedZone:10"),
         [66] = new(null, "", ""),
     };
+
     // Purchase price as percent of base, indexed by modified roll -1 through 23.
-    private static readonly int[] Percentages = [200,175,150,135,125,120,115,110,105,100,95,90,85,80,75,70,65,60,55,50,45,40,35,30,25];
-    public static int Percentage(int modifiedRoll) => Percentages[Math.Clamp(modifiedRoll, -1, 23) + 1];
+    private static readonly int[] Percentages =
+    [
+        200,
+        175,
+        150,
+        135,
+        125,
+        120,
+        115,
+        110,
+        105,
+        100,
+        95,
+        90,
+        85,
+        80,
+        75,
+        70,
+        65,
+        60,
+        55,
+        50,
+        45,
+        40,
+        35,
+        30,
+        25,
+    ];
+
+    public static int Percentage(int modifiedRoll) =>
+        Percentages[Math.Clamp(modifiedRoll, -1, 23) + 1];
+
     public static TradePriceInfo Get(int d66) => Data[d66];
 
     // Keep both contributions visible even when they cancel; missing values stay blank.
     public static string FormatTradeModifiers(MarketLine line, bool selling)
     {
-        var modifiers = new[] { selling ? line.SaleDm : line.PurchaseDm,
-            selling ? -line.PurchaseDm : -line.SaleDm };
-        return string.Join("/", modifiers.Where(value => value.HasValue && value.Value != 0)
-            .Select(value => value!.Value).OrderByDescending(value => value)
-            .Select(value => value.ToString("+#;-#", System.Globalization.CultureInfo.InvariantCulture)));
+        var modifiers = new[]
+        {
+            selling ? line.SaleDm : line.PurchaseDm,
+            selling ? -line.PurchaseDm : -line.SaleDm,
+        };
+        return string.Join(
+            "/",
+            modifiers
+                .Where(value => value.HasValue && value.Value != 0)
+                .Select(value => value!.Value)
+                .OrderByDescending(value => value)
+                .Select(value =>
+                    value.ToString("+#;-#", System.Globalization.CultureInfo.InvariantCulture)
+                )
+        );
     }
-    private static readonly int[] SalePercentages = [30,40,45,50,55,60,65,70,75,80,85,90,100,105,110,115,120,125,130,135,140,145,150,155,160];
-    public static int SalePercentage(int modifiedRoll) => SalePercentages[Math.Clamp(modifiedRoll, -1, 23) + 1];
+
+    private static readonly int[] SalePercentages =
+    [
+        30,
+        40,
+        45,
+        50,
+        55,
+        60,
+        65,
+        70,
+        75,
+        80,
+        85,
+        90,
+        100,
+        105,
+        110,
+        115,
+        120,
+        125,
+        130,
+        135,
+        140,
+        145,
+        150,
+        155,
+        160,
+    ];
+
+    public static int SalePercentage(int modifiedRoll) =>
+        SalePercentages[Math.Clamp(modifiedRoll, -1, 23) + 1];
+
     private static HashSet<string> Codes(string? remarks)
     {
-        var codes = new HashSet<string>((remarks ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries), StringComparer.OrdinalIgnoreCase);
+        var codes = new HashSet<string>(
+            (remarks ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries),
+            StringComparer.OrdinalIgnoreCase
+        );
         return codes;
     }
+
     public static string WithZone(string? remarks, string? zone)
     {
         // Zone modifiers come only from the world's Zone field, never its remarks.
-        var codes = (remarks ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-            .Where(code => !code.Equals("AmberZone", StringComparison.OrdinalIgnoreCase)
-                && !code.Equals("RedZone", StringComparison.OrdinalIgnoreCase));
-        var zoneCode = zone?.Trim().ToUpperInvariant() switch {
-            "A" or "AMBER" or "AMBERZONE" => "AmberZone", "R" or "RED" or "REDZONE" => "RedZone", _ => null
+        var codes = (remarks ?? "")
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            .Where(code =>
+                !code.Equals("AmberZone", StringComparison.OrdinalIgnoreCase)
+                && !code.Equals("RedZone", StringComparison.OrdinalIgnoreCase)
+            );
+        var zoneCode = zone?.Trim().ToUpperInvariant() switch
+        {
+            "A" or "AMBER" or "AMBERZONE" => "AmberZone",
+            "R" or "RED" or "REDZONE" => "RedZone",
+            _ => null,
         };
         return string.Join(" ", zoneCode is null ? codes : codes.Append(zoneCode));
     }
+
     public static bool HasSaleDemand(int d66, string? remarks)
     {
         var codes = Codes(remarks);
         return MatchingModifier(Get(d66).SaleModifiers, codes) > 0;
     }
-    public static MarketLine SalePrice(MarketLine line, int skillDm, string? remarks, Func<int> d6, int buyerDm = 0)
+
+    public static MarketLine SalePrice(
+        MarketLine line,
+        int skillDm,
+        string? remarks,
+        Func<int> d6,
+        int buyerDm = 0
+    )
     {
         var info = Get(line.D66);
-        if (info.BasePrice is null) return line;
+        if (info.BasePrice is null)
+            return line;
         var codes = Codes(remarks);
         var roll = d6() + d6() + d6();
         var purchaseDm = MatchingModifier(info.PurchaseModifiers, codes);
         var saleDm = MatchingModifier(info.SaleModifiers, codes);
         var percent = SalePercentage(roll + skillDm + buyerDm + saleDm - purchaseDm);
-        return line with { BasePrice = info.BasePrice, PricePercent = percent, SalePrice = info.BasePrice.Value * percent / 100,
-            PriceRoll = roll, PurchaseDm = purchaseDm, SaleDm = saleDm };
+        return line with
+        {
+            BasePrice = info.BasePrice,
+            PricePercent = percent,
+            SalePrice = info.BasePrice.Value * percent / 100,
+            PriceRoll = roll,
+            PurchaseDm = purchaseDm,
+            SaleDm = saleDm,
+        };
     }
+
     private static int MatchingModifier(string modifiers, HashSet<string> codes)
     {
-        var matches = modifiers.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+        var matches = modifiers
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Select(item => item.Split(':', 2))
             .Where(pair => codes.Contains(pair[0]))
-            .Select(pair => int.Parse(pair[1], System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            .Select(pair => int.Parse(pair[1], System.Globalization.CultureInfo.InvariantCulture))
+            .ToArray();
         return matches.Length == 0 ? 0 : matches.Max();
     }
-    public static MarketLine Price(MarketLine line, int skillDm, string? remarks, Func<int> d6, int supplierDm = 0)
+
+    public static MarketLine Price(
+        MarketLine line,
+        int skillDm,
+        string? remarks,
+        Func<int> d6,
+        int supplierDm = 0
+    )
     {
         var info = Get(line.D66);
-        if (info.BasePrice is null) return line with { BasePrice = null, PricePercent = null, BuyPrice = null };
+        if (info.BasePrice is null)
+            return line with { BasePrice = null, PricePercent = null, BuyPrice = null };
         var codes = Codes(remarks);
         var roll = d6() + d6() + d6();
         var purchaseDm = MatchingModifier(info.PurchaseModifiers, codes);
         var saleDm = MatchingModifier(info.SaleModifiers, codes);
         var percent = Percentage(roll + skillDm + supplierDm + purchaseDm - saleDm);
-        return line with { BasePrice = info.BasePrice, PricePercent = percent,
-            BuyPrice = info.BasePrice.Value * percent / 100, PriceRoll = roll,
-            PurchaseDm = purchaseDm, SaleDm = saleDm };
+        return line with
+        {
+            BasePrice = info.BasePrice,
+            PricePercent = percent,
+            BuyPrice = info.BasePrice.Value * percent / 100,
+            PriceRoll = roll,
+            PurchaseDm = purchaseDm,
+            SaleDm = saleDm,
+        };
     }
 }

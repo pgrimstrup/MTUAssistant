@@ -5,7 +5,19 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-  <ItemGroup><ProjectReference Include="../MTU.Core/MTU.Core.csproj" /></ItemGroup>
-  <ItemGroup><Compile Include="../MTUAssistant/Services/TradingSelectionState.cs" Link="TradingSelectionState.cs" /></ItemGroup>
-  <ItemGroup><Compile Include="../MTUAssistant/Services/TileRefreshService.cs" Link="TileRefreshService.cs" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../MTU.Core/MTU.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile
+      Include="../MTUAssistant/Services/TradingSelectionState.cs"
+      Link="TradingSelectionState.cs"
+    />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile
+      Include="../MTUAssistant/Services/TileRefreshService.cs"
+      Link="TileRefreshService.cs"
+    />
+  </ItemGroup>
 </Project>

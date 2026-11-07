@@ -7,5 +7,11 @@ namespace MTU.Core.Data;
 public class MtuDbContextFactory : IDesignTimeDbContextFactory<MtuDbContext>
 {
     public MtuDbContext CreateDbContext(string[] args) =>
-        new(new DbContextOptionsBuilder<MtuDbContext>().UseSqlite(ServiceCollectionExtensions.ConnectionString(MtuDbContext.DefaultDatabasePath)).Options);
+        new(
+            new DbContextOptionsBuilder<MtuDbContext>()
+                .UseSqlite(
+                    ServiceCollectionExtensions.ConnectionString(MtuDbContext.DefaultDatabasePath)
+                )
+                .Options
+        );
 }

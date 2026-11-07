@@ -14,12 +14,13 @@ namespace MTU.Core.Data.Migrations
                 name: "TradeMarkets",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table
+                        .Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     SectorId = table.Column<int>(type: "INTEGER", nullable: false),
                     Hex = table.Column<string>(type: "TEXT", nullable: false),
                     Mode = table.Column<string>(type: "TEXT", nullable: false),
-                    ResultJson = table.Column<string>(type: "TEXT", nullable: false)
+                    ResultJson = table.Column<string>(type: "TEXT", nullable: false),
                 },
                 constraints: table =>
                 {
@@ -29,21 +30,23 @@ namespace MTU.Core.Data.Migrations
                         column: x => x.SectorId,
                         principalTable: "Sectors",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                        onDelete: ReferentialAction.Cascade
+                    );
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_TradeMarkets_SectorId_Hex_Mode",
                 table: "TradeMarkets",
                 columns: new[] { "SectorId", "Hex", "Mode" },
-                unique: true);
+                unique: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "TradeMarkets");
+            migrationBuilder.DropTable(name: "TradeMarkets");
         }
     }
 }

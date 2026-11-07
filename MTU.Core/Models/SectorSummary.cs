@@ -22,5 +22,3 @@ public class SectorName
     public string? Lang { get; set; }
     public string? Source { get; set; }
 }
-
-

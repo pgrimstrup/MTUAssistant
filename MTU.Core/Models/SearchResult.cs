@@ -1,6 +1,11 @@
 namespace MTU.Core.Models;
 
-public enum SearchResultKind { Sector, Subsector, System }
+public enum SearchResultKind
+{
+    Sector,
+    Subsector,
+    System,
+}
 
 /// <param name="Kind">What the result refers to.</param>
 /// <param name="DisplayText">Text shown in the search list, e.g. "Regina (Regina 1910)".</param>
@@ -14,4 +19,5 @@ public record SearchResult(
     int SectorId,
     int Id,
     string? SubsectorLetter = null,
-    string? Hex = null);
+    string? Hex = null
+);

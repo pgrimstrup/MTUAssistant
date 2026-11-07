@@ -14,7 +14,8 @@ namespace MTU.Core.Data.Migrations
                 name: "Travellers",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table
+                        .Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     CampaignId = table.Column<int>(type: "INTEGER", nullable: false),
                     PlayerName = table.Column<string>(type: "TEXT", nullable: false),
@@ -24,7 +25,7 @@ namespace MTU.Core.Data.Migrations
                     TermsServed = table.Column<int>(type: "INTEGER", nullable: false),
                     HighestNavalRank = table.Column<int>(type: "INTEGER", nullable: false),
                     HighestScoutRank = table.Column<int>(type: "INTEGER", nullable: false),
-                    NaturalDr = table.Column<int>(type: "INTEGER", nullable: false)
+                    NaturalDr = table.Column<int>(type: "INTEGER", nullable: false),
                 },
                 constraints: table =>
                 {
@@ -34,20 +35,22 @@ namespace MTU.Core.Data.Migrations
                         column: x => x.CampaignId,
                         principalTable: "Campaigns",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                        onDelete: ReferentialAction.Cascade
+                    );
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_Travellers_CampaignId_TravellerName",
                 table: "Travellers",
-                columns: new[] { "CampaignId", "TravellerName" });
+                columns: new[] { "CampaignId", "TravellerName" }
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "Travellers");
+            migrationBuilder.DropTable(name: "Travellers");
         }
     }
 }

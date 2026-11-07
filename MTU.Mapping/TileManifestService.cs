@@ -15,22 +15,30 @@ public sealed partial class TileManifestService(MappingOptions options) : ITileM
     public TileManifest GetManifest()
     {
         // key: "row,col" -> (file, scale -> count of files)
-        var sectors = new Dictionary<(int Row, int Col), (string File, Dictionary<int, int> Whole, Dictionary<int, int> Sub)>();
+        var sectors =
+            new Dictionary<
+                (int Row, int Col),
+                (string File, Dictionary<int, int> Whole, Dictionary<int, int> Sub)
+            >();
 
         foreach (var scale in AllScales)
         {
             var folder = Path.Combine(options.TileRoot, scale.ToString());
-            if (!Directory.Exists(folder)) continue;
+            if (!Directory.Exists(folder))
+                continue;
 
             foreach (var path in Directory.EnumerateFiles(folder, "*.png"))
             {
                 var m = TileName().Match(Path.GetFileName(path));
-                if (!m.Success) continue;
+                if (!m.Success)
+                    continue;
 
                 var row = char.ToUpperInvariant(m.Groups[1].Value[0]) - 'A';
                 var col = char.ToUpperInvariant(m.Groups[2].Value[0]) - 'A';
                 var isSub = m.Groups[4].Success;
-                var file = isSub ? $"{m.Groups[1].Value}{m.Groups[2].Value}_{m.Groups[3].Value}" : Path.GetFileNameWithoutExtension(path);
+                var file = isSub
+                    ? $"{m.Groups[1].Value}{m.Groups[2].Value}_{m.Groups[3].Value}"
+                    : Path.GetFileNameWithoutExtension(path);
 
                 if (!sectors.TryGetValue((row, col), out var entry))
                     sectors[(row, col)] = entry = (file, [], []);
@@ -52,14 +60,20 @@ public sealed partial class TileManifestService(MappingOptions options) : ITileM
         {
             manifest.Rows = Math.Max(manifest.Rows, row + 1);
             manifest.Columns = Math.Max(manifest.Columns, col + 1);
-            manifest.Sectors.Add(new SectorTiles
-            {
-                Row = row,
-                Col = col,
-                File = e.File,
-                SectorScales = e.Whole.Keys.Order().ToArray(),
-                SubsectorScales = e.Sub.Where(kv => kv.Value >= SubsectorsPerSector).Select(kv => kv.Key).Order().ToArray(),
-            });
+            manifest.Sectors.Add(
+                new SectorTiles
+                {
+                    Row = row,
+                    Col = col,
+                    File = e.File,
+                    SectorScales = e.Whole.Keys.Order().ToArray(),
+                    SubsectorScales = e
+                        .Sub.Where(kv => kv.Value >= SubsectorsPerSector)
+                        .Select(kv => kv.Key)
+                        .Order()
+                        .ToArray(),
+                }
+            );
         }
 
         return manifest;
