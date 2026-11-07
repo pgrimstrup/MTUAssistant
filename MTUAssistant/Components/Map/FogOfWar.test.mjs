@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {fogKey,fogCells,fogVisible,validFog,paintFog,fogRectangles,fogPublicState,fogStrokeMode} from '../../wwwroot/js/FogOfWar.js';
+import {fogKey,fogCells,fogVisible,validFog,paintFog,fogRectangles,fogPublicState,fogStrokeMode,stepFogBrush} from '../../wwwroot/js/FogOfWar.js';
 import {Battlemap} from '../../wwwroot/js/Battlemap.js';
 import {validBattlemapSnapshot} from '../../wwwroot/js/BattlemapPresentationSync.js';
 const revealed=new Set();
@@ -61,4 +61,15 @@ map.fogStroke={id:1,before:new Set(map.revealedFog),last:null,reveal:true};map.p
 assert.ok(map.revealedFog.has('0,1'),'Shift strokes clear fog');map.cancelFogStroke();
 map.readOnly=true;map.setFogBrush(9);assert.equal(map.fogBrush,1,'read-only maps ignore brush changes');
 map.readOnly=false;map.setFogBrush(9);assert.equal(map.fogBrush,9);map.setFogBrush(4);assert.equal(map.fogBrush,3,'invalid brush falls back to 3');
-console.log('Fog painting, interpolation, clipping, rectangle coverage, privacy, sync, cancellation, save rollback, undo, Shift/Ctrl stroke modes, brush and read-only guards passed.');
+assert.equal(stepFogBrush(1,1),3);assert.equal(stepFogBrush(5,1),9);assert.equal(stepFogBrush(9,1),9,'largest brush stays at 9');
+assert.equal(stepFogBrush(3,-1),1);assert.equal(stepFogBrush(1,-1),1,'smallest brush stays at 1');assert.equal(stepFogBrush(4,1),3);
+const brushUpdates=[];map.callback={invokeMethodAsync:async(name,size)=>{assert.equal(name,'FogBrushChanged');brushUpdates.push(size);}};
+map.fogBrush=3;map.fogWheelDelta=0;map.wheelFogBrush({deltaY:-100,deltaMode:0});assert.equal(map.fogBrush,5,'wheel up enlarges the brush');
+map.wheelFogBrush({deltaY:-100,deltaMode:0});map.wheelFogBrush({deltaY:-100,deltaMode:0});assert.equal(map.fogBrush,9);
+map.wheelFogBrush({deltaY:100,deltaMode:0});assert.equal(map.fogBrush,5,'wheel down shrinks the brush');
+map.wheelFogBrush({deltaY:20,deltaMode:0});assert.equal(map.fogBrush,5,'small trackpad deltas accumulate');map.wheelFogBrush({deltaY:40,deltaMode:0});assert.equal(map.fogBrush,3);
+map.wheelFogBrush({deltaY:0,deltaX:-100,deltaMode:0});assert.equal(map.fogBrush,5,'Shift+wheel horizontal deltas are used');
+map.wheelFogBrush({deltaY:3,deltaMode:1});assert.equal(map.fogBrush,3,'line-mode deltas are scaled');
+assert.deepEqual(brushUpdates,[5,9,5,3,5,3],'clamped steps are not reported');
+map.readOnly=true;map.wheelFogBrush({deltaY:-100,deltaMode:0});assert.equal(map.fogBrush,3);map.readOnly=false;
+console.log('Fog painting, interpolation, clipping, rectangle coverage, privacy, sync, cancellation, save rollback, undo, Shift/Ctrl stroke modes, brush, wheel brush sizing and read-only guards passed.');

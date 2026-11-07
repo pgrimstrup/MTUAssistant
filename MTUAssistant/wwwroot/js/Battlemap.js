@@ -1,4 +1,4 @@
-import { fogKey, fogCells, fogVisible, paintFog, fogRectangles, fogPublicState, fogStrokeMode } from './FogOfWar.js';
+import { fogKey, fogCells, fogVisible, paintFog, fogRectangles, fogPublicState, fogStrokeMode, fogBrushSizes, stepFogBrush } from './FogOfWar.js';
 import { DescriptionDialog, playerDescription } from './CombatDescription.js';
 import { automaticMoveRange } from './AutomaticMovement.js';
 import { movementGeometry, weaponRangeBand } from './MovementIndicators.js';
@@ -251,7 +251,10 @@ export class Battlemap {
             })());
         };
         this.wheel = event => {
-            event.preventDefault(); if (this.readOnly) return; const bounds = this.host.getBoundingClientRect();
+            event.preventDefault(); if (this.readOnly) return;
+            if (!this.placement && this.revealedFog != null && fogStrokeMode(event)) { this.wheelFogBrush(event); return; }
+            this.fogWheelDelta = 0;
+            const bounds = this.host.getBoundingClientRect();
             this.zoom(Math.exp(-event.deltaY * .0015), { x:event.clientX-bounds.left, y:event.clientY-bounds.top });
         };
         this.contextMenu = event => { if (this.targetingContext && !this.readOnly) event.preventDefault(); };
@@ -489,7 +492,22 @@ export class Battlemap {
     }
     setFogBrush(brush) {
         if(this.readOnly) return;
-        this.fogBrush=[1,3,5,9].includes(brush) ? brush : 3;
+        this.fogBrush=fogBrushSizes.includes(brush) ? brush : 3;
+    }
+    // Shift/Ctrl+wheel steps through the brush sizes. Deltas accumulate so trackpads don't skip sizes.
+    wheelFogBrush(event) {
+        if(this.readOnly) return;
+        const delta=(event.deltaY || event.deltaX) * (event.deltaMode === 1 ? 33 : event.deltaMode === 2 ? 100 : 1);
+        if(!delta) return;
+        if(Math.sign(delta) !== Math.sign(this.fogWheelDelta || delta)) this.fogWheelDelta=0;
+        this.fogWheelDelta=(this.fogWheelDelta || 0)+delta;
+        if(Math.abs(this.fogWheelDelta)<50) return;
+        const size=stepFogBrush(this.fogBrush,this.fogWheelDelta<0 ? 1 : -1);
+        this.fogWheelDelta=0;
+        if(size === this.fogBrush) return;
+        this.fogBrush=size;
+        this.callback?.invokeMethodAsync('FogBrushChanged',size)
+            .catch(error => { if(!this.disposed) console.warn('Unable to update the fog brush.',error); });
     }
     updateCursor(event) {
         if (this.readOnly || this.disposed || this.dragging || this.fogStroke || this.targetDrag) return;

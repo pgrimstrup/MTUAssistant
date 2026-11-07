@@ -23,7 +23,7 @@
                 <label>Width (px)<input class="form-control grid-number" type="number" min="0.25" max="@scene.GridSize" step="0.25" @bind="gridWidth" @bind:after="SaveGrid" disabled="@(map is null || busy)" /></label>
                 <label>Opacity (%)<input class="form-control grid-number" type="number" min="0" max="100" @bind="gridOpacity" @bind:after="SaveGrid" disabled="@(map is null || busy)" /></label>
                 }
-                <label title="Fog brush size in squares. Shift+drag clears fog; Ctrl+drag adds fog.">Fog brush<select class="form-select" @bind="fogBrush" @bind:after="SetFogBrush" disabled="@(map is null)"><option value="1">1</option><option value="3">3</option><option value="5">5</option><option value="9">9</option></select></label>
+                <label title="Fog brush size in squares. Shift+drag clears fog; Ctrl+drag adds fog. Shift/Ctrl+wheel changes the size.">Fog brush<select class="form-select" @bind="fogBrush" @bind:after="SetFogBrush" disabled="@(map is null)"><option value="1">1</option><option value="3">3</option><option value="5">5</option><option value="9">9</option></select></label>
                 <button class="btn btn-outline-secondary" @onclick="UndoFog" disabled="@(map is null || busy)">Undo fog</button>
                 <button class="btn btn-outline-secondary" aria-label="Zoom in" title="Zoom in" @onclick='() => Command("zoomIn")' disabled="@(map is null)">+</button>
                 <button class="btn btn-outline-secondary" aria-label="Zoom out" title="Zoom out" @onclick='() => Command("zoomOut")' disabled="@(map is null)">−</button>

@@ -13,6 +13,13 @@ export function fogStrokeMode(event) {
     if (!event || Boolean(event.shiftKey) === Boolean(event.ctrlKey)) return null;
     return event.shiftKey ? 'clear' : 'set';
 }
+export const fogBrushSizes = [1,3,5,9];
+// Move one size up (direction > 0) or down, staying within the dropdown's sizes.
+export function stepFogBrush(size,direction) {
+    const index = fogBrushSizes.indexOf(size);
+    if (index < 0) return 3;
+    return fogBrushSizes[Math.min(fogBrushSizes.length-1,Math.max(0,index+Math.sign(direction)))];
+}
 // Interpolate in cell space so fast pointer motion cannot leave gaps.
 export function paintFog(keys,from,to,size,reveal,columns,rows) {
     const steps = Math.max(Math.abs(to.column-from.column),Math.abs(to.row-from.row),1);
