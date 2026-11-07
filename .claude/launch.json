@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "MTUAssistant",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "MTUAssistant/MTUAssistant.csproj", "--launch-profile", "http"],
+      "port": 5096
+    }
+  ]
+}
