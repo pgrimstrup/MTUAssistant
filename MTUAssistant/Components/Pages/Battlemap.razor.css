@@ -6,7 +6,7 @@ h1 { font-size:1.4rem; margin:0; } .muted { color:var(--app-muted); font-size:.7
 .controls .grid-number { width:4.6rem; padding:.35rem .4rem; font-size:.8rem; }
 .controls .form-select { height:34px; width:auto; padding:.3rem 1.8rem .3rem .5rem; font-size:.8rem; line-height:1.25; background-position:right .5rem center; }
 .controls .btn { min-height:34px; padding:.3rem .6rem; font-size:.8rem; }
-.present-link { display:flex; align-items:center; justify-content:center; } .present-link svg { width:20px; height:20px; fill:currentColor; }
+.present-link, .fog-toggle { display:flex; align-items:center; justify-content:center; } .present-link svg, .fog-toggle svg { width:20px; height:20px; fill:currentColor; }
 .battlemap-workspace { display:grid; grid-template-columns:17.5rem minmax(0,1fr) 24rem; gap:.6rem; height:calc(100dvh - 10rem); min-height:360px; }
 .map-column { position:relative; display:flex; flex-direction:column; min-width:0; min-height:0; }
 .battlemap-host { flex:1; min-height:0; position:relative; overflow:hidden; background:#080c14; border:1px solid var(--app-border); border-radius:.5rem; touch-action:none; cursor:grab; }

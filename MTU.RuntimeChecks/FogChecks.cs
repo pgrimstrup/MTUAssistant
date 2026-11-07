@@ -38,6 +38,9 @@ public static class FogChecks
             SceneImageChecks.Png(250, 180)
         );
         Check((await scenes.LoadFogAsync(1, scene.Id)).Count == 0, "New scenes start covered");
+        Check(!await scenes.FogEnabledAsync(1, scene.Id), "Fog is off by default");
+        await scenes.SetFogEnabledAsync(1, scene.Id, true);
+        Check(await scenes.FogEnabledAsync(1, scene.Id), "Fog setting persists");
         await scenes.SaveFogAsync(
             1,
             scene.Id,
@@ -93,6 +96,24 @@ public static class FogChecks
             "Stale grid rejected"
         );
         Check((await scenes.LoadFogAsync(1, scene.Id)).Count == 2, "Invalid saves preserve fog");
+        await Reject(
+            () => scenes.SetFogEnabledAsync(2, scene.Id, false),
+            "Fog setting respects campaigns"
+        );
+        await Reject(
+            async () =>
+            {
+                await scenes.FogEnabledAsync(2, scene.Id);
+            },
+            "Fog setting reads respect campaigns"
+        );
+        await scenes.SetFogEnabledAsync(1, scene.Id, false);
+        Check(!await scenes.FogEnabledAsync(1, scene.Id), "Fog can be turned off");
+        Check(
+            (await scenes.LoadFogAsync(1, scene.Id)).Count == 2,
+            "Turning fog off keeps the painted fog"
+        );
+        await scenes.SetFogEnabledAsync(1, scene.Id, true);
         await scenes.SaveGridAsync(1, scene.Id, "#ffffff", 1, 20, 100);
         Check((await scenes.LoadFogAsync(1, scene.Id)).Count == 2, "Grid styling preserves fog");
         await scenes.SaveGridAsync(1, scene.Id, "#ffffff", 1, 20, 50);
@@ -112,8 +133,9 @@ public static class FogChecks
             (await scenes.LoadFogAsync(1, scene.Id)).Count == 0,
             "Replacement backgrounds reset fog"
         );
+        Check(await scenes.FogEnabledAsync(1, scene.Id), "Scene edits keep the fog setting");
         Console.WriteLine(
-            "Fog migration, covered defaults, persistence, bounds, campaign isolation, stale saves and grid/image resets passed."
+            "Fog migration, covered defaults, on/off setting, persistence, bounds, campaign isolation, stale saves and grid/image resets passed."
         );
     }
 }

@@ -525,6 +525,8 @@ namespace MTU.Core.Data.Migrations
 
                     b.Property<string>("EncounterState").HasColumnType("TEXT");
 
+                    b.Property<bool>("FogEnabled").HasColumnType("INTEGER");
+
                     b.Property<string>("FogState").HasColumnType("TEXT");
 
                     b.Property<string>("GridColour").IsRequired().HasColumnType("TEXT");

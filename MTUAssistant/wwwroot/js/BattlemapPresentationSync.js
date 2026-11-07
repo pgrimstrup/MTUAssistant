@@ -35,6 +35,19 @@ function validPlayerCombatant(e) {
             ([e.originalStrength,e.originalDexterity,e.originalEndurance].every(v => Number.isInteger(v) && v >= 0)
                 && e.currentStrength <= e.originalStrength && e.currentDexterity <= e.originalDexterity && e.currentEndurance <= e.originalEndurance));
 }
+// The GM's measurement is shared only when both ends are on squares the players can see.
+export function playerMeasure(measure,revealedFog) {
+    if (!measure?.origin || !measure?.target) return null;
+    const {origin,target} = measure;
+    return fogVisible(revealedFog,origin.column,origin.row) && fogVisible(revealedFog,target.column,target.row)
+        ? {fromColumn:origin.column,fromRow:origin.row,toColumn:target.column,toRow:target.row} : null;
+}
+function validMeasure(m,revealed,scene,view) {
+    return [m.fromColumn,m.fromRow,m.toColumn,m.toRow].every(v => Number.isInteger(v) && v >= 0)
+        && m.fromColumn*scene.gridSize < view.imageWidth && m.toColumn*scene.gridSize < view.imageWidth
+        && m.fromRow*scene.gridSize < view.imageHeight && m.toRow*scene.gridSize < view.imageHeight
+        && fogVisible(revealed,m.fromColumn,m.fromRow) && fogVisible(revealed,m.toColumn,m.toRow);
+}
 export function playerMovementRanges(ranges) {
     return ranges.filter(r => r.isVisible === true).map(r => ({id:r.id,column:r.column,row:r.row,diameter:r.diameter,colour:r.colour,isVisible:true}));
 }
@@ -84,6 +97,7 @@ export function validBattlemapSnapshot(state) {
             && state.tokens.some(t => t.id === state.targetSelection.actorId && t.isVisible === true)
             && state.tokens.some(t => t.id === state.targetSelection.targetId && t.isVisible === true)))
         && (state.fog == null || state.fog.every(c=>c.column*scene.gridSize < view.imageWidth && c.row*scene.gridSize < view.imageHeight))
+        && (state.measure == null || validMeasure(state.measure,revealed,scene,view))
         && state.tokens.every(t => fogVisible(revealed,t.column,t.row) && Number.isInteger(t.id) && t.id > 0
             && Number.isInteger(t.characterId) && t.characterId > 0 && t.isVisible === true
             && (t.isUnconscious === undefined || typeof t.isUnconscious === 'boolean')

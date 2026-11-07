@@ -7,6 +7,33 @@ namespace MTUAssistant.Components.Pages;
 public partial class Battlemap
 {
     private int fogBrush = 3;
+    private bool fogEnabled;
+
+    private async Task ToggleFog()
+    {
+        if (map is null || busy || BattlemapState.Current is not { } scene)
+            return;
+        busy = true;
+        try
+        {
+            var enabled = !fogEnabled;
+            await ScenesStore.SetFogEnabledAsync(scene.CampaignId, scene.Id, enabled);
+            fogEnabled = enabled;
+            var cells = enabled ? await ScenesStore.LoadFogAsync(scene.CampaignId, scene.Id) : null;
+            await map.InvokeVoidAsync("setFogEnabled", cells);
+            error = null;
+        }
+        catch (JSDisconnectedException) { }
+        catch (Exception ex)
+        {
+            error =
+                ex is ArgumentException ? ex.Message : "Unable to change fog. Please try again.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
 
     private async Task SetFogBrush()
     {

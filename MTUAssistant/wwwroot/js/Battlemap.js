@@ -1,10 +1,10 @@
 import { fogKey, fogCells, fogVisible, paintFog, fogRectangles, fogPublicState, fogStrokeMode, fogBrushSizes, stepFogBrush } from './FogOfWar.js';
 import { DescriptionDialog, playerDescription } from './CombatDescription.js';
 import { automaticMoveRange } from './AutomaticMovement.js';
-import { movementGeometry, weaponRangeBand } from './MovementIndicators.js';
+import { movementGeometry, weaponRangeBand, measureGeometry, measureLabel, measureCell } from './MovementIndicators.js';
 import { attachCastWindow } from './CastWindow.js';
 import { presentationSession } from './PresentationSync.js';
-import { connectBattlemapPresentation, playerTokens, playerCombatants, playerMovementRanges, playerMovementTrails, playerTargetSelection } from './BattlemapPresentationSync.js';
+import { connectBattlemapPresentation, playerMeasure, playerTokens, playerCombatants, playerMovementRanges, playerMovementTrails, playerTargetSelection } from './BattlemapPresentationSync.js';
 export function fitView(width, height, imageWidth, imageHeight) {
     const scale = Math.min(width / imageWidth, height / imageHeight);
     return { x: (width - imageWidth * scale) / 2, y: (height - imageHeight * scale) / 2, scale };
@@ -104,8 +104,14 @@ export class Battlemap {
         this.movementOverlay = new PIXI.Container();
         this.movementStroke = new PIXI.Graphics(); this.movementOverlay.addChild(this.movementStroke);
         this.targetRingGraphics = new PIXI.Graphics();
+        this.measureOverlay = new PIXI.Container();
+        this.measureGraphics = new PIXI.Graphics();
+        this.measureLabelBackground = new PIXI.Graphics();
+        this.measureLabelText = new PIXI.Text({text:'',style:{fontFamily:'Arial',fontSize:14,fontWeight:'bold',fill:0xffffff}});
+        this.measureLabel = new PIXI.Container(); this.measureLabel.addChild(this.measureLabelBackground,this.measureLabelText); this.measureLabel.visible = false;
+        this.measureOverlay.addChild(this.measureGraphics,this.measureLabel);
         this.world.addChild(this.background);
-        this.app.stage.addChild(this.world, this.grid, this.rangeGraphics, this.movementOverlay, this.targetRingGraphics, this.tokens, this.fog);
+        this.app.stage.addChild(this.world, this.grid, this.rangeGraphics, this.movementOverlay, this.targetRingGraphics, this.tokens, this.fog, this.measureOverlay);
         this.placementPreview = new PIXI.Graphics();
         this.tokens.addChild(this.placementPreview);
         this.tiles = new Map();
@@ -133,7 +139,7 @@ export class Battlemap {
         };
         this.app.ticker.add(this.animateTurn);
         this.down = event => {
-            if (this.readOnly || this.dragging || this.targetDrag || this.fogStroke || this.fogSaving) return;
+            if (this.readOnly || this.dragging || this.targetDrag || this.measure || this.fogStroke || this.fogSaving) return;
             // Shift-drag clears fog and Ctrl-drag sets it; the mode is fixed when the stroke starts.
             const fogMode = event.button === 0 && !this.placement && this.revealedFog != null ? fogStrokeMode(event) : null;
             if (fogMode) {
@@ -144,7 +150,8 @@ export class Battlemap {
                 this.host.setPointerCapture(event.pointerId); this.paintFogAt(event); return;
             }
             if (event.button === 2) {
-                if (!this.targetingContext || this.placement || this.targetSavePending) return;
+                // Combatant targeting takes priority; otherwise right-drag measures.
+                if (!this.targetingContext || this.placement || this.targetSavePending) { this.beginMeasure(event); return; }
                 event.preventDefault(); this.cancelPan();
                 this.targetDrag = {id:event.pointerId,context:this.targetingContext};
                 this.host.setPointerCapture(event.pointerId); this.previewTarget(event); return;
@@ -180,6 +187,7 @@ export class Battlemap {
             const point = this.pointerWorld(event);
             if (this.fogStroke) { if(this.fogStroke.id === event.pointerId) this.paintFogAt(event); return; }
             if (this.targetDrag) { if (this.targetDrag.id === event.pointerId) this.previewTarget(event); return; }
+            if (this.measure) { if (this.measure.id === event.pointerId) this.updateMeasure(event); return; }
             if (!this.dragging) {
                 const token = this.hitToken(point);
                 this.host.title = token?.name ?? '';
@@ -200,6 +208,7 @@ export class Battlemap {
             this.dragging.x = event.clientX; this.dragging.y = event.clientY; this.apply();
         };
         this.up = event => {
+            if (this.measure?.id === event.pointerId) { this.cancelMeasure(); return; }
             if (this.fogStroke?.id === event.pointerId) {
                 if(event.type === 'pointerup' && event.button === 0) {
                     this.paintFogAt(event);
@@ -257,9 +266,10 @@ export class Battlemap {
             const bounds = this.host.getBoundingClientRect();
             this.zoom(Math.exp(-event.deltaY * .0015), { x:event.clientX-bounds.left, y:event.clientY-bounds.top });
         };
-        this.contextMenu = event => { if (this.targetingContext && !this.readOnly) event.preventDefault(); };
+        // Right-drag targets or measures, so the browser menu never opens over the GM map.
+        this.contextMenu = event => { if (!this.readOnly) event.preventDefault(); };
         this.host.addEventListener('contextmenu',this.contextMenu);
-        this.pointerLeave = () => { this.cancelFogStroke(); this.cancelTargetDrag(); this.pointerPosition = null; this.publishPresentationPointer(); };
+        this.pointerLeave = () => { this.cancelFogStroke(); this.cancelTargetDrag(); this.cancelMeasure(); this.pointerPosition = null; this.publishPresentationPointer(); };
         this.visibilityChange = () => { if (document.hidden) this.pointerLeave(); };
         this.modifierKey = event => { if (this.pointerPosition) this.updateCursor(event); };
         globalThis.addEventListener('keydown',this.modifierKey);
@@ -514,6 +524,15 @@ export class Battlemap {
         const fog = !this.placement && this.revealedFog != null && fogStrokeMode(event) != null;
         this.host.style.cursor = fog || this.placement ? 'crosshair' : this.hoverToken ? 'move' : 'grab';
     }
+    // Turns fog on (with the saved revealed cells) or off (null) in the GM view and the player snapshot.
+    setFogEnabled(cells) {
+        if(this.readOnly || this.disposed) return;
+        this.cancelFogStroke();
+        this.fogEpoch=(this.fogEpoch ?? 0)+1;
+        this.revealedFog=cells == null ? null : new Set(cells.map(c=>fogKey(c.column,c.row)));
+        this.fogHistory=[]; this.fogWheelDelta=0;
+        this.drawFog(); this.publishPresentation(); this.publishPresentationPointer();
+    }
     setFog(cells) {
         this.revealedFog=cells == null ? null : new Set(cells.map(c=>fogKey(c.column,c.row)));
         this.drawFog(); this.drawPresentationPointer();
@@ -540,11 +559,14 @@ export class Battlemap {
         if(this.revealedFog.size === before.size && [...before].every(key=>this.revealedFog.has(key)))return;
         this.fogSaving=true;
         let saved=false;
+        const epoch=this.fogEpoch ?? 0;
         try {
             saved=await this.callback.invokeMethodAsync('SaveFog',this.scene.campaignId,this.scene.id,this.scene.revision,this.scene.gridSize,DotNet.createJSStreamReference(new TextEncoder().encode(JSON.stringify(fogCells(this.revealedFog)))));
         } catch(error) { if(!this.disposed) console.warn('Unable to save fog.',error); }
         finally {
-            if(!saved) this.revealedFog=before;
+            // Fog was switched off or reloaded while saving; keep the newer state.
+            if(epoch !== (this.fogEpoch ?? 0)) {}
+            else if(!saved) this.revealedFog=before;
             else if(undo) this.fogHistory.pop();
             else { this.fogHistory.push(before); if(this.fogHistory.length>20)this.fogHistory.shift(); }
             this.fogSaving=false;
@@ -564,6 +586,52 @@ export class Battlemap {
         for(const rect of fogRectangles(this.revealedFog,this.imageWidth,this.imageHeight,this.scene.gridSize))
             graphics.rect(rect.x,rect.y,rect.width,rect.height);
         graphics.fill({color:0x000000,alpha:this.readOnly ? 1 : .55});
+    }
+    beginMeasure(event) {
+        if (this.readOnly || this.disposed || this.placement || !this.view) return false;
+        const point = this.pointerWorld(event);
+        if (point.x < 0 || point.y < 0 || point.x >= this.imageWidth || point.y >= this.imageHeight) return false;
+        event.preventDefault?.(); this.cancelPan?.();
+        const cell = measureCell(point,this.scene.gridSize,this.imageWidth,this.imageHeight);
+        this.measure = {id:event.pointerId,origin:cell,target:cell};
+        this.host.setPointerCapture?.(event.pointerId);
+        this.drawMeasure(); this.publishPresentation(); return true;
+    }
+    updateMeasure(event) {
+        const measure = this.measure; if (!measure) return;
+        const target = measureCell(this.pointerWorld(event),this.scene.gridSize,this.imageWidth,this.imageHeight);
+        if (target.column === measure.target.column && target.row === measure.target.row) return;
+        measure.target = target; this.drawMeasure(); this.publishPresentation();
+    }
+    cancelMeasure() {
+        const measure = this.measure; if (!measure) return;
+        this.measure = null;
+        if (measure.id != null && this.host.hasPointerCapture?.(measure.id)) this.host.releasePointerCapture(measure.id);
+        this.drawMeasure(); this.publishPresentation();
+    }
+    // Presentation maps show the GM's measurement as sent in the player snapshot.
+    setMeasure(measure) {
+        this.measure = measure == null ? null : {origin:{column:measure.fromColumn,row:measure.fromRow},target:{column:measure.toColumn,row:measure.toRow}};
+        this.drawMeasure();
+    }
+    measureGeometry() {
+        return this.measure && this.view ? measureGeometry(this.measure.origin,this.measure.target,this.scene.gridSize,this.view) : null;
+    }
+    drawMeasure() {
+        const graphics = this.measureGraphics;
+        if (!graphics) return;
+        graphics.clear();
+        const geometry = this.measureGeometry();
+        this.measureLabel.visible = geometry != null;
+        if (!geometry) return;
+        const {start,end,midpoint,distance} = geometry;
+        graphics.moveTo(start.x,start.y).lineTo(end.x,end.y).stroke({color:0xffffff,width:2});
+        graphics.circle(start.x,start.y,4).fill({color:0xffffff});
+        this.measureLabelText.text = measureLabel(distance);
+        const width = this.measureLabelText.width+10, height = this.measureLabelText.height+6;
+        this.measureLabelText.position.set(5,3);
+        this.measureLabelBackground.clear().rect(0,0,width,height).fill({color:0x000000,alpha:.75});
+        this.measureLabel.position.set(midpoint.x-width/2,midpoint.y-height/2);
     }
     cancelTargetDrag() {
         const drag = this.targetDrag; this.targetDrag = null;
@@ -803,7 +871,7 @@ export class Battlemap {
         const visible=fogPublicState(this);
         this.presentation.publish({fog:this.revealedFog == null ? null : fogCells(this.revealedFog),description:playerDescription(visible.description),combatMode:this.combatMode === true,round:this.combatRound ?? 0,
             actionSummary:this.combatMode && visible.tracker.some(e=>e.id === visible.summary?.id && e.isVisible === true) ? visible.summary : null,
-            tracker:visible.tracker,movementRanges:playerMovementRanges(visible.ranges),
+            tracker:visible.tracker,movementRanges:playerMovementRanges(visible.ranges),measure:playerMeasure(this.measure,this.revealedFog),
             movementTrails:playerMovementTrails(visible.trails,visible.tokens),
             targetSelection:this.combatMode ? playerTargetSelection(this.targetActorId,this.targetIds ?? this.targetId,visible.tokens,this.targetRange) : null,
             scene:this.scene,tokens:playerTokens(visible.tokens),
@@ -839,7 +907,7 @@ export class Battlemap {
     draw() {
         const {x,y,scale} = this.view;
         this.drawMovementRanges();
-        this.drawMovementIndicators(); this.drawTargetRing();
+        this.drawMovementIndicators(); this.drawTargetRing(); this.drawMeasure();
         this.world.position.set(x,y); this.world.scale.set(scale);
         for (const token of this.characterTokens.values()) this.decorateToken(token);
         this.tokens?.position.set(x,y); this.tokens?.scale.set(scale);
@@ -906,7 +974,7 @@ export class Battlemap {
         this.apply(); this.disposed = true; this.resizeObserver?.disconnect();
         for (const [name, handler] of [['contextmenu',this.contextMenu],['dblclick',this.doubleClick],['pointerdown',this.down],['pointermove',this.move],['pointerup',this.up],['pointercancel',this.up],['lostpointercapture',this.up],['wheel',this.wheel]])
             if (handler) this.host.removeEventListener(name, handler);
-        this.cancelFogStroke(); this.cancelTargetDrag();
+        this.cancelFogStroke(); this.cancelTargetDrag(); this.cancelMeasure();
         if(this.dragging && this.host.hasPointerCapture(this.dragging.id)) this.host.releasePointerCapture(this.dragging.id);
         this.dragging=null;
         for (const token of this.characterTokens.values()) { token.texture?.destroy(true); token.fallbackTexture?.destroy(true); token.filter?.destroy(); }

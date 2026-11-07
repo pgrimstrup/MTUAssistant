@@ -45,14 +45,18 @@ public static class InstanceNameChecks
         db.Animals.Add(new AnimalEntity { CharacterId = beast.Id, Hits = 10 });
         await db.SaveChangesAsync();
         var store = scope.ServiceProvider.GetRequiredService<SceneService>();
-        var scene = await store.SaveAsync(
-            new SceneInput { CampaignId = 1, Name = "Names" },
-            SceneImageChecks.Png(500, 500)
-        );
-        var otherScene = await store.SaveAsync(
-            new SceneInput { CampaignId = 1, Name = "Other" },
-            SceneImageChecks.Png(500, 500)
-        );
+        // Insert with SQL: the database is still at the SceneFog schema, so the current model can't save scenes.
+        async Task<int> LegacySceneAsync(string name)
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO Scenes (CampaignId, Name, Image, ContentType, GridSize, GridColour, GridOpacity, GridlineWidth, Revision) VALUES (1, {name}, {SceneImageChecks.Png(500, 500)}, {"image/png"}, 100, {"#000000"}, 50, 2, 1)"
+            );
+            return await db
+                .Database.SqlQuery<int>($"SELECT Id AS Value FROM Scenes WHERE Name = {name}")
+                .SingleAsync();
+        }
+        var scene = new { Id = await LegacySceneAsync("Names") };
+        var otherScene = new { Id = await LegacySceneAsync("Other") };
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"INSERT INTO SceneTokens (SceneId, CharacterId, Name, InstanceNumber, IsVisible, \"Column\", \"Row\") VALUES ({scene.Id}, {guard.Id}, {"Guard 1"}, 1, 1, 0, 0)"
         );

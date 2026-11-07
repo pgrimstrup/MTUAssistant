@@ -51,6 +51,7 @@ class PresentedBattlemap {
                 this.map.setMovementRanges(state.movementRanges ?? []);
                 this.map.setMovementTrails(state.movementTrails ?? []);
                 this.map.setTargetSelection(state.targetSelection ?? null);
+                this.map.setMeasure(state.measure ?? null);
                 this.map.view=restoreView(state.view,this.map.width,this.map.height,this.map.imageWidth,this.map.imageHeight) ?? this.map.view;
                 this.map.setPresentedPointer(this.pointer ?? null);
                 this.map.apply(); this.status.textContent=state.scene.name;

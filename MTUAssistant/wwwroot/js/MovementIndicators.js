@@ -1,3 +1,13 @@
+// Measure between square centres (origin and target are {column,row}). Squares are 1.5 m.
+export function measureGeometry(origin,target,gridSize,view) {
+    return movementGeometry({fromColumn:origin.column,fromRow:origin.row,toColumn:target.column,toRow:target.row},gridSize,view);
+}
+// The square under a world point, clamped to the image so dragging off the map stops at its edge.
+export function measureCell(point,gridSize,imageWidth,imageHeight) {
+    const clamp=(value,size)=>Math.min(Math.max(0,Math.floor(value/gridSize)),Math.max(0,Math.ceil(size/gridSize)-1));
+    return {column:clamp(point.x,imageWidth),row:clamp(point.y,imageHeight)};
+}
+export const measureLabel = distance => `${distance.toFixed(1)} m`;
 export function movementGeometry(trail,gridSize,view) {
     const start={x:view.x+(trail.fromColumn+.5)*gridSize*view.scale,y:view.y+(trail.fromRow+.5)*gridSize*view.scale};
     const end={x:view.x+(trail.toColumn+.5)*gridSize*view.scale,y:view.y+(trail.toRow+.5)*gridSize*view.scale};

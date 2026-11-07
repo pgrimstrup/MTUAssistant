@@ -72,4 +72,12 @@ map.wheelFogBrush({deltaY:0,deltaX:-100,deltaMode:0});assert.equal(map.fogBrush,
 map.wheelFogBrush({deltaY:3,deltaMode:1});assert.equal(map.fogBrush,3,'line-mode deltas are scaled');
 assert.deepEqual(brushUpdates,[5,9,5,3,5,3],'clamped steps are not reported');
 map.readOnly=true;map.wheelFogBrush({deltaY:-100,deltaMode:0});assert.equal(map.fogBrush,3);map.readOnly=false;
-console.log('Fog painting, interpolation, clipping, rectangle coverage, privacy, sync, cancellation, save rollback, undo, Shift/Ctrl stroke modes, brush, wheel brush sizing and read-only guards passed.');
+map.fogStroke=null;map.fogSaving=false;map.revealedFog=new Set(['0,0']);map.fogHistory=[new Set()];map.description=null;
+map.setFogEnabled(null);assert.equal(map.revealedFog,null);assert.equal(map.fogHistory.length,0,'turning fog off clears undo');
+assert.equal(published.fog,null,'players see no fog when it is off');assert.equal(published.tokens.length,2,'all visible tokens show without fog');assert.ok(validBattlemapSnapshot(published));
+map.setFogEnabled([{column:0,row:0}]);assert.deepEqual([...map.revealedFog],['0,0']);assert.equal(published.fog.length,1);assert.equal(published.tokens.length,1,'fog hides covered tokens again');
+let finishSave;map.callback={invokeMethodAsync:()=>new Promise(resolve=>finishSave=resolve)};
+map.revealedFog.add('1,0');const pending=map.saveFogEdit(new Set(['0,0']));map.setFogEnabled(null);finishSave(false);await pending;
+assert.equal(map.revealedFog,null,'a save finishing after fog is turned off does not bring fog back');
+map.readOnly=true;map.setFogEnabled([]);assert.equal(map.revealedFog,null,'read-only maps ignore the fog switch');map.readOnly=false;
+console.log('Fog painting, interpolation, clipping, rectangle coverage, privacy, sync, cancellation, save rollback, undo, Shift/Ctrl stroke modes, brush, wheel brush sizing, fog on/off and read-only guards passed.');
