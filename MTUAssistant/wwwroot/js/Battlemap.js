@@ -1,4 +1,4 @@
-import { fogKey, fogCells, fogVisible, paintFog, fogRectangles, fogPublicState } from './FogOfWar.js';
+import { fogKey, fogCells, fogVisible, paintFog, fogRectangles, fogPublicState, fogStrokeMode } from './FogOfWar.js';
 import { DescriptionDialog, playerDescription } from './CombatDescription.js';
 import { automaticMoveRange } from './AutomaticMovement.js';
 import { movementGeometry, weaponRangeBand } from './MovementIndicators.js';
@@ -51,7 +51,7 @@ export async function createBattlemap(host, url, scene, key, tokens = [], callba
     const map = new Battlemap(host, scene, key);
     map.callback = callback; map.readOnly = !!options.readOnly;
     map.revealedFog = options.fog == null ? null : new Set(options.fog.map(c=>fogKey(c.column,c.row)));
-    map.fogHistory = []; map.fogMode = 'Navigate'; map.fogBrush = 3;
+    map.fogHistory = []; map.fogBrush = 3;
     try { await map.start(url); await Promise.all(tokens.filter(t => t.column != null && t.row != null).map(token => map.upsertToken(token))); if (presentationLink) map.attachPresentation(presentationLink); return map; }
     catch (error) { await map.dispose(); throw error; }
 }
@@ -134,11 +134,13 @@ export class Battlemap {
         this.app.ticker.add(this.animateTurn);
         this.down = event => {
             if (this.readOnly || this.dragging || this.targetDrag || this.fogStroke || this.fogSaving) return;
-            if (event.button === 0 && this.fogMode !== 'Navigate' && this.revealedFog != null) {
+            // Shift-drag clears fog and Ctrl-drag sets it; the mode is fixed when the stroke starts.
+            const fogMode = event.button === 0 && !this.placement && this.revealedFog != null ? fogStrokeMode(event) : null;
+            if (fogMode) {
                 const point=this.pointerWorld(event);
                 if (!this.fogPointInside(point)) return;
                 event.preventDefault(); this.cancelPan();
-                this.fogStroke={id:event.pointerId,before:new Set(this.revealedFog),last:null};
+                this.fogStroke={id:event.pointerId,before:new Set(this.revealedFog),last:null,reveal:fogMode === 'clear'};
                 this.host.setPointerCapture(event.pointerId); this.paintFogAt(event); return;
             }
             if (event.button === 2) {
@@ -181,7 +183,7 @@ export class Battlemap {
             if (!this.dragging) {
                 const token = this.hitToken(point);
                 this.host.title = token?.name ?? '';
-                this.host.style.cursor = this.fogMode !== 'Navigate' || this.placement ? 'crosshair' : token ? 'move' : 'grab';
+                this.hoverToken = token != null; this.updateCursor(event);
                 if (this.placement) this.previewPlacement(point);
                 return;
             }
@@ -256,6 +258,9 @@ export class Battlemap {
         this.host.addEventListener('contextmenu',this.contextMenu);
         this.pointerLeave = () => { this.cancelFogStroke(); this.cancelTargetDrag(); this.pointerPosition = null; this.publishPresentationPointer(); };
         this.visibilityChange = () => { if (document.hidden) this.pointerLeave(); };
+        this.modifierKey = event => { if (this.pointerPosition) this.updateCursor(event); };
+        globalThis.addEventListener('keydown',this.modifierKey);
+        globalThis.addEventListener('keyup',this.modifierKey);
         this.host.addEventListener('pointerleave',this.pointerLeave);
         this.host.addEventListener('pointercancel',this.pointerLeave);
         globalThis.addEventListener('blur',this.pointerLeave);
@@ -287,7 +292,7 @@ export class Battlemap {
             y:(event.clientY-rect.top-this.host.clientTop-this.view.y)/this.view.scale };
     }
     async selectTokenAt(event) {
-        if (this.readOnly || this.disposed || this.placement || (this.fogMode && this.fogMode !== 'Navigate') || this.fogSaving || !this.callback || event.button !== 0) return;
+        if (this.readOnly || this.disposed || this.placement || fogStrokeMode(event) || this.fogSaving || !this.callback || event.button !== 0) return;
         const token = this.hitToken(this.pointerWorld(event));
         if (!token) return;
         event.preventDefault();
@@ -482,12 +487,14 @@ export class Battlemap {
         this.targetActorId = selection?.actorId ?? null; this.targetIds = selection?.targetIds ?? (selection?.targetId == null ? [] : [selection.targetId]); this.targetId = this.targetIds[0] ?? null; this.targetRange = selection?.rangeProfile ?? null;
         this.drawMovementIndicators(); this.drawTargetRing();
     }
-    setFogTool(mode,brush) {
+    setFogBrush(brush) {
         if(this.readOnly) return;
-        this.cancelFogStroke(); this.cancelTargetDrag();
-        this.fogMode=['Reveal','Hide'].includes(mode) ? mode : 'Navigate';
         this.fogBrush=[1,3,5,9].includes(brush) ? brush : 3;
-        this.host.style.cursor=this.fogMode === 'Navigate' ? 'grab' : 'crosshair';
+    }
+    updateCursor(event) {
+        if (this.readOnly || this.disposed || this.dragging || this.fogStroke || this.targetDrag) return;
+        const fog = !this.placement && this.revealedFog != null && fogStrokeMode(event) != null;
+        this.host.style.cursor = fog || this.placement ? 'crosshair' : this.hoverToken ? 'move' : 'grab';
     }
     setFog(cells) {
         this.revealedFog=cells == null ? null : new Set(cells.map(c=>fogKey(c.column,c.row)));
@@ -501,7 +508,7 @@ export class Battlemap {
         if(!stroke) return;
         if(!this.fogPointInside(point)) { stroke.last=null; return; }
         const cell={column:Math.floor(point.x/this.scene.gridSize),row:Math.floor(point.y/this.scene.gridSize)};
-        paintFog(this.revealedFog,stroke.last ?? cell,cell,this.fogBrush,this.fogMode === 'Reveal',
+        paintFog(this.revealedFog,stroke.last ?? cell,cell,this.fogBrush,stroke.reveal === true,
             Math.ceil(this.imageWidth/this.scene.gridSize),Math.ceil(this.imageHeight/this.scene.gridSize));
         stroke.last=cell; this.drawFog();
     }
@@ -897,6 +904,10 @@ export class Battlemap {
             globalThis.removeEventListener('pagehide',this.pointerLeave);
         }
         if (this.visibilityChange) document.removeEventListener('visibilitychange',this.visibilityChange);
+        if (this.modifierKey) {
+            globalThis.removeEventListener('keydown',this.modifierKey);
+            globalThis.removeEventListener('keyup',this.modifierKey);
+        }
         if(this.initialized) this.app.destroy(true,{children:true});
         for(const tile of this.tiles?.values() ?? []) tile.texture.destroy(true);
         this.tiles?.clear(); this.overviewTexture?.destroy(true); this.image=null;

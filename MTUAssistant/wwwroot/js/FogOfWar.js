@@ -8,6 +8,11 @@ export function fogCells(keys) {
 export function fogVisible(keys,column,row) {
     return keys == null || keys.has(fogKey(column,row));
 }
+// Shift-drag clears fog and Ctrl-drag sets it. Both modifiers together are ambiguous, so neither applies.
+export function fogStrokeMode(event) {
+    if (!event || Boolean(event.shiftKey) === Boolean(event.ctrlKey)) return null;
+    return event.shiftKey ? 'clear' : 'set';
+}
 // Interpolate in cell space so fast pointer motion cannot leave gaps.
 export function paintFog(keys,from,to,size,reveal,columns,rows) {
     const steps = Math.max(Math.abs(to.column-from.column),Math.abs(to.row-from.row),1);

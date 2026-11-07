@@ -6,15 +6,13 @@ namespace MTUAssistant.Components.Pages;
 
 public partial class Battlemap
 {
-    private string fogMode = "Navigate";
     private int fogBrush = 3;
 
-    private async Task SetFogMode()
+    private async Task SetFogBrush()
     {
         if (map is null)
             return;
-        await CancelPlacement();
-        await map.InvokeVoidAsync("setFogTool", fogMode, fogBrush);
+        await map.InvokeVoidAsync("setFogBrush", fogBrush);
     }
 
     private Task UndoFog() =>

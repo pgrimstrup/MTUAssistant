@@ -14,7 +14,7 @@
 @if (BattlemapState.Current is { } scene)
 {
     <section class="battlemap-page">
-        <header><div><h1>@scene.Name</h1><span class="muted">@scene.GridSize px per square · 1.5 m × 1.5 m</span></div>
+        <header><div><h1>@scene.Name</h1><span class="muted">@scene.GridSize px per square · 1.5 m × 1.5 m · Shift+drag clears fog · Ctrl+drag adds fog</span></div>
             <div class="controls">
                 @if (!encounter.Active)
                 {
@@ -23,8 +23,7 @@
                 <label>Width (px)<input class="form-control grid-number" type="number" min="0.25" max="@scene.GridSize" step="0.25" @bind="gridWidth" @bind:after="SaveGrid" disabled="@(map is null || busy)" /></label>
                 <label>Opacity (%)<input class="form-control grid-number" type="number" min="0" max="100" @bind="gridOpacity" @bind:after="SaveGrid" disabled="@(map is null || busy)" /></label>
                 }
-                <label>Fog<select class="form-select" @bind="fogMode" @bind:after="SetFogMode" disabled="@(map is null || busy)"><option>Navigate</option><option>Reveal</option><option>Hide</option></select></label>
-                <label>Brush<select class="form-select" @bind="fogBrush" @bind:after="SetFogMode" disabled="@(map is null || fogMode == "Navigate")"><option value="1">1</option><option value="3">3</option><option value="5">5</option><option value="9">9</option></select></label>
+                <label title="Fog brush size in squares. Shift+drag clears fog; Ctrl+drag adds fog.">Fog brush<select class="form-select" @bind="fogBrush" @bind:after="SetFogBrush" disabled="@(map is null)"><option value="1">1</option><option value="3">3</option><option value="5">5</option><option value="9">9</option></select></label>
                 <button class="btn btn-outline-secondary" @onclick="UndoFog" disabled="@(map is null || busy)">Undo fog</button>
                 <button class="btn btn-outline-secondary" aria-label="Zoom in" title="Zoom in" @onclick='() => Command("zoomIn")' disabled="@(map is null)">+</button>
                 <button class="btn btn-outline-secondary" aria-label="Zoom out" title="Zoom out" @onclick='() => Command("zoomOut")' disabled="@(map is null)">−</button>
@@ -364,7 +363,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
             callback ??= DotNetObjectReference.Create(this);
             map = await module.InvokeAsync<IJSObjectReference>("createBattlemap", host,
                 $"api/scenes/{scene.CampaignId}/{scene.Id}/image?v={scene.Revision}", scene, key, entries.Where(e => e.OnMap), callback, new { readOnly = false, fog = await ScenesStore.LoadFogAsync(scene.CampaignId, scene.Id) }, presentationLink);
-            fogMode = "Navigate";
+            await map.InvokeVoidAsync("setFogBrush", fogBrush);
             await SyncEncounterMap();
             loadedKey = key;
             if (disposed) { await map.InvokeVoidAsync("dispose"); await map.DisposeAsync(); map = null; }
@@ -382,7 +381,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         if (!disposed) StateHasChanged();
     });
     private async Task Command(string action) { if (map is not null) await map.InvokeVoidAsync(action); }
-    private async Task BeginPlacement(int id) { if (map is null) return; fogMode = "Navigate"; await map.InvokeVoidAsync("setFogTool", fogMode, fogBrush); placingId = id; error = null; await map.InvokeVoidAsync("beginPlacement", id); }
+    private async Task BeginPlacement(int id) { if (map is null) return; placingId = id; error = null; await map.InvokeVoidAsync("beginPlacement", id); }
     private async Task CancelPlacement() { placingId = null; if (map is not null) await map.InvokeVoidAsync("cancelPlacement"); }
     private async Task Run(Func<SceneSummary, Task> action)
     {
