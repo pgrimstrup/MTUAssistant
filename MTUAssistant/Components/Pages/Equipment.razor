@@ -42,7 +42,11 @@
             }
         </section>
     }
-    @if (editing is not null) { <EquipmentDialog @key="editing" Item="editing" Delete="deleting" OnSaved="Saved" OnClose="Close" /> }
+    @if (editing is not null) { <EquipmentDialog @key="editing" Item="editing" OnSaved="Saved" OnClose="Close" /> }
+    @if (pendingDelete is { } deleting)
+    {
+        <DeleteConfirmDialog @key="deleting.Id" Title="@(deleting.Kind == EquipmentKind.Armour ? "Delete Armour" : "Delete Weapon")" ConfirmText="@(deleting.Kind == EquipmentKind.Armour ? "Delete Armour" : "Delete Weapon")" Busy="busy" Error="@deleteError" OnConfirm="Delete" OnCancel="CancelDelete"><p>Delete <strong>@deleting.Name</strong> from the catalogue? This also removes it from all Traveller equipment lists.</p></DeleteConfirmDialog>
+    }
 </div>
 
 @code {
@@ -60,9 +64,9 @@
                 ? (e.RequiredSkill?.Contains(text, StringComparison.OrdinalIgnoreCase) == true)
                 : e.Traits.Contains(text, StringComparison.OrdinalIgnoreCase) || e.Notes.Contains(text, StringComparison.OrdinalIgnoreCase))));
     }
-    private EquipmentItem? editing;
-    private bool loading = true, deleting;
-    private string? error;
+    private EquipmentItem? editing, pendingDelete;
+    private bool loading = true, busy;
+    private string? error, deleteError;
     protected override async Task OnInitializedAsync() => await Load();
     private async Task Load()
     {
@@ -71,9 +75,19 @@
         catch (Exception) { error = "Unable to load equipment."; }
         finally { loading = false; }
     }
-    private void Add(EquipmentKind kind) { deleting = false; editing = new() { Kind = kind }; }
-    private void Edit(EquipmentItem item) { deleting = false; editing = item; }
-    private void ConfirmDelete(EquipmentItem item) { deleting = true; editing = item; }
+    private void Add(EquipmentKind kind) { pendingDelete = null; editing = new() { Kind = kind }; }
+    private void Edit(EquipmentItem item) { pendingDelete = null; editing = item; }
+    private void ConfirmDelete(EquipmentItem item) { editing = null; deleteError = null; pendingDelete = item; }
+    private void CancelDelete() { pendingDelete = null; deleteError = null; }
     private void Close() => editing = null;
+    private async Task Delete()
+    {
+        if (busy || pendingDelete is not { } current) return;
+        busy = true;
+        try { await EquipmentStore.DeleteAsync(current.Id); pendingDelete = null; deleteError = null; await Load(); }
+        catch (ArgumentException ex) { deleteError = ex.Message; }
+        catch (Exception) { deleteError = "Unable to delete this equipment."; }
+        finally { busy = false; }
+    }
     private async Task Saved(EquipmentItem item) { editing = null; await Load(); }
 }

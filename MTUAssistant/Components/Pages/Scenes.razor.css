@@ -6,7 +6,7 @@ header p, .muted { color:var(--app-muted); }
 .scene-fields { display:grid; grid-template-columns:2fr repeat(4,minmax(0,1fr)); gap:.8rem; }
 label { display:grid; gap:.35rem; color:var(--app-muted); font-size:.85rem; min-width:0; }
 .image-upload { margin-top:1rem; }
-.actions, .delete-confirm { display:flex; gap:.5rem; align-items:center; margin-top:1rem; }
+.actions { display:flex; gap:.5rem; align-items:center; margin-top:1rem; }
 .actions { justify-content:flex-end; }
 .table-wrap { overflow-x:auto; } .scenes-table { font-size:.9rem; } td, th { vertical-align:middle; }
 .row-actions { text-align:right; white-space:nowrap; }

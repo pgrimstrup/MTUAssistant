@@ -20,25 +20,24 @@
     @if (editing is not null)
     {
         <section class="cover-editor" aria-labelledby="cover-editor-title">
-            <h2 id="cover-editor-title">@(deleting ? "Delete Cover" : editing.Id == 0 ? "Add Cover" : "Edit Cover")</h2>
-            @if (deleting)
-            { <p>Delete @editing.Name? Saved encounters will retain their selected cover values.</p> }
-            else
-            {
-                <label>Cover<input class="form-control" maxlength="120" @bind="editing.Name" disabled="@busy" /></label>
-                <label>Protection<input class="form-control" type="number" min="0" @bind="editing.Protection" disabled="@busy" /></label>
-                <label>Hits<input class="form-control" type="number" min="1" @bind="editing.Hits" disabled="@busy" /></label>
-            }
-            <button class="btn @(deleting ? "btn-danger" : "btn-primary")" disabled="@busy" @onclick="Save">@(deleting ? "Delete" : "Save")</button>
+            <h2 id="cover-editor-title">@(editing.Id == 0 ? "Add Cover" : "Edit Cover")</h2>
+            <label>Cover<input class="form-control" maxlength="120" @bind="editing.Name" disabled="@busy" /></label>
+            <label>Protection<input class="form-control" type="number" min="0" @bind="editing.Protection" disabled="@busy" /></label>
+            <label>Hits<input class="form-control" type="number" min="1" @bind="editing.Hits" disabled="@busy" /></label>
+            <button class="btn btn-primary" disabled="@busy" @onclick="Save">Save</button>
             <button class="btn btn-outline-secondary" disabled="@busy" @onclick="Close">Cancel</button>
         </section>
+    }
+    @if (pendingDelete is { } deleting)
+    {
+        <DeleteConfirmDialog @key="deleting.Id" Title="Delete Cover" ConfirmText="Delete Cover" Busy="busy" Error="@error" OnConfirm="Delete" OnCancel="CancelDelete"><p>Delete <strong>@deleting.Name</strong>? Saved encounters will retain their selected cover values.</p></DeleteConfirmDialog>
     }
 </section>
 
 @code {
     private IReadOnlyList<CoverProtection> items = [];
-    private CoverProtection? editing;
-    private bool loading = true, busy, deleting;
+    private CoverProtection? editing, pendingDelete;
+    private bool loading = true, busy;
     private string? error;
     protected override async Task OnInitializedAsync()
     {
@@ -46,9 +45,10 @@
         catch (Exception) { error = "Unable to load cover protection."; }
         finally { loading = false; }
     }
-    private void Add() { editing = new(); deleting = false; error = null; }
-    private void Edit(CoverProtection item) { editing = item.Copy(); deleting = false; error = null; }
-    private void ConfirmDelete(CoverProtection item) { editing = item.Copy(); deleting = true; error = null; }
+    private void Add() { editing = new(); pendingDelete = null; error = null; }
+    private void Edit(CoverProtection item) { editing = item.Copy(); pendingDelete = null; error = null; }
+    private void ConfirmDelete(CoverProtection item) { editing = null; pendingDelete = item; error = null; }
+    private void CancelDelete() { pendingDelete = null; error = null; }
     private void Close() { editing = null; error = null; }
     private async Task Save()
     {
@@ -56,14 +56,28 @@
         busy = true;
         try
         {
-            if (deleting) await Store.DeleteAsync(editing.Id);
-            else await Store.SaveAsync(editing);
+            await Store.SaveAsync(editing);
             items = await Store.ListAsync();
             editing = null;
             error = null;
         }
         catch (ArgumentException ex) { error = ex.Message; }
         catch (Exception) { error = "Unable to save cover protection. Please try again."; }
+        finally { busy = false; }
+    }
+    private async Task Delete()
+    {
+        if (pendingDelete is not { } current || busy) return;
+        busy = true;
+        try
+        {
+            await Store.DeleteAsync(current.Id);
+            items = await Store.ListAsync();
+            pendingDelete = null;
+            error = null;
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to delete cover protection. Please try again."; }
         finally { busy = false; }
     }
 }

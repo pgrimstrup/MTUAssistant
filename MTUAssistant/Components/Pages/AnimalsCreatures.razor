@@ -54,8 +54,15 @@
         }
         @if (!items.Any()) { <p class="empty-message">No animals or creatures in this campaign yet.</p> }
         else { <div class="table-wrap"><table class="table characters-table"><thead><tr><th>Token</th><th>Name</th><th>Scope</th><th>Type</th><th>Behaviour</th><th>Speed</th><th>Hits</th><th>Traits</th><th>Skills</th><th>Natural Attacks</th><th></th></tr></thead><tbody>
-            @foreach (var animal in Filtered) { <tr @key="animal.Character.Id"><td>@if (CharacterToken.DataUri(animal.Character.TokenImage) is { } token) { <img class="token-thumbnail" src="@token" alt="@($"{animal.Character.Name} token")" /> }</td><th scope="row">@animal.Character.Name</th><td>@(animal.Shared ? "Shared" : "Campaign")</td><td>@animal.AnimalType</td><td>@animal.Behaviour</td><td>@animal.Character.Speed</td><td>@animal.Hits</td><td>@animal.Traits</td><td>@Skills(animal)</td><td>@string.Join(", ", animal.NaturalAttacks.Select(a => $"{a.Name} ({a.Damage})"))</td><td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenSkills(animal.Character)">Skills</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenAttacks(animal)">Attacks</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(animal)">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => Delete(animal)">Delete</button></td></tr> }
+            @foreach (var animal in Filtered) { <tr @key="animal.Character.Id"><td>@if (CharacterToken.DataUri(animal.Character.TokenImage) is { } token) { <img class="token-thumbnail" src="@token" alt="@($"{animal.Character.Name} token")" /> }</td><th scope="row">@animal.Character.Name</th><td>@(animal.Shared ? "Shared" : "Campaign")</td><td>@animal.AnimalType</td><td>@animal.Behaviour</td><td>@animal.Character.Speed</td><td>@animal.Hits</td><td>@animal.Traits</td><td>@Skills(animal)</td><td>@string.Join(", ", animal.NaturalAttacks.Select(a => $"{a.Name} ({a.Damage})"))</td><td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenSkills(animal.Character)">Skills</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenAttacks(animal)">Attacks</button> <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(animal)">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(animal)" disabled="@busy">Delete</button></td></tr> }
         </tbody></table></div> }
+        @if (pendingDelete is { } deleting)
+        {
+            <DeleteConfirmDialog @key="deleting.Character.Id" Title="Delete Animal" ConfirmText="Delete Animal" Busy="busy" Error="@error" OnConfirm="Delete" OnCancel="CancelDelete">
+                <p>Delete <strong>@deleting.Character.Name</strong>? This cannot be undone.</p>
+                @if (deleting.Shared) { <p class="warning">This animal is Shared and is used across multiple Campaigns. Deleting it removes it from ALL Campaigns.</p> }
+            </DeleteConfirmDialog>
+        }
         @if (selectedAttacks is { } attacker) { <AnimalAttacks @key="attacker.Character.Id" Animal="attacker" OnChanged="Reload" OnClose="CloseAttacks" /> }
         @if (selectedSkills is { } skilled) { <CharacterSkills @key="skilled.Id" Character="skilled" OnChanged="Reload" OnClose="CloseSkills" /> }
     }
@@ -69,7 +76,7 @@
     private string description = "";
     private byte[]? tokenImage;
     private InjuryTolerance injuryTolerance;
-    private Animal? editingAnimal;
+    private Animal? editingAnimal, pendingDelete;
     private Character? selectedSkills;
     private Animal? selectedAttacks;
     private bool editing, busy, shared;
@@ -77,7 +84,7 @@
     private IEnumerable<Animal> Filtered => items.Where(a => (typeFilter.Length == 0 || a.AnimalType == typeFilter) && (filter.Length == 0 || a.Character.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) || a.AnimalType.Contains(filter, StringComparison.OrdinalIgnoreCase) || a.Behaviour.Contains(filter, StringComparison.OrdinalIgnoreCase) || a.Traits.Contains(filter, StringComparison.OrdinalIgnoreCase)));
     protected override async Task OnInitializedAsync() { Campaigns.Changed += CampaignChanged; await SetCampaign((await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive)); }
     private void CampaignChanged(Campaign? value) => _ = InvokeAsync(async () => { await SetCampaign(value); StateHasChanged(); });
-    private async Task SetCampaign(Campaign? value) { Cancel(); selectedSkills = null; selectedAttacks = null; campaign = value; await Reload(); }
+    private async Task SetCampaign(Campaign? value) { Cancel(); pendingDelete = null; selectedSkills = null; selectedAttacks = null; campaign = value; await Reload(); }
     private async Task Reload() { if (campaign is null) { items = []; return; } try { items = await Animals.ListAsync(campaign.Id); error = null; } catch { error = "Unable to load animals and creatures."; } }
     private static string Skills(Animal a) => string.Join(", ", (a.Character.Skills ?? []).Select(s => $"{s.Name} {s.Level}"));
     private void Add(AnimalArchetype archetype) { if (busy || campaign is null) return; Edit(AnimalGenerator.Generate(campaign.Id, archetype)); }
@@ -114,7 +121,16 @@
             await Animals.SaveAsync(new Animal(character, hits, animalType, behaviour, traits, editingAnimal?.NaturalAttacks ?? [], description, shared)); editing = false; editingAnimal = null; await Reload();
         } catch (ArgumentException ex) { error = ex.Message; } catch { error = "Unable to save this animal."; } finally { busy = false; }
     }
-    private async Task Delete(Animal animal) { if (campaign is null) return; try { await Animals.DeleteAsync(campaign.Id, animal.Character.Id); if (selectedAttacks?.Character.Id == animal.Character.Id) selectedAttacks = null; if (selectedSkills?.Id == animal.Character.Id) selectedSkills = null; await Reload(); } catch { error = "Unable to delete this animal."; } }
+    private void ConfirmDelete(Animal animal) { if (busy) return; Cancel(); pendingDelete = animal; }
+    private void CancelDelete() { pendingDelete = null; error = null; }
+    private async Task Delete()
+    {
+        if (busy || campaign is null || pendingDelete is not { } animal) return;
+        busy = true;
+        try { await Animals.DeleteAsync(campaign.Id, animal.Character.Id); if (selectedAttacks?.Character.Id == animal.Character.Id) selectedAttacks = null; if (selectedSkills?.Id == animal.Character.Id) selectedSkills = null; pendingDelete = null; await Reload(); }
+        catch { error = "Unable to delete this animal."; }
+        finally { busy = false; }
+    }
     public void Dispose() => Campaigns.Changed -= CampaignChanged;
 }
 

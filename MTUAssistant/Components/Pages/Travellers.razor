@@ -40,7 +40,7 @@
         }
         @if (pendingDelete is { } deleting)
         {
-            <div class="confirm" role="alert"><span>Delete @deleting.Name?</span><button type="button" class="btn btn-danger" @onclick="Delete" disabled="@busy">Delete Traveller</button><button type="button" class="btn btn-outline-secondary" @onclick="() => pendingDelete = null" disabled="@busy">Cancel</button></div>
+            <DeleteConfirmDialog @key="deleting.Id" Title="Delete Traveller" ConfirmText="Delete Traveller" Busy="busy" Error="@error" OnConfirm="Delete" OnCancel="CancelDelete"><p>Delete <strong>@deleting.Name</strong>? This cannot be undone.</p></DeleteConfirmDialog>
         }
         @if (!busy && items.Count == 0) { <p class="empty-message">No Travellers in this campaign yet.</p> }
         else if (items.Count > 0)
@@ -139,6 +139,7 @@
         finally { busy = false; }
     }
     private void ConfirmDelete(Character item) { pendingDelete = item; editing = null; selectedSkills = null; selectedEquipment = null; error = null; }
+    private void CancelDelete() { pendingDelete = null; error = null; }
     private async Task Save()
     {
         if (editing is not { } current || campaign?.Id != current.CampaignId || busy) return;

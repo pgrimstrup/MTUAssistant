@@ -4,65 +4,57 @@
 
 <dialog @ref="dialog" class="equipment-dialog" aria-labelledby="equipment-dialog-heading">
     <form @onsubmit="Save" @onsubmit:preventDefault>
-        <h2 id="equipment-dialog-heading">@(Delete ? "Delete equipment" : Item.Id == 0 ? "Add equipment" : "Edit equipment")</h2>
+        <h2 id="equipment-dialog-heading">@(Item.Id == 0 ? "Add equipment" : "Edit equipment")</h2>
         @if (error is not null) { <p class="error" role="alert">@error</p> }
-        @if (Delete)
-        {
-            <p>Delete <strong>@Item.Name</strong> from the catalogue? This also removes it from all Traveller equipment lists.</p>
-        }
-        else
-        {
-            @if (Item.Id != 0) { <p class="hint">Catalogue changes apply to every Traveller using this item.</p> }
-            <div class="fields">
-                <label>Category <select class="form-select" @bind="model.Kind" disabled="@(busy || Item.Id != 0)"><option value="@EquipmentKind.Armour">Armour</option><option value="@EquipmentKind.Weapon">Weapon</option></select></label>
-                <label>Name <input class="form-control" @bind="model.Name" required maxlength="120" disabled="@busy" /></label>
-                @if (model.Kind == EquipmentKind.Armour)
-                {
-                    <label>Protection <input class="form-control" type="number" min="0" @bind="model.Protection" disabled="@busy" /></label>
-                }
-                <label>TL <input class="form-control" type="number" min="0" @bind="model.Tl" disabled="@busy" /></label>
-                @if (model.Kind == EquipmentKind.Armour)
-                {
-                    <label>Rad <input class="form-control" type="number" min="0" @bind="model.Rad" disabled="@busy" /></label>
-                }
-                else
-                {
-                    <label>Range (m) <input class="form-control" type="number" min="0" step="any" @bind="model.Range" disabled="@busy" /></label>
-                    <label>Damage <input class="form-control" @bind="model.Damage" maxlength="120" placeholder="3D" disabled="@busy" /></label>
-                }
-                <label>Kg <input class="form-control" type="number" min="0" step="any" @bind="model.Kg" disabled="@busy" /></label>
-                <label>Cost (Cr) <input class="form-control" type="number" min="0" step="any" @bind="model.Cost" disabled="@busy" /></label>
-                @if (model.Kind == EquipmentKind.Armour)
-                {
-                    <label>Required Skill <input class="form-control" @bind="model.RequiredSkill" maxlength="240" placeholder="e.g. Vacc Suit 1" disabled="@busy" /></label>
-                }
-                else
-                {
-                    <label>Magazine <input class="form-control" @bind="model.Magazine" maxlength="120" disabled="@busy" /></label>
-                    <label>Mag Cost (Cr) <input class="form-control" type="number" min="0" step="any" @bind="model.MagCost" disabled="@busy" /></label>
-                    <label>Required Skill <select class="form-select" @bind="model.RequiredSkill" disabled="@busy"><option value="">None selected</option>@foreach (var skill in EquipmentService.WeaponRequiredSkills) { <option value="@skill">@skill</option> }</select></label>
-                    <label class="wide">Traits <input class="form-control" @bind="model.Traits" maxlength="1000" disabled="@busy" /></label>
-                }
-                <label class="wide">Notes <textarea class="form-control" rows="3" @bind="model.Notes" maxlength="4000" disabled="@busy"></textarea></label>
-                @if (model.Kind == EquipmentKind.Armour)
-                {
-                    <label>Protection (Lasers) <input class="form-control" type="number" min="0" step="1" placeholder="Optional" @bind="model.ProtectionL" disabled="@busy" /></label>
-                    <label>Protection (Energy) <input class="form-control" type="number" min="0" step="1" placeholder="Optional" @bind="model.ProtectionE" disabled="@busy" /></label>
-                    <label>Protection (Psionics) <input class="form-control" type="number" min="0" step="1" placeholder="Optional" @bind="model.ProtectionP" disabled="@busy" /></label>
-                    <label>Protection (Kinetic) <input class="form-control" type="number" min="0" step="1" placeholder="Optional" @bind="model.ProtectionK" disabled="@busy" /></label>
-                }
-            </div>
-        }
+        @if (Item.Id != 0) { <p class="hint">Catalogue changes apply to every Traveller using this item.</p> }
+        <div class="fields">
+            <label>Category <select class="form-select" @bind="model.Kind" disabled="@(busy || Item.Id != 0)"><option value="@EquipmentKind.Armour">Armour</option><option value="@EquipmentKind.Weapon">Weapon</option></select></label>
+            <label>Name <input class="form-control" @bind="model.Name" required maxlength="120" disabled="@busy" /></label>
+            @if (model.Kind == EquipmentKind.Armour)
+            {
+                <label>Protection <input class="form-control" type="number" min="0" @bind="model.Protection" disabled="@busy" /></label>
+            }
+            <label>TL <input class="form-control" type="number" min="0" @bind="model.Tl" disabled="@busy" /></label>
+            @if (model.Kind == EquipmentKind.Armour)
+            {
+                <label>Rad <input class="form-control" type="number" min="0" @bind="model.Rad" disabled="@busy" /></label>
+            }
+            else
+            {
+                <label>Range (m) <input class="form-control" type="number" min="0" step="any" @bind="model.Range" disabled="@busy" /></label>
+                <label>Damage <input class="form-control" @bind="model.Damage" maxlength="120" placeholder="3D" disabled="@busy" /></label>
+            }
+            <label>Kg <input class="form-control" type="number" min="0" step="any" @bind="model.Kg" disabled="@busy" /></label>
+            <label>Cost (Cr) <input class="form-control" type="number" min="0" step="any" @bind="model.Cost" disabled="@busy" /></label>
+            @if (model.Kind == EquipmentKind.Armour)
+            {
+                <label>Required Skill <input class="form-control" @bind="model.RequiredSkill" maxlength="240" placeholder="e.g. Vacc Suit 1" disabled="@busy" /></label>
+            }
+            else
+            {
+                <label>Magazine <input class="form-control" @bind="model.Magazine" maxlength="120" disabled="@busy" /></label>
+                <label>Mag Cost (Cr) <input class="form-control" type="number" min="0" step="any" @bind="model.MagCost" disabled="@busy" /></label>
+                <label>Required Skill <select class="form-select" @bind="model.RequiredSkill" disabled="@busy"><option value="">None selected</option>@foreach (var skill in EquipmentService.WeaponRequiredSkills) { <option value="@skill">@skill</option> }</select></label>
+                <label class="wide">Traits <input class="form-control" @bind="model.Traits" maxlength="1000" disabled="@busy" /></label>
+            }
+            <label class="wide">Notes <textarea class="form-control" rows="3" @bind="model.Notes" maxlength="4000" disabled="@busy"></textarea></label>
+            @if (model.Kind == EquipmentKind.Armour)
+            {
+                <label>Protection (Lasers) <input class="form-control" type="number" min="0" step="1" placeholder="Optional" @bind="model.ProtectionL" disabled="@busy" /></label>
+                <label>Protection (Energy) <input class="form-control" type="number" min="0" step="1" placeholder="Optional" @bind="model.ProtectionE" disabled="@busy" /></label>
+                <label>Protection (Psionics) <input class="form-control" type="number" min="0" step="1" placeholder="Optional" @bind="model.ProtectionP" disabled="@busy" /></label>
+                <label>Protection (Kinetic) <input class="form-control" type="number" min="0" step="1" placeholder="Optional" @bind="model.ProtectionK" disabled="@busy" /></label>
+            }
+        </div>
         <div class="actions">
             <button type="button" class="btn btn-outline-secondary" @onclick="Cancel" disabled="@busy">Cancel</button>
-            <button type="submit" class="btn @(Delete ? "btn-danger" : "btn-primary")" disabled="@busy">@(Delete ? "Delete equipment" : "Save")</button>
+            <button type="submit" class="btn btn-primary" disabled="@busy">Save</button>
         </div>
     </form>
 </dialog>
 
 @code {
     [Parameter, EditorRequired] public EquipmentItem Item { get; set; } = default!;
-    [Parameter] public bool Delete { get; set; }
     [Parameter] public EventCallback<EquipmentItem> OnSaved { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     private EquipmentItem model = new();
@@ -86,11 +78,11 @@
         busy = true;
         try
         {
-            if (Delete) { await EquipmentStore.DeleteAsync(Item.Id); await OnSaved.InvokeAsync(Item); }
-            else { var saved = await EquipmentStore.SaveAsync(model); await OnSaved.InvokeAsync(saved); }
+            var saved = await EquipmentStore.SaveAsync(model);
+            await OnSaved.InvokeAsync(saved);
         }
         catch (ArgumentException ex) { error = ex.Message; }
-        catch (Exception) { error = Delete ? "Unable to delete this equipment." : "Unable to save this equipment."; }
+        catch (Exception) { error = "Unable to save this equipment."; }
         finally { busy = false; }
     }
     public async ValueTask DisposeAsync()

@@ -1,0 +1,7 @@
+.delete-confirm-dialog { width:min(30rem,calc(100vw - 2rem)); max-height:90vh; overflow:auto; padding:1.4rem; border:1px solid var(--app-border); border-radius:var(--app-radius); color:var(--app-text); background:var(--app-surface); }
+.delete-confirm-dialog::backdrop { background:rgba(0,0,0,.65); }
+h2 { font-size:1.2rem; margin:0 0 1rem; }
+.message ::deep p { margin:0 0 .6rem; }
+.message ::deep .warning { color:#ffcf70; font-weight:600; }
+.actions { display:flex; justify-content:flex-end; gap:.6rem; margin-top:1.2rem; }
+.error { color:#ffaaaa; }

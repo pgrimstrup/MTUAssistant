@@ -35,5 +35,4 @@ h2 { font-size:1.15rem; margin:0 0 1rem; }
 .token-thumbnail, .token-preview { object-fit:cover; border-radius:50%; border:1px solid var(--app-border); background:var(--app-surface); }
 .token-thumbnail { width:2.75rem; height:2.75rem; }
 .token-preview { width:4rem; height:4rem; }
-.confirm { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin:1rem 0; }
-.confirm, .error { color:#ffaaaa; }
+.error { color:#ffaaaa; }

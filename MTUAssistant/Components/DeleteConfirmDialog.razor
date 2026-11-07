@@ -1,0 +1,43 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<dialog @ref="dialog" class="delete-confirm-dialog" aria-labelledby="delete-confirm-heading" aria-describedby="delete-confirm-message">
+    <h2 id="delete-confirm-heading">@Title</h2>
+    @if (Error is not null) { <p class="error" role="alert">@Error</p> }
+    <div id="delete-confirm-message" class="message">@ChildContent</div>
+    <div class="actions">
+        <button type="button" class="btn btn-outline-secondary" @onclick="Cancel" disabled="@Busy">Cancel</button>
+        <button type="button" class="btn btn-danger" @onclick="Confirm" disabled="@Busy">@ConfirmText</button>
+    </div>
+</dialog>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string ConfirmText { get; set; } = "Delete";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    private ElementReference dialog;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<DeleteConfirmDialog>? reference;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/EquipmentDialog.js");
+        reference = DotNetObjectReference.Create(this);
+        await module.InvokeVoidAsync("open", dialog, reference);
+    }
+    [JSInvokable] public async Task Cancel() { if (!Busy) await OnCancel.InvokeAsync(); }
+    private async Task Confirm() { if (!Busy) await OnConfirm.InvokeAsync(); }
+    public async ValueTask DisposeAsync()
+    {
+        if (module is not null)
+        {
+            try { await module.InvokeVoidAsync("close", dialog); await module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+        reference?.Dispose();
+    }
+}

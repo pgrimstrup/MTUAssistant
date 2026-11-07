@@ -86,7 +86,7 @@
         }
         @if (pendingDelete is { } deleting)
         {
-            <div class="confirm" role="alert"><span>Delete @deleting.Character.Name?</span><button type="button" class="btn btn-danger" @onclick="Delete" disabled="@busy">Delete Character</button><button type="button" class="btn btn-outline-secondary" @onclick="() => pendingDelete = null" disabled="@busy">Cancel</button></div>
+            <DeleteConfirmDialog @key="deleting.Character.Id" Title="Delete Patron or Enemy" ConfirmText="Delete Character" Busy="busy" Error="@error" OnConfirm="Delete" OnCancel="CancelDelete"><p>Delete <strong>@deleting.Character.Name</strong>? This cannot be undone.</p></DeleteConfirmDialog>
         }
         @if (!busy && !FilteredItems.Any()) { <p class="empty-message">@(items.Count == 0 ? "No patrons or enemies in this campaign yet." : "No NPCs match the filter.")</p> }
         else if (FilteredItems.Any())
@@ -242,6 +242,7 @@
     private void OpenSkills(Character actor) { editing = pendingDelete = null; selectedEquipment = null; selectedSkills = actor; }
     private void OpenEquipment(Character actor) { editing = pendingDelete = null; selectedSkills = null; selectedEquipment = actor; }
     private void ConfirmDelete(Npc item) { pendingDelete = item; editing = null; selectedSkills = selectedEquipment = null; error = null; }
+    private void CancelDelete() { pendingDelete = null; error = null; }
     private async Task SelectToken(InputFileChangeEventArgs args)
     {
         if (editing is not { } current || busy) return;

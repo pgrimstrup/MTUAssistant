@@ -34,8 +34,7 @@
         }
         @if (pendingDelete is { } deleting)
         {
-            <div class="delete-confirm" role="alert"><span>Delete scene “@deleting.Name”? Its background image will also be deleted.</span>
-                <button class="btn btn-danger" @onclick="Delete" disabled="@busy">Delete Scene</button><button class="btn btn-outline-secondary" @onclick="() => pendingDelete = null" disabled="@busy">Cancel</button></div>
+            <DeleteConfirmDialog @key="deleting.Id" Title="Delete Scene" ConfirmText="Delete Scene" Busy="busy" Error="@error" OnConfirm="Delete" OnCancel="CancelDelete"><p>Delete scene <strong>@deleting.Name</strong>? Its background image will also be deleted.</p></DeleteConfirmDialog>
         }
         @if (loading) { <p>Loading scenes…</p> }
         else if (scenes.Count == 0) { <p class="muted">No scenes in this campaign yet.</p> }
@@ -46,7 +45,7 @@
                 {
                     <tr @key="scene.Id"><th scope="row">@scene.Name @if (Battlemap.Current?.Id == scene.Id && Battlemap.Current.CampaignId == scene.CampaignId) { <span class="badge text-bg-success">Open</span> }</th>
                         <td>@scene.GridSize px</td><td><span class="colour-swatch" style="background:@scene.GridColour"></span> @scene.GridColour</td><td>@scene.GridOpacity%</td><td>@scene.GridlineWidth px</td><td>@((scene.ImageBytes / 1048576d).ToString("0.##")) MB</td>
-                        <td class="row-actions"><button class="btn btn-sm btn-primary" @onclick="() => Open(scene)" disabled="@busy">Open</button> <button class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(scene)" disabled="@busy">Edit</button> <button class="btn btn-sm btn-outline-danger" @onclick="() => pendingDelete = scene" disabled="@busy">Delete</button></td>
+                        <td class="row-actions"><button class="btn btn-sm btn-primary" @onclick="() => Open(scene)" disabled="@busy">Open</button> <button class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(scene)" disabled="@busy">Edit</button> <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(scene)" disabled="@busy">Delete</button></td>
                     </tr>
                 }</tbody>
             </table></div>
@@ -91,6 +90,8 @@
             GridColour = scene.GridColour, GridOpacity = scene.GridOpacity, GridlineWidth = scene.GridlineWidth };
     }
     private void Cancel() { editing = null; image = null; uploadName = null; pendingDelete = null; error = null; fileKey++; }
+    private void ConfirmDelete(SceneSummary scene) { pendingDelete = scene; error = null; }
+    private void CancelDelete() { pendingDelete = null; error = null; }
     private async Task Upload(InputFileChangeEventArgs args)
     {
         if (editing is not { } current || busy) return;
