@@ -103,17 +103,31 @@
         if (map is not null) await FocusSearchTarget();
     }
 
-    private async Task RestoreWorldSelection()
+    private sealed record WorldSelection(int SectorId, string Hex);
+
+    private async Task RestoreWorldSelection(bool loadSavedSelection = false)
     {
-        var selected = WorldState.World;
-        if (selected is null || map is null) return;
+        if (map is null) return;
         var version = ++selectionVersion;
+        var selected = WorldState.World is { } world ? new WorldSelection(world.SectorId, world.Hex) : null;
+        if (selected is null && loadSavedSelection)
+        {
+            try
+            {
+                selected = await map.InvokeAsync<WorldSelection?>("loadWorldSelection");
+            }
+            catch (JSDisconnectedException)
+            {
+                return;
+            }
+        }
+        if (disposed || version != selectionVersion || selected is null) return;
         var data = SystemData.Catalogue;
         if (!data.SectorsById.TryGetValue(selected.SectorId, out var sector)
             || sector.Milieu != TileRefreshWorker.Milieu
             || !data.SystemsByHex.ContainsKey((sector.Milieu, sector.X, sector.Y, selected.Hex)))
         {
-            await WorldSelected.InvokeAsync(null);
+            await PublishWorldSelection(null, version);
             return;
         }
         bool restored;
@@ -126,7 +140,7 @@
             return;
         }
         if (disposed || version != selectionVersion) return;
-        if (!restored) { await WorldSelected.InvokeAsync(null); return; }
+        if (!restored) { await PublishWorldSelection(null, version); return; }
         await SelectHex(sector.X, sector.Y, int.Parse(selected.Hex[..2]), int.Parse(selected.Hex[2..]));
     }
 
@@ -164,7 +178,7 @@
                 return;
             }
             selectionError = null;
-            await WorldSelected.InvokeAsync(null);
+            await PublishWorldSelection(null, version);
         }
         catch (JSDisconnectedException) { }
         catch (Exception ex)
@@ -231,7 +245,7 @@
             var world = await Worlds.FindAsync(sectorX, sectorY, column, row);
             if (disposed || version != selectionVersion) return;
             selectionError = null;
-            await WorldSelected.InvokeAsync(world);
+            await PublishWorldSelection(world, version);
         }
         catch (Exception ex)
         {
@@ -240,6 +254,17 @@
             selectionError = "Unable to load world data. Please try again.";
         }
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task PublishWorldSelection(SelectedWorld? world, long version)
+    {
+        await WorldSelected.InvokeAsync(world);
+        if (ReadOnly || disposed || version != selectionVersion || map is null) return;
+        try
+        {
+            await map.InvokeVoidAsync("saveWorldSelection", world?.SectorId, world?.Hex);
+        }
+        catch (JSDisconnectedException) { }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -255,8 +280,9 @@
             {
                 if (ReadOnly) { await InvokeAsync(StateHasChanged); return; }
                 if (reloadPending) await ReloadMapData();
-                else if (SystemId is not null || SectorId is not null || SubsectorId is not null) await FocusSearchTarget();
-                else await RestoreWorldSelection();
+                if (disposed) return;
+                if (SystemId is not null || SectorId is not null || SubsectorId is not null) await FocusSearchTarget();
+                else await RestoreWorldSelection(loadSavedSelection: true);
                 await InvokeAsync(StateHasChanged);
             }
         }

@@ -167,6 +167,37 @@ assert.equal(focused.restoreSelection(999, '0101'), false);
 assert.equal(focused.restoreSelection(17, '0000'), false);
 assert.equal(focused.selected.key, '22/3240');
 
+// The selected world survives a new map instance and uses a separate browser storage key.
+const storedMapState = new Map([['mtu.map.view', '{"x":10,"y":20,"zoom":32}']]);
+const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+    getItem: key => storedMapState.get(key) ?? null,
+    setItem: (key, value) => storedMapState.set(key, value),
+    removeItem: key => storedMapState.delete(key)
+}});
+try {
+    focused.saveWorldSelection(22, '3240');
+    const reopened = new DynamicMap({}, {}, {});
+    assert.deepEqual(reopened.loadWorldSelection(), { sectorId: 22, hex: '3240' });
+
+    const cast = new DynamicMap({}, {}, {}, { readOnly: true });
+    assert.equal(cast.loadWorldSelection(), null);
+    cast.saveWorldSelection(null, null);
+    assert.deepEqual(reopened.loadWorldSelection(), { sectorId: 22, hex: '3240' });
+
+    reopened.saveWorldSelection(null, null);
+    assert.equal(reopened.loadWorldSelection(), null);
+    assert.equal(storedMapState.get('mtu.map.view'), '{"x":10,"y":20,"zoom":32}');
+
+    storedMapState.set('mtu.map.selection', '{');
+    assert.equal(reopened.loadWorldSelection(), null);
+    storedMapState.set('mtu.map.selection', '{"sectorId":22,"hex":"9940"}');
+    assert.equal(reopened.loadWorldSelection(), null);
+} finally {
+    if (originalStorage) Object.defineProperty(globalThis, 'localStorage', originalStorage);
+    else delete globalThis.localStorage;
+}
+
 // Region navigation clears selection and uses the same animated pan without changing zoom.
 for (const [id,col,row] of [[17,0,0],[22,3,2]]) {
     focused.selected={key:'old world'};

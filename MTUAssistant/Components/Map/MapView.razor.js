@@ -7,6 +7,7 @@ import { HEX_X, SECTOR_WIDTH, SECTOR_HEIGHT, MAP_PADDING, DETAIL_LEVELS,
 
 const MAX_ZOOM = 192;
 const VIEW_STORAGE_KEY = "mtu.map.view";
+const SELECTION_STORAGE_KEY = "mtu.map.selection";
 const MAX_CACHED_SECTORS = 24;
 const MAX_REQUESTS = 4;
 let scriptsPromise;
@@ -514,6 +515,23 @@ export class DynamicMap {
         if (!this.selected) return;
         this.hexPath(this.selection, this.selected);
         this.selection.fill({ color: 0x83e3d1, alpha: .10 }).stroke({ color: 0x83e3d1, width: 1.8 / zoom });
+    }
+
+    saveWorldSelection(sectorId, hex) {
+        if (this.readOnly || this.disposed) return;
+        try {
+            if (sectorId === null) localStorage.removeItem(SELECTION_STORAGE_KEY);
+            else localStorage.setItem(SELECTION_STORAGE_KEY, JSON.stringify({ sectorId, hex }));
+        } catch { /* World selection remains usable without browser storage. */ }
+    }
+
+    loadWorldSelection() {
+        if (this.readOnly || this.disposed) return null;
+        try {
+            const saved = JSON.parse(localStorage.getItem(SELECTION_STORAGE_KEY) ?? "null");
+            return Number.isInteger(saved?.sectorId) && saved.sectorId > 0
+                && typeof saved.hex === "string" && parseHex(saved.hex) ? saved : null;
+        } catch { return null; }
     }
 
     restoreSelection(sectorId, hex) {
