@@ -25,9 +25,13 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
-        module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/EquipmentDialog.js");
-        reference = DotNetObjectReference.Create(this);
-        await module.InvokeVoidAsync("open", dialog, reference);
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/EquipmentDialog.js");
+            reference = DotNetObjectReference.Create(this);
+            await module.InvokeVoidAsync("open", dialog, reference);
+        }
+        catch (JSDisconnectedException) { }
     }
     [JSInvokable] public async Task Cancel() { if (!Busy) await OnCancel.InvokeAsync(); }
     private async Task Confirm() { if (!Busy) await OnConfirm.InvokeAsync(); }

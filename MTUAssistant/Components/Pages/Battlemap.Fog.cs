@@ -35,12 +35,7 @@ public partial class Battlemap
         }
     }
 
-    private async Task SetFogBrush()
-    {
-        if (map is null)
-            return;
-        await map.InvokeVoidAsync("setFogBrush", fogBrush);
-    }
+    private Task SetFogBrush() => UpdateMap("setFogBrush", fogBrush);
 
     [JSInvokable]
     public Task FogBrushChanged(int size) =>
@@ -52,8 +47,7 @@ public partial class Battlemap
             StateHasChanged();
         });
 
-    private Task UndoFog() =>
-        map is null ? Task.CompletedTask : map.InvokeVoidAsync("undoFog").AsTask();
+    private Task UndoFog() => UpdateMap("undoFog");
 
     [JSInvokable]
     public async Task<bool> SaveFog(

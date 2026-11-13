@@ -123,7 +123,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
     {
         if (SelectedActor is not { } actor || map is null) return;
         var description = await ScenesStore.DescribeCombatantAsync(scene.CampaignId, scene.Id, actor.Id);
-        await map.InvokeVoidAsync("showDescription", description);
+        await UpdateMap("showDescription", description);
     });
     private Character? editingSkills;
     private Character? equipping;
@@ -138,7 +138,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
     private Task OpenSkills() => Run(async scene =>
     {
         if (SelectedActor is not { } actor) return;
-        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        if (!await FlushTokenMoves()) return;
         var character = await FindCharacter(scene.CampaignId, actor)
             ?? throw new ArgumentException("This combatant is no longer in the campaign.");
         equipping = null;
@@ -165,7 +165,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         {
             await Run(async scene =>
             {
-                if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+                if (!await FlushTokenMoves()) return;
                 var previous = encounter.Snapshot();
                 try
                 {
@@ -174,14 +174,14 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
                 }
                 catch { encounter.Restore(previous, entries); throw; }
                 automaticMoveBefore = null;
-                if (map is not null) await map.InvokeVoidAsync("resetTokenMovement", actor.Id);
+                await UpdateMap("resetTokenMovement", actor.Id);
                 await SyncEncounterMap();
             });
             return;
         }
         await Run(async scene =>
         {
-            if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+            if (!await FlushTokenMoves()) return;
             loadouts[actor.CharacterId] = await LoadoutFor(scene.CampaignId, actor);
             encounter.RefreshAutoWeapon(actor.Id, loadouts[actor.CharacterId].AutoScore, entries);
             var slots = encounter.ActionFor(actor.Id).AttackTargets;
@@ -233,7 +233,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
             attackVolley = null;
             attackVolleyIndex = 0;
             automaticMoveBefore = null;
-            if (map is not null) await map.InvokeVoidAsync("resetTokenMovement", attack.ActorId);
+            await UpdateMap("resetTokenMovement", attack.ActorId);
         }
     }
     private Task SetBehindCover(bool value) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetCoverStatus(actor.Id, value, encounter.ActionFor(actor.Id).SelectedHiding, entries)) : Task.CompletedTask;
@@ -246,7 +246,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
     private Task SetElevated(bool value) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetElevated(actor.Id, value, entries)) : Task.CompletedTask;
     private Task ResetActions() => Run(async scene =>
     {
-        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        if (!await FlushTokenMoves()) return;
         if (SelectedActor is not { } actor) return;
         var previous = encounter.Snapshot();
         var state = encounter.ActionFor(actor.Id);
@@ -265,9 +265,9 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         {
             var index = entries.FindIndex(e => e.Id == actor.Id);
             if (index >= 0) entries[index] = returned;
-            if (map is not null) await map.InvokeVoidAsync("updateCombatant", returned);
+            await UpdateMap("updateCombatant", returned);
         }
-        if (map is not null) await map.InvokeVoidAsync("resetTokenMovement", actor.Id);
+        await UpdateMap("resetTokenMovement", actor.Id);
         await SyncEncounterMap();
     });
     private Task SetAutoAttack(string mode) => SelectedActor is { } actor ? ChangeEncounter(() => encounter.SetAutoAttack(actor.Id, mode, SelectedLoadout?.AutoScore ?? 0, entries)) : Task.CompletedTask;
@@ -295,7 +295,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
             loadouts[entry.CharacterId] = await LoadoutFor(scene.CampaignId, entry);
         if (SelectedActor is { } selectedActor) { encounter.RefreshAutoWeapon(selectedActor.Id, SelectedLoadout?.AutoScore ?? 0, entries); encounter.PruneAutoTargets(selectedActor.Id, entries); }
         if (map is null) return;
-        await map.InvokeVoidAsync("setEncounterState", encounter.Active, encounter.SelectedId, entries.Where(encounter.IsDead).Select(e => e.Id).ToArray(), encounter.Round, encounter.PlayerTracker(entries), entries.Select(e => new { e.Id, HealthWidth = encounter.HealthWidth(e), HealthColour = encounter.HealthColour(e) }).ToArray(), encounter.MovementRanges(entries), encounter.SelectedId is int selected ? encounter.ActionFor(selected).TargetIds : [], SelectedActor is { } actor && encounter.ActionFor(actor.Id).MajorAction == "Ranged Attack" ? SelectedLoadout?.RangeFor(encounter.ActionFor(actor.Id)) : null, CombatActionSummary.Create(encounter, SelectedActor, entries, SelectedLoadout, player: true), entries.Where(e => encounter.ActionFor(e.Id).Unconscious).Select(e => e.Id).ToArray(), encounter.AutomaticMoveFor(entries), MapTargetingContext());
+        await UpdateMap("setEncounterState", encounter.Active, encounter.SelectedId, entries.Where(encounter.IsDead).Select(e => e.Id).ToArray(), encounter.Round, encounter.PlayerTracker(entries), entries.Select(e => new { e.Id, HealthWidth = encounter.HealthWidth(e), HealthColour = encounter.HealthColour(e) }).ToArray(), encounter.MovementRanges(entries), encounter.SelectedId is int selected ? encounter.ActionFor(selected).TargetIds : [], SelectedActor is { } actor && encounter.ActionFor(actor.Id).MajorAction == "Ranged Attack" ? SelectedLoadout?.RangeFor(encounter.ActionFor(actor.Id)) : null, CombatActionSummary.Create(encounter, SelectedActor, entries, SelectedLoadout, player: true), entries.Where(e => encounter.ActionFor(e.Id).Unconscious).Select(e => e.Id).ToArray(), encounter.AutomaticMoveFor(entries), MapTargetingContext());
     }
     private ElementReference host, presentationLink;
     private IJSObjectReference? module, map;
@@ -351,7 +351,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
     private void Changed() => _ = InvokeAsync(async () =>
     {
         if (disposed) return;
-        if (BattlemapState.Current is null) { if (map is not null) await map.InvokeVoidAsync("closePresentation"); Navigation.NavigateTo("scenes"); }
+        if (BattlemapState.Current is null) { await UpdateMap("closePresentation"); Navigation.NavigateTo("scenes"); }
         else StateHasChanged();
     });
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -385,9 +385,9 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         await SelectCombatant(id);
         if (!disposed) StateHasChanged();
     });
-    private async Task Command(string action) { if (map is not null) await map.InvokeVoidAsync(action); }
-    private async Task BeginPlacement(int id) { if (map is null) return; placingId = id; error = null; await map.InvokeVoidAsync("beginPlacement", id); }
-    private async Task CancelPlacement() { placingId = null; if (map is not null) await map.InvokeVoidAsync("cancelPlacement"); }
+    private async Task Command(string action) { await UpdateMap(action); }
+    private async Task BeginPlacement(int id) { if (map is null) return; placingId = id; error = null; await UpdateMap("beginPlacement", id); }
+    private async Task CancelPlacement() { placingId = null; await UpdateMap("cancelPlacement"); }
     private async Task Run(Func<SceneSummary, Task> action)
     {
         if (busy || tokenScene is not { } scene) return;
@@ -400,7 +400,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
     {
         if (encounter.Active) throw new ArgumentException("Exit the encounter before adding Travellers.");
         await CancelPlacement();
-        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        if (!await FlushTokenMoves()) return;
         await ScenesStore.MoveTravellersHereAsync(scene.CampaignId, scene.Id);
         var previousTravellers = entries.Where(e => !e.IsNpc).Select(e => e.Id).ToArray();
         entries = (await ScenesStore.CombatantsAsync(scene.CampaignId, scene.Id)).ToList();
@@ -408,14 +408,14 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         if (saved is not null) encounter.Restore(saved, entries);
         if (map is not null)
         {
-            foreach (var id in previousTravellers.Where(id => !entries.Any(e => e.Id == id))) await map.InvokeVoidAsync("removeToken", id);
-            foreach (var entry in entries.Where(e => !e.IsNpc)) await map.InvokeVoidAsync("updateCombatant", entry);
+            foreach (var id in previousTravellers.Where(id => !entries.Any(e => e.Id == id))) await UpdateMap("removeToken", id);
+            foreach (var entry in entries.Where(e => !e.IsNpc)) await UpdateMap("updateCombatant", entry);
         }
         await SyncEncounterMap();
     });
     private Task AddNpc(int characterId) => Run(async scene =>
     {
-        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        if (!await FlushTokenMoves()) return;
         var entry = await ScenesStore.AddCharacterAsync(scene.CampaignId, scene.Id, characterId);
         if (entry.IsNpc)
         {
@@ -440,22 +440,22 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         var index = entries.FindIndex(e => e.Id == entry.Id);
         if (index >= 0) entries[index] = entry;
         await RefreshInstanceNames();
-        if (map is not null) { await map.InvokeVoidAsync("updateCombatant", entry); await SyncEncounterMap(); }
+        if (map is not null) { await UpdateMap("updateCombatant", entry); await SyncEncounterMap(); }
     }
     private Task SetVisibility((int Id, bool Visible) change) => Run(async scene =>
     {
-        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        if (!await FlushTokenMoves()) return;
         await UpdateEntry(await ScenesStore.SetCombatantVisibilityAsync(scene.CampaignId, scene.Id, change.Id, change.Visible));
     });
     private Task RenameInstance((int Id, string Name) change) => Run(async scene =>
     {
-        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        if (!await FlushTokenMoves()) return;
         await UpdateEntry(await ScenesStore.RenameNpcInstanceAsync(scene.CampaignId, scene.Id, change.Id, change.Name));
     });
     private Task Unplace(int id) => Run(async scene =>
     {
         if (placingId == id) await CancelPlacement();
-        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        if (!await FlushTokenMoves()) return;
         var cleared = Encounter.ClearMapState(encounter.Snapshot(), id);
         var token = await ScenesStore.PositionCombatantAsync(scene.CampaignId, scene.Id, id, null, null, cleared);
         var index = entries.FindIndex(e => e.Id == id); if (index >= 0) entries[index] = token;
@@ -466,12 +466,12 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
     private Task RemoveInstance(int id) => Run(async scene =>
     {
         if (placingId == id) await CancelPlacement();
-        if (map is not null) await map.InvokeVoidAsync("flushTokenMoves");
+        if (!await FlushTokenMoves()) return;
         await ScenesStore.RemoveNpcInstanceAsync(scene.CampaignId, scene.Id, id);
         entries.RemoveAll(e => e.Id == id);
         encounter.Restore(Encounter.ClearMapState(encounter.Snapshot(), id), entries);
         await RefreshInstanceNames();
-        if (map is not null) { await map.InvokeVoidAsync("removeToken", id); await SyncEncounterMap(); }
+        if (map is not null) { await UpdateMap("removeToken", id); await SyncEncounterMap(); }
     });
     [JSInvokable]
     public async Task<SceneCombatant?> PlaceToken(int id, int column, int row)
@@ -556,7 +556,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
             catch { SetGridFields(scene); throw; }
         });
     }
-    private async Task Close() { if (map is not null) await map.InvokeVoidAsync("closePresentation"); BattlemapState.Close(); Navigation.NavigateTo("scenes"); }
+    private async Task Close() { await UpdateMap("closePresentation"); BattlemapState.Close(); Navigation.NavigateTo("scenes"); }
     public async ValueTask DisposeAsync()
     {
         disposed = true; BattlemapState.Changed -= Changed;

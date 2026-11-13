@@ -116,7 +116,15 @@
             await WorldSelected.InvokeAsync(null);
             return;
         }
-        var restored = await map.InvokeAsync<bool>("restoreSelection", selected.SectorId, selected.Hex);
+        bool restored;
+        try
+        {
+            restored = await map.InvokeAsync<bool>("restoreSelection", selected.SectorId, selected.Hex);
+        }
+        catch (JSDisconnectedException)
+        {
+            return;
+        }
         if (disposed || version != selectionVersion) return;
         if (!restored) { await WorldSelected.InvokeAsync(null); return; }
         await SelectHex(sector.X, sector.Y, int.Parse(selected.Hex[..2]), int.Parse(selected.Hex[2..]));
@@ -268,7 +276,11 @@
 
     private async Task Invoke(string method)
     {
-        if (map is not null) await map.InvokeVoidAsync(method);
+        try
+        {
+            if (map is not null) await map.InvokeVoidAsync(method);
+        }
+        catch (JSDisconnectedException) { }
     }
 
     public async ValueTask DisposeAsync()

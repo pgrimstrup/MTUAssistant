@@ -1,5 +1,3 @@
-using Microsoft.JSInterop;
-
 namespace MTUAssistant.Components.Pages;
 
 public partial class Battlemap
@@ -15,8 +13,8 @@ public partial class Battlemap
             if (index < 0 || entries[index].Name == updated.Name)
                 continue;
             entries[index] = updated;
-            if (map is not null && updated.OnMap)
-                await map.InvokeVoidAsync("updateCombatant", updated);
+            if (updated.OnMap)
+                await UpdateMap("updateCombatant", updated);
         }
     }
 }

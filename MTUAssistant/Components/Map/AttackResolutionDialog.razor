@@ -58,9 +58,13 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
-        module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/EquipmentDialog.js");
-        reference = DotNetObjectReference.Create(this);
-        await module.InvokeVoidAsync("open", dialog, reference);
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/EquipmentDialog.js");
+            reference = DotNetObjectReference.Create(this);
+            await module.InvokeVoidAsync("open", dialog, reference);
+        }
+        catch (JSDisconnectedException) { }
     }
     private static int? Number(ChangeEventArgs e) => string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null
         : int.TryParse(e.Value?.ToString(), out var value) ? value : throw new ArgumentException("Enter a whole number.");
