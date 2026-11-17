@@ -8,7 +8,7 @@
            aria-label="Search" value="@_text" @oninput="OnInput" @onkeydown="OnKeyDown" @onblur="Close" />
     @if (_open)
     {
-        <ul class="results" role="listbox">
+        <ul @ref="resultsList" class="results" role="listbox">
             @if (_results.Count == 0)
             {
                 <li class="empty">No matches</li>
@@ -17,7 +17,13 @@
             {
                 var result = _results[i];
                 <li class="@(i == _active ? "active" : null)" role="option"
-                    @onmousedown="() => Select(result)" @onmousedown:preventDefault>@result.DisplayText</li>
+                    @onmousedown="() => Select(result)" @onmousedown:preventDefault>
+                    <span class="result-title">@result.Title</span>
+                    <span class="result-detail">
+                        <span class="result-subtitle">@result.Subtitle</span>
+                        <span class="result-location">@result.Location</span>
+                    </span>
+                </li>
             }
         </ul>
     }
@@ -33,14 +39,21 @@
     private CancellationTokenSource? _cts;
     private ElementReference searchInput;
     private IJSObjectReference? inputModule;
+    private ElementReference resultsList;
     private bool selectTextAfterRender;
+    private bool scrollActiveAfterRender;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!selectTextAfterRender) return;
+        if (!selectTextAfterRender && !scrollActiveAfterRender) return;
         try
         {
             inputModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/SearchInput.js");
+            if (scrollActiveAfterRender)
+            {
+                scrollActiveAfterRender = false;
+                if (_open) await inputModule.InvokeVoidAsync("scrollActiveIntoView", resultsList);
+            }
             if (!selectTextAfterRender) return;
             selectTextAfterRender = false;
             await inputModule.InvokeVoidAsync("selectAll", searchInput);
@@ -83,9 +96,11 @@
         {
             case "ArrowDown" when _results.Count > 0:
                 _active = (_active + 1) % _results.Count;
+                scrollActiveAfterRender = true;
                 break;
             case "ArrowUp" when _results.Count > 0:
                 _active = (_active - 1 + _results.Count) % _results.Count;
+                scrollActiveAfterRender = true;
                 break;
             case "Enter" when _open && _results.Count > 0:
                 Select(_results[Math.Max(0, _active)]);
@@ -99,7 +114,7 @@
     private void Select(SearchResult result)
     {
         _cts?.Cancel();
-        _text = result.DisplayText;
+        _text = result.Title;
         selectTextAfterRender = true;
         Close();
         var target = result.SystemId > 0 ? $"system={result.SystemId}"
@@ -116,6 +131,7 @@
         _cts?.Cancel();
         _cts?.Dispose();
         selectTextAfterRender = false;
+        scrollActiveAfterRender = false;
         try
         {
             if (inputModule is not null) await inputModule.DisposeAsync();

@@ -1168,6 +1168,20 @@ Check(
     "Search subsector context preserved"
 );
 Check(
+    regina is { Title: "Regina", Subtitle: "Regina", Location: "Spinward Marches 1910" }
+        && results[0] is { Title: "Regina", Subtitle: "Subsector C", Location: "Spinward Marches" }
+        && new SearchResult
+        {
+            SectorName = "Spinward Marches",
+            SystemId = 1,
+            SystemName = "Nowhere",
+            SubsectorLetter = "C",
+            SectorHex = "1910",
+        }
+            is { Subtitle: "Subsector C" },
+    "Search list title, subtitle and location lines"
+);
+Check(
     results.Any(r => r.SystemName == "Other Regina"),
     "Search retains its existing all-milieu scope"
 );
@@ -1178,7 +1192,13 @@ Check(
 );
 Check((await search.SearchAsync("re")).Count == 0, "Minimum search term length");
 Check(
-    (await search.SearchAsync("Spinward")).Single().SectorName == "Spinward Marches",
+    (await search.SearchAsync("Spinward")).Single()
+        is {
+            SectorName: "Spinward Marches",
+            Title: "Spinward Marches",
+            Subtitle: "Sector",
+            Location: ""
+        },
     "Sector search"
 );
 await Task.WhenAll(

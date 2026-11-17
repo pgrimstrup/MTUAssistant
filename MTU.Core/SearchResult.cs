@@ -28,5 +28,23 @@ public class SearchResult
         }
     }
 
+    /// <summary>First line of a search list item: the system, subsector or sector name.</summary>
+    public string Title =>
+        SystemId > 0 ? SystemName
+        : SubsectorId > 0 ? SubsectorName
+        : SectorName;
+
+    /// <summary>Second line, left: the subsector, or the kind of result for sectors.</summary>
+    public string Subtitle =>
+        SystemId > 0 && !string.IsNullOrWhiteSpace(SubsectorName) ? SubsectorName
+        : SystemId > 0 || SubsectorId > 0 ? $"Subsector {SubsectorLetter}"
+        : "Sector";
+
+    /// <summary>Second line, right: the sector, with the sector hex for systems.</summary>
+    public string Location =>
+        SystemId > 0 ? $"{SectorName} {SectorHex}"
+        : SubsectorId > 0 ? SectorName
+        : string.Empty;
+
     public override string ToString() => DisplayText;
 }

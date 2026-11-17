@@ -10,6 +10,7 @@ The app is well advanced. Extend and refine what's here; don't redesign it. If a
 - **Check `git status` before starting.** If there's uncommitted work, ask whether to wait or build on top of it.
 - **When a change is ready**, list the changed files and suggest a one-line commit message.
 - **Don't touch Paul's real database** in `%LOCALAPPDATA%\MTU` (SQLite). The app applies EF migrations to it automatically at startup, so **don't launch the app after adding a migration** without asking first. The RuntimeChecks use their own in-memory databases, so they're safe.
+- **Don't run the app.** Don't start it, including through a preview or dev server, to verify a change, and never leave a copy running. A running copy locks the build output. Paul runs the app himself, outside the agent.
 - **Ask before:** migrations or other changes that could lose campaign data, deleting files or data, swapping frameworks or libraries, changing a rules interpretation, or building anything out of scope.
 - **Otherwise, decide.** For routine or easily reversible choices, go with sensible defaults and list the choices you made at the end.
 - **One feature or fix at a time,** so each makes a clean commit. Explain what changed, why, and how to test it.
@@ -97,7 +98,7 @@ Get-ChildItem MTUAssistant -Recurse -Filter *.test.mjs | ForEach-Object { node $
 csharpier check .
 ```
 
-**Baseline (17 Nov 2026):** 0 warnings, 0 errors, all RuntimeChecks pass, all 19 `.mjs` tests pass. A new warning counts as a regression. When you add or remove a test file, update this count and date in the same change. If you can't run something, say so plainly. Paul checks the UI in a browser himself.
+**Baseline (17 Nov 2026):** 0 warnings, 0 errors, all RuntimeChecks pass, all 20 `.mjs` tests pass. A new warning counts as a regression. When you add or remove a test file, update this count and date in the same change. If you can't run something, say so plainly. Paul checks the UI in a browser himself, so finish by telling him what to look at.
 
 ## Documentation
 

@@ -6,8 +6,8 @@
 .results {
     position: absolute;
     top: calc(100% + 4px);
-    left: 0;
     right: 0;
+    width: max(100%, min(24rem, calc(100vw - 2rem)));
     z-index: 50;
     margin: 0;
     padding: .25rem;
@@ -28,6 +28,34 @@
 
         .results li:hover, .results li.active {
             background: var(--app-accent-soft);
+        }
+
+        .results .result-title {
+            display: block;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .results .result-detail {
+            display: flex;
+            justify-content: space-between;
+            gap: .75rem;
+            color: var(--app-muted);
+            font-size: .8rem;
+        }
+
+        .results .result-subtitle {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .results .result-location {
+            flex-shrink: 0;
+            white-space: nowrap;
         }
 
         .results li.empty {
