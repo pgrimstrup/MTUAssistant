@@ -61,7 +61,7 @@ public static class SceneChecks
         await db.Database.ExecuteSqlRawAsync(
             "INSERT INTO Characters (Id, CampaignId, Name, PlayerName, Race, Upp, TermsServed, HighestNavalRank, HighestScoutRank, NaturalDr, Inactive, IsNpc) VALUES (301,1,'Legacy Traveller','','','','0',0,0,0,0,0),(302,1,'Legacy Mercenary','','','','0',0,0,0,0,1)"
         );
-        await db.Database.ExecuteSqlInterpolatedAsync(
+        await db.Database.ExecuteSqlAsync(
             $"INSERT INTO SceneTokens (SceneId, CharacterId, \"Column\", \"Row\") VALUES ({legacyScene.Id}, {301}, {2}, {3}), ({legacyScene.Id}, {302}, {4}, {5})"
         );
         await migrator.MigrateAsync();

@@ -48,7 +48,7 @@ public static class InstanceNameChecks
         // Insert with SQL: the database is still at the SceneFog schema, so the current model can't save scenes.
         async Task<int> LegacySceneAsync(string name)
         {
-            await db.Database.ExecuteSqlInterpolatedAsync(
+            await db.Database.ExecuteSqlAsync(
                 $"INSERT INTO Scenes (CampaignId, Name, Image, ContentType, GridSize, GridColour, GridOpacity, GridlineWidth, Revision) VALUES (1, {name}, {SceneImageChecks.Png(500, 500)}, {"image/png"}, 100, {"#000000"}, 50, 2, 1)"
             );
             return await db
@@ -57,13 +57,13 @@ public static class InstanceNameChecks
         }
         var scene = new { Id = await LegacySceneAsync("Names") };
         var otherScene = new { Id = await LegacySceneAsync("Other") };
-        await db.Database.ExecuteSqlInterpolatedAsync(
+        await db.Database.ExecuteSqlAsync(
             $"INSERT INTO SceneTokens (SceneId, CharacterId, Name, InstanceNumber, IsVisible, \"Column\", \"Row\") VALUES ({scene.Id}, {guard.Id}, {"Guard 1"}, 1, 1, 0, 0)"
         );
-        await db.Database.ExecuteSqlInterpolatedAsync(
+        await db.Database.ExecuteSqlAsync(
             $"INSERT INTO SceneTokens (SceneId, CharacterId, Name, InstanceNumber, IsVisible, \"Column\", \"Row\") VALUES ({otherScene.Id}, {guard.Id}, {"Guard 42"}, 1, 1, 0, 0)"
         );
-        await db.Database.ExecuteSqlInterpolatedAsync(
+        await db.Database.ExecuteSqlAsync(
             $"INSERT INTO SceneTokens (SceneId, CharacterId, Name, InstanceNumber, IsVisible) VALUES ({scene.Id}, {guard.Id}, {"Guard 2"}, 2, 1)"
         );
         await db.Database.MigrateAsync();

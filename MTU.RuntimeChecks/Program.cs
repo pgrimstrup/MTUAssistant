@@ -812,80 +812,77 @@ SelectedWorld SystemWorld(
 ) => new("Test", "Test sector", "0101", uwp, pbg, w, stellar, remarks, "", null);
 
 var systemData = SystemDataLookup.Describe(SystemWorld());
+
+// T5: W includes the main world, belts (B) and gas giants (G); other worlds = W - G - B - 1.
 Check(
-    systemData.WorldDescription == "9 worlds, including 3 gas giants and 1 asteroid belt.",
-    "Combined world description"
+    systemData
+        is { Worlds: 8, GasGiants: 3, AsteroidBelts: 1, OtherWorlds: 3, MainWorldNote: null },
+    "T5 world, belt, gas giant and other-world counts"
 );
 Check(
-    SystemDataLookup.Describe(SystemWorld(pbg: "703")).WorldDescription
-        == "9 worlds, including 3 gas giants.",
-    "Omit absent asteroid belts"
+    SystemDataLookup.Describe(SystemWorld(uwp: "X000000-0"))
+        is {
+            AsteroidBelts: 1,
+            OtherWorlds: 3,
+            MainWorldNote: "The main world is an asteroid belt, not included in Asteroid belts.",
+        },
+    "Main-world belt counts towards W but not B"
 );
 Check(
-    SystemDataLookup.Describe(SystemWorld(pbg: "700", w: "0")).WorldDescription == "1 world.",
-    "Singular world and no empty inclusions"
+    SystemDataLookup.Describe(SystemWorld(remarks: "Ni As")).MainWorldNote
+        == "The main world is an asteroid belt, not included in Asteroid belts.",
+    "As remark marks a main-world belt"
 );
 Check(
-    SystemDataLookup.Describe(SystemWorld(pbg: "701", remarks: "Sa")).WorldDescription
-        == "8 worlds, including 1 gas giant. The main world is a satellite.",
-    "Satellite description"
+    SystemDataLookup.Describe(SystemWorld(remarks: "Hi Sa Ht"))
+        is { OtherWorlds: 3, MainWorldNote: "The main world is a satellite." },
+    "Satellite main world counts once towards W"
 );
 Check(
-    SystemDataLookup.Describe(SystemWorld(uwp: "X000000-0", pbg: "700")).WorldDescription
-        == "8 worlds, including 1 asteroid belt. The main world is an asteroid belt.",
-    "Main-world belt description"
+    SystemDataLookup.Describe(SystemWorld(remarks: "(Saurian) O:0101")).MainWorldNote == null,
+    "Remark codes must be complete remarks"
 );
 Check(
-    SystemDataLookup.Describe(SystemWorld(pbg: "???", w: "?")).WorldDescription
-        == "Unknown number of worlds.",
+    SystemDataLookup.Describe(SystemWorld(pbg: "700", w: "1"))
+        is { GasGiants: 0, AsteroidBelts: 0, OtherWorlds: 0 },
+    "Known zero counts"
+);
+Check(
+    SystemDataLookup.Describe(SystemWorld(pbg: "7AB", w: "25"))
+        is { Worlds: 25, GasGiants: 11, AsteroidBelts: 10, OtherWorlds: 3 },
+    "Decimal W and extended-hex PBG counts"
+);
+Check(
+    SystemDataLookup.Describe(SystemWorld(w: "5")).OtherWorlds == 0
+        && SystemDataLookup.Describe(SystemWorld(w: "4")).OtherWorlds == null
+        && SystemDataLookup.Describe(SystemWorld(pbg: "700", w: "0")).OtherWorlds == null,
+    "W too small for its belts, gas giants and main world leaves other worlds unknown"
+);
+Check(
+    SystemDataLookup.Describe(SystemWorld(pbg: "???", w: "?"))
+        is { Worlds: null, GasGiants: null, AsteroidBelts: null, OtherWorlds: null },
     "Unknown counts remain unknown"
+);
+Check(
+    SystemDataLookup.Describe(SystemWorld(pbg: "7?3"))
+        is { Worlds: 8, GasGiants: 3, AsteroidBelts: null, OtherWorlds: null },
+    "Independent unknown counts"
+);
+Check(
+    SystemDataLookup.Describe(SystemWorld(uwp: "A?88899-C"))
+        is { Worlds: 8, AsteroidBelts: 1, OtherWorlds: 3 },
+    "Unknown main-world size does not affect counts"
 );
 Check(
     systemData.Stars.Select(s => s.Designation).SequenceEqual(new[] { "A", "B", "C" }),
     "Stellar letter designations in source order"
 );
-Check(
-    systemData is { Worlds: 9, GasGiants: 3, AsteroidBelts: 1, StellarDataKnown: true }
-        && systemData.Stars.Count == 3,
-    "System totals and multi-star classification"
-);
+Check(systemData.StellarDataKnown && systemData.Stars.Count == 3, "Multi-star classification");
 Check(
     systemData.Stars[0] is { Code: "F7 V", Description: "Yellow-white main-sequence star" }
         && systemData.Stars[1].Description == "Brown dwarf"
         && systemData.Stars[2].Description == "Red main-sequence star",
     "Star types"
-);
-Check(
-    SystemDataLookup.Describe(SystemWorld(uwp: "X000000-0")) is { Worlds: 8, AsteroidBelts: 2 },
-    "Main-world asteroid belt adjustments"
-);
-Check(
-    SystemDataLookup.Describe(SystemWorld(remarks: "Hi Sa Ht")).Worlds == 8,
-    "Main-world moon excluded from extra worlds"
-);
-Check(
-    SystemDataLookup.Describe(SystemWorld(remarks: "(Saurian) O:0101")).Worlds == 9,
-    "Moon code must be a complete remark"
-);
-Check(
-    SystemDataLookup.Describe(SystemWorld(pbg: "7AB", w: "12"))
-        is { Worlds: 13, GasGiants: 11, AsteroidBelts: 10 },
-    "Decimal W and extended-hex PBG counts"
-);
-Check(
-    SystemDataLookup.Describe(SystemWorld(pbg: "700", w: "0"))
-        is { Worlds: 1, GasGiants: 0, AsteroidBelts: 0 },
-    "Known zero counts"
-);
-Check(
-    SystemDataLookup.Describe(SystemWorld(pbg: "7?3", w: "?"))
-        is { Worlds: null, GasGiants: 3, AsteroidBelts: null },
-    "Independent unknown counts"
-);
-Check(
-    SystemDataLookup.Describe(SystemWorld(uwp: "A?88899-C"))
-        is { Worlds: null, AsteroidBelts: null },
-    "Unknown main-world classification"
 );
 foreach (var value in new[] { "", "-", "?", "F7 V unknown", "F7 V ?", "garbage" })
     Check(

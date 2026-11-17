@@ -59,7 +59,7 @@ public static class SharedAnimalChecks
         await db.Database.ExecuteSqlRawAsync(
             "INSERT INTO Characters (Id,CampaignId,Name,PlayerName,Race,Upp,TermsServed,HighestNavalRank,HighestScoutRank,NaturalDr,Inactive,IsNpc,IsAnimal,InjuryTolerance,Speed) VALUES (1,1,'Legacy Animal','','','','0',0,0,0,0,0,1,0,6)"
         );
-        await db.Database.ExecuteSqlInterpolatedAsync(
+        await db.Database.ExecuteSqlAsync(
             $"INSERT INTO Animals (CharacterId, Hits, AnimalType, Behaviour, Traits, Description) VALUES ({legacy.Id}, 10, 'Herbivore', 'Grazer', '', '')"
         );
         await db.Database.MigrateAsync();

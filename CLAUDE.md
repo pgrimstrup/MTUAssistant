@@ -36,7 +36,7 @@ The app is well advanced. Extend and refine what's here; don't redesign it. If a
 - **Setting:** Third Imperium, milieu **M1105**. Sector data comes from the Traveller Map API, stored locally. A sector refresh replaces a sector's systems in one transaction, so key campaign data attached to worlds by sector + hex.
 - **Unclear rules:** say so rather than guessing, and mark the assumption in code with `// RULES-ASSUMPTION:`.
 - **House rules** must be configurable and labelled, not hard-coded.
-- **Copyright:** don't paste rulebook text. Write short original summaries. Keep the CC BY-NC credit for Tim Heiderich's *Trade Goods Dice Modifiers* in the README.
+- **Copyright:** don't paste rulebook text. Write short original summaries. Keep the CC BY-NC credit for Tim Heiderich's *Trade Goods Dice Modifiers* in `ARCHITECTURE.md` (Trading section).
 
 ## Stack and layout
 
@@ -97,11 +97,12 @@ Get-ChildItem MTUAssistant -Recurse -Filter *.test.mjs | ForEach-Object { node $
 csharpier check .
 ```
 
-**Baseline (7 Nov 2026):** 0 warnings, 0 errors, all RuntimeChecks pass, all 16 `.mjs` tests pass. A new warning counts as a regression. If you can't run something, say so plainly. Paul checks the UI in a browser himself.
+**Baseline (17 Nov 2026):** 0 warnings, 0 errors, all RuntimeChecks pass, all 18 `.mjs` tests pass. A new warning counts as a regression. When you add or remove a test file, update this count and date in the same change. If you can't run something, say so plainly. Paul checks the UI in a browser himself.
 
-## README is the feature spec
+## Documentation
 
-`README.md` documents each feature's behaviour, edge cases, migrations and the checks that cover it. Update the matching section, or add one, in the same style with every feature change.
+- **`ARCHITECTURE.md` is the feature spec.** It documents each feature's behaviour, edge cases, migrations and the checks that cover it. Update the matching section, or add one, in the same style with every feature change.
+- **`README.md` is the end-user overview.** Keep it current when a major new feature would interest someone using the app: add or update a short, plain-language entry under "What you can do". Leave implementation detail, checks and minor tweaks to `ARCHITECTURE.md`.
 
 ## Cast view (player display)
 

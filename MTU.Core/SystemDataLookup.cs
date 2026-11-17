@@ -11,13 +11,16 @@ public sealed record SystemData(
     int? Worlds,
     int? GasGiants,
     int? AsteroidBelts,
-    string WorldDescription
+    int? OtherWorlds,
+    string? MainWorldNote
 );
 
 /// <summary>System data and terminology displayed alongside the UWP.</summary>
 /// <remarks>
 /// Stellar and PBG codes: https://travellermap.com/doc/secondsurvey.
-/// World counts follow the MTU convention: W plus the main world unless it is a belt or moon.
+/// World counts follow T5 Book 3: W is the total number of worlds in the system, including the
+/// main world, belts (PBG B) and gas giants (PBG G), but not worldlets or satellites other than
+/// a satellite main world. A main-world asteroid belt counts towards W but not towards B.
 /// </remarks>
 public static partial class SystemDataLookup
 {
@@ -76,66 +79,46 @@ public static partial class SystemDataLookup
     public static SystemData Describe(SelectedWorld world)
     {
         var uwp = world.Uwp.Trim().ToUpperInvariant();
-        var size = uwp.Length == 9 && uwp[7] == '-' ? uwp[1] : '?';
-        var knownSize = Digits.IndexOf(size) is >= 0 and <= 15 || size == 'S';
-        var belt = size == '0';
-        var moon = world
-            .Remarks.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-            .Contains("Sa", StringComparer.OrdinalIgnoreCase);
+        var remarks = world.Remarks.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var belt =
+            (uwp.Length == 9 && uwp[7] == '-' && uwp[1] == '0')
+            || remarks.Contains("As", StringComparer.OrdinalIgnoreCase);
+        var moon = remarks.Contains("Sa", StringComparer.OrdinalIgnoreCase);
 
-        int? worlds = null;
-        if (
-            (knownSize || moon)
-            && int.TryParse(
-                world.W.Trim(),
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out var count
-            )
-            && count < int.MaxValue
+        int? worlds = int.TryParse(
+            world.W.Trim(),
+            NumberStyles.None,
+            CultureInfo.InvariantCulture,
+            out var count
         )
-            worlds = count + (belt || moon ? 0 : 1);
-
-        var belts = PbgDigit(world.Pbg, 1);
-        // An unknown main-world size also leaves the belt adjustment unknown.
-        int? asteroidBelts = knownSize ? belts + (belt ? 1 : 0) : null;
-        var (stars, stellarDataKnown) = ParseStars(world.Stellar);
+            ? count
+            : null;
+        var asteroidBelts = PbgDigit(world.Pbg, 1);
         var gasGiants = PbgDigit(world.Pbg, 2);
+        var (stars, stellarDataKnown) = ParseStars(world.Stellar);
         return new SystemData(
             stars,
             stellarDataKnown,
             worlds,
             gasGiants,
             asteroidBelts,
-            DescribeWorlds(worlds, gasGiants, asteroidBelts, belt, moon)
+            OtherWorlds(worlds, gasGiants, asteroidBelts),
+            belt ? "The main world is an asteroid belt, not included in Asteroid belts."
+                : moon ? "The main world is a satellite."
+                : null
         );
     }
 
-    private static string DescribeWorlds(
-        int? worlds,
-        int? gasGiants,
-        int? belts,
-        bool mainWorldIsBelt,
-        bool mainWorldIsMoon
-    )
-    {
-        var description = worlds is { } count
-            ? $"{count} {(count == 1 ? "world" : "worlds")}"
-            : "Unknown number of worlds";
-        var included = new List<string>();
-        if (gasGiants is > 0)
-            included.Add($"{gasGiants} {(gasGiants == 1 ? "gas giant" : "gas giants")}");
-        if (belts is > 0)
-            included.Add($"{belts} {(belts == 1 ? "asteroid belt" : "asteroid belts")}");
-        if (included.Count > 0)
-            description += ", including " + string.Join(" and ", included);
-        description += ".";
-        if (mainWorldIsBelt)
-            description += " The main world is an asteroid belt.";
-        else if (mainWorldIsMoon)
-            description += " The main world is a satellite.";
-        return description;
-    }
+    // The same whether the main world is a belt, a satellite or neither: it counts once towards
+    // W and never towards B or G. Data with W too small for its belts, gas giants and main world
+    // leaves the count unknown rather than negative.
+    private static int? OtherWorlds(int? worlds, int? gasGiants, int? belts) =>
+        worlds is { } total
+        && gasGiants is { } giants
+        && belts is { } beltCount
+        && total - giants - beltCount - 1 >= 0
+            ? total - giants - beltCount - 1
+            : null;
 
     private static string StarDesignation(int index)
     {

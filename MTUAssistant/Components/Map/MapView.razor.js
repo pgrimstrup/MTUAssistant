@@ -1,13 +1,16 @@
 import { attachCastWindow } from "../../js/CastWindow.js";
 import { observeClicks } from "../../js/WorldSelection.js";
 import { presentationSession, connectPresentation } from "../../js/PresentationSync.js";
+import { drawHexSelection, hexSelectionGeometry, drawHexDestination, hexDestinationGeometry } from "../../js/HexSelection.js";
 import { HEX_X, SECTOR_WIDTH, SECTOR_HEIGHT, MAP_PADDING, DETAIL_LEVELS,
     hexCenter, findHex, parseHex, detailLevel, intersects, worldPriority, worldLabelRules,
-    mapAppearance, baseSymbols, isSubsectorCapital, worldName, borderSegments, routePoints, insetBorderSegment } from "../../js/MapGeometry.js";
+    mapAppearance, baseSymbols, isSubsectorCapital, worldName, borderSegments, routePoints, insetBorderSegment,
+    globalHex, hexDistance, jumpLabel } from "../../js/MapGeometry.js";
 
 const MAX_ZOOM = 192;
 const VIEW_STORAGE_KEY = "mtu.map.view";
 const SELECTION_STORAGE_KEY = "mtu.map.selection";
+const DESTINATION_STORAGE_KEY = "mtu.map.destination";
 const MAX_CACHED_SECTORS = 24;
 const MAX_REQUESTS = 4;
 let scriptsPromise;
@@ -73,7 +76,8 @@ export class DynamicMap {
             screenHeight: this.host.clientHeight, worldWidth: this.worldW, worldHeight: this.worldH,
             events: this.app.renderer.events });
         this.app.stage.addChild(this.viewport);
-        if (!this.readOnly) this.viewport.drag().pinch().wheel({ smooth: 6 }).decelerate({ friction: .92 });
+        // The right button is reserved for jump measurement, so it never pans.
+        if (!this.readOnly) this.viewport.drag({ mouseButtons: "left-middle" }).pinch().wheel({ smooth: 6 }).decelerate({ friction: .92 });
         this.viewport.interactiveChildren = false;
 
         this.grid = new PIXI.Graphics();
@@ -81,18 +85,42 @@ export class DynamicMap {
         this.political = new PIXI.Graphics();
         this.markerLayer = new PIXI.Container();
         this.labelLayer = new PIXI.Container();
+        this.destinationMarker = new PIXI.Graphics();
         this.selection = new PIXI.Graphics();
-        for (const layer of [this.grid, this.boundaries, this.political, this.markerLayer, this.labelLayer, this.selection]) {
+        for (const layer of [this.grid, this.boundaries, this.political, this.markerLayer, this.labelLayer, this.destinationMarker, this.selection]) {
             layer.eventMode = "none";
             this.viewport.addChild(layer);
         }
-        if (!this.readOnly) this.removeClickObserver = observeClicks(this.app.canvas, event => this.selectWorld(event));
+        // Jump measurement is drawn in screen space so it matches the Battlemap measurement style.
+        this.measureGraphics = new PIXI.Graphics();
+        this.measureLabelBackground = new PIXI.Graphics();
+        this.measureLabelText = new PIXI.Text({ text: "", style: { fontFamily: "Arial", fontSize: 14, fontWeight: "bold", fill: 0xffffff } });
+        this.measureLabel = new PIXI.Container();
+        this.measureLabel.addChild(this.measureLabelBackground, this.measureLabelText);
+        this.measureLabel.visible = false;
+        this.measureOverlay = new PIXI.Container();
+        this.measureOverlay.eventMode = "none";
+        this.measureOverlay.addChild(this.measureGraphics, this.measureLabel);
+        this.app.stage.addChild(this.measureOverlay);
+        if (!this.readOnly) {
+            this.removeClickObserver = observeClicks(this.app.canvas, event => this.selectWorld(event));
+            this.onMeasureDown = event => this.beginMeasure(event);
+            this.onMeasureMove = event => { if (this.measure?.id === event.pointerId) this.updateMeasure(event); };
+            this.onMeasureEnd = event => this.endMeasure(event);
+            this.onContextMenu = event => event.preventDefault();
+            this.app.canvas.addEventListener("pointerdown", this.onMeasureDown);
+            this.app.canvas.addEventListener("pointermove", this.onMeasureMove, { passive:true });
+            for (const name of ["pointerup", "pointercancel", "lostpointercapture"])
+                this.app.canvas.addEventListener(name, this.onMeasureEnd);
+            // Right-drag measures, so the browser menu never opens over the GM map.
+            this.app.canvas.addEventListener("contextmenu", this.onContextMenu);
+        }
         this.onPointerMove = event => {
             if (event.pointerType === "touch") return;
             this.pointerPosition = { x:event.clientX, y:event.clientY };
             this.updatePointerLocation();
         };
-        this.onPointerLeave = () => { this.pointerPosition = null; this.updatePointerLocation(); };
+        this.onPointerLeave = () => { this.cancelMeasure(); this.pointerPosition = null; this.updatePointerLocation(); };
         this.app.canvas.addEventListener("pointermove", this.onPointerMove, { passive:true });
         this.app.canvas.addEventListener("pointerleave", this.onPointerLeave, { passive:true });
         this.app.canvas.addEventListener("pointercancel", this.onPointerLeave, { passive:true });
@@ -104,8 +132,11 @@ export class DynamicMap {
         this.resizeObserver.observe(this.host);
         this.onResize();
         if (this.readOnly || !this.restoreView()) this.fit();
+        this.restoreDestination();
         this.startPresentation();
-        this.tick = () => this.onTick();
+        this.selectionTime = 0;
+        this.reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)") ?? null;
+        this.tick = ticker => this.onTick(ticker);
         this.app.ticker.add(this.tick);
         this.update();
     }
@@ -139,6 +170,8 @@ export class DynamicMap {
         await this.loadOverview();
         if (this.disposed) return;
         this.selected = null;
+        this.cancelMeasure();
+        this.restoreDestination();
         this.presentationSelectionKey = null;
         this.updatePointerLocation();
         this.onResize();
@@ -195,8 +228,13 @@ export class DynamicMap {
             scale: Math.min(MAX_ZOOM, Math.max(this.fitZoom, this.viewport.scale.x * factor)), ease: "easeInOutSine" });
     }
 
-    onTick() {
+    onTick(ticker) {
         if (this.disposed) return;
+        this.selectionTime += ticker?.deltaMS ?? 0;
+        // Selection and destination markers animate every frame, and the screen-space measurement
+        // follows wheel zoom mid-drag; the rest of the map redraws on view changes.
+        if ((this.selected || this.destination) && this.reducedMotion?.matches !== true) this.drawSelection(this.viewport.scale.x);
+        if (this.measure) this.drawMeasure();
         const v = this.viewport;
         const signature = `${v.left.toFixed(2)},${v.top.toFixed(2)},${v.scale.x.toFixed(4)},${this.host.clientWidth},${this.host.clientHeight}`;
         const retryDue = [...this.sectorCache.values()].some(entry => entry.state === "failed" && entry.retryAt <= Date.now());
@@ -511,10 +549,113 @@ export class DynamicMap {
     }
 
     drawSelection(zoom) {
-        this.selection.clear();
-        if (!this.selected) return;
-        this.hexPath(this.selection, this.selected);
-        this.selection.fill({ color: 0x83e3d1, alpha: .10 }).stroke({ color: 0x83e3d1, width: 1.8 / zoom });
+        const reduced = this.reducedMotion?.matches === true, time = this.selectionTime ?? 0;
+        drawHexSelection(this.selection, hexSelectionGeometry(this.selected, zoom, time, reduced));
+        if (this.destinationMarker)
+            drawHexDestination(this.destinationMarker, hexDestinationGeometry(this.destination, zoom, time, reduced));
+        this.drawMeasure();
+    }
+
+    // Global hex under a pointer event, clamped to the atlas so dragging off it stops at the edge.
+    hexAtClient(event) {
+        const bounds = this.app.canvas.getBoundingClientRect();
+        const point = this.viewport.toWorld((event.clientX - bounds.left) * this.host.clientWidth / bounds.width,
+            (event.clientY - bounds.top) * this.host.clientHeight / bounds.height);
+        const hex = globalHex(point.x, point.y);
+        return { column: Math.min(Math.max(0, hex.column), this.overview.columns * 32 - 1),
+            row: Math.min(Math.max(0, hex.row), this.overview.rows * 40 - 1) };
+    }
+
+    beginMeasure(event) {
+        if (this.readOnly || this.disposed || this.measure || event.button !== 2 || !this.viewport) return;
+        event.preventDefault();
+        const hex = this.hexAtClient(event);
+        this.measure = { id: event.pointerId, origin: hex, target: hex };
+        // Capture keeps the drag alive outside the canvas; an inactive pointer cannot be captured.
+        try { this.app.canvas.setPointerCapture?.(event.pointerId); } catch { /* Measure without capture. */ }
+        this.drawMeasure();
+        this.publishPresentation();
+    }
+
+    updateMeasure(event) {
+        const measure = this.measure;
+        if (!measure) return;
+        const target = this.hexAtClient(event);
+        if (target.column === measure.target.column && target.row === measure.target.row) return;
+        measure.target = target;
+        this.drawMeasure();
+        this.publishPresentation();
+    }
+
+    // Releasing the right button makes the hex under the pointer the jump destination.
+    endMeasure(event) {
+        const measure = this.measure;
+        if (!measure || measure.id !== event.pointerId) return;
+        const released = event.type === "pointerup" && event.button === 2;
+        if (released) this.updateMeasure(event);
+        this.cancelMeasure();
+        if (released) this.chooseDestination(measure.origin, measure.target);
+    }
+
+    cancelMeasure() {
+        const measure = this.measure;
+        // The presentation only mirrors the GM's measurement from snapshots.
+        if (!measure || this.readOnly) return;
+        this.measure = null;
+        if (measure.id != null && this.app?.canvas?.hasPointerCapture?.(measure.id)) this.app.canvas.releasePointerCapture(measure.id);
+        this.drawMeasure();
+        this.publishPresentation();
+    }
+
+    drawMeasure() {
+        const graphics = this.measureGraphics;
+        if (!graphics || !this.viewport) return;
+        graphics.clear();
+        const measure = this.measure;
+        this.measureLabel.visible = !!measure;
+        if (!measure) return;
+        const start = this.viewport.toScreen(hexCenter(measure.origin.column, measure.origin.row));
+        const end = this.viewport.toScreen(hexCenter(measure.target.column, measure.target.row));
+        graphics.moveTo(start.x, start.y).lineTo(end.x, end.y).stroke({ color: 0xffffff, width: 2 });
+        graphics.circle(start.x, start.y, 4).fill({ color: 0xffffff });
+        this.measureLabelText.text = jumpLabel(hexDistance(measure.origin, measure.target));
+        const width = this.measureLabelText.width + 10, height = this.measureLabelText.height + 6;
+        this.measureLabelText.position.set(5, 3);
+        this.measureLabelBackground.clear().rect(0, 0, width, height).fill({ color: 0x000000, alpha: .75 });
+        this.measureLabel.position.set((start.x + end.x) / 2 - width / 2, (start.y + end.y) / 2 - height / 2);
+    }
+
+    // A destination needs a charted sector to persist by sector ID and hex. A right-click without
+    // dragging on the current destination clears it.
+    chooseDestination(origin, target) {
+        const sector = this.sectors.find(s => s.col === Math.floor(target.column / 32) && s.row === Math.floor(target.row / 40));
+        if (!sector) return;
+        const hex = String(target.column % 32 + 1).padStart(2, "0") + String(target.row % 40 + 1).padStart(2, "0");
+        const key = `${sector.id}/${hex}`;
+        const clear = origin.column === target.column && origin.row === target.row && this.destination?.key === key;
+        this.destination = clear ? null : { ...hexCenter(target.column, target.row), key };
+        this.saveDestination(clear ? null : { sectorId: sector.id, hex });
+        this.drawSelection(this.viewport.scale.x);
+        this.publishPresentation();
+    }
+
+    saveDestination(destination) {
+        if (this.readOnly || this.disposed) return;
+        try {
+            if (destination === null) localStorage.removeItem(DESTINATION_STORAGE_KEY);
+            else localStorage.setItem(DESTINATION_STORAGE_KEY, JSON.stringify(destination));
+        } catch { /* The destination remains usable without browser storage. */ }
+    }
+
+    // Restores the saved destination by sector ID and hex, like the selected world.
+    restoreDestination() {
+        if (this.readOnly) return;
+        let saved = null;
+        try { saved = JSON.parse(localStorage.getItem(DESTINATION_STORAGE_KEY) ?? "null"); } catch { saved = null; }
+        const sector = Number.isInteger(saved?.sectorId) ? this.sectors.find(s => s.id === saved.sectorId) : null;
+        const location = typeof saved?.hex === "string" ? parseHex(saved.hex) : null;
+        this.destination = sector && location ? { ...hexCenter(sector.col * 32 + location.column - 1,
+            sector.row * 40 + location.row - 1), key: `${sector.id}/${saved.hex}` } : null;
     }
 
     saveWorldSelection(sectorId, hex) {
@@ -664,9 +805,11 @@ export class DynamicMap {
         const offsetX = this.overview.minSectorX * SECTOR_WIDTH;
         const offsetY = this.overview.minSectorY * SECTOR_HEIGHT;
         const { x, y } = this.viewport.center;
+        const marked = hex => hex ? { x: hex.x + offsetX, y: hex.y + offsetY, key: hex.key ?? null } : null;
+        const centre = hex => { const point = hexCenter(hex.column, hex.row); return { x: point.x + offsetX, y: point.y + offsetY }; };
         this.presentation.publish({ version: 1, x: x + offsetX, y: y + offsetY, zoom: this.viewport.scale.x,
-            selected: this.selected ? { x: this.selected.x + offsetX, y: this.selected.y + offsetY,
-                key: this.selected.key ?? null } : null });
+            selected: marked(this.selected), destination: marked(this.destination),
+            measure: this.measure ? { from: centre(this.measure.origin), to: centre(this.measure.target) } : null });
     }
 
     applyPresentation(state) {
@@ -678,6 +821,10 @@ export class DynamicMap {
         this.viewport.moveCenter(state.x - offsetX, state.y - offsetY);
         this.selected = state.selected ? { ...state.selected,
             x: state.selected.x - offsetX, y: state.selected.y - offsetY } : null;
+        this.destination = state.destination ? { ...state.destination,
+            x: state.destination.x - offsetX, y: state.destination.y - offsetY } : null;
+        this.measure = state.measure ? { origin: globalHex(state.measure.from.x - offsetX, state.measure.from.y - offsetY),
+            target: globalHex(state.measure.to.x - offsetX, state.measure.to.y - offsetY) } : null;
         this.updatePresentationSelection();
         this.drawPresentationPointer();
         this.lastView = "";
@@ -762,7 +909,15 @@ export class DynamicMap {
             this.app.canvas.removeEventListener("pointermove", this.onPointerMove);
             this.app.canvas.removeEventListener("pointerleave", this.onPointerLeave);
             this.app.canvas.removeEventListener("pointercancel", this.onPointerLeave);
+            if (this.onMeasureDown) {
+                this.app.canvas.removeEventListener("pointerdown", this.onMeasureDown);
+                this.app.canvas.removeEventListener("pointermove", this.onMeasureMove);
+                for (const name of ["pointerup", "pointercancel", "lostpointercapture"])
+                    this.app.canvas.removeEventListener(name, this.onMeasureEnd);
+                this.app.canvas.removeEventListener("contextmenu", this.onContextMenu);
+            }
         }
+        this.measure = null;
         globalThis.removeEventListener("blur", this.onPointerLeave);
         globalThis.removeEventListener("pagehide", this.onPointerLeave);
         document.removeEventListener("visibilitychange", this.onVisibilityChange);

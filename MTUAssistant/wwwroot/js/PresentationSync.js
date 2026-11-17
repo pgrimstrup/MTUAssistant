@@ -17,12 +17,17 @@ export function presentationSession(storage, newId = () => crypto.randomUUID?.()
     } catch { return newId(); }
 }
 
+const validMapPoint = point => !!point && [point.x, point.y].every(Number.isFinite);
+const validMarkedHex = hex => validMapPoint(hex) && (hex.key == null || typeof hex.key === "string");
+
+// The Galaxy Map has no GM-only data: the snapshot holds the camera, the selected world, the
+// jump destination and any jump measurement in progress. Older snapshots omit the last two.
 export function validMapState(state) {
     return state?.version === 1 && [state.x, state.y, state.zoom].every(Number.isFinite)
         && state.zoom > 0 && state.zoom <= 192
-        && (state.selected === null || (state.selected
-            && [state.selected.x, state.selected.y].every(Number.isFinite)
-            && (state.selected.key == null || typeof state.selected.key === "string")));
+        && (state.selected === null || validMarkedHex(state.selected))
+        && (state.destination == null || validMarkedHex(state.destination))
+        && (state.measure == null || (validMapPoint(state.measure.from) && validMapPoint(state.measure.to)));
 }
 
 // Snapshots are paired to one Admin tab, shared only within this browser profile/origin.

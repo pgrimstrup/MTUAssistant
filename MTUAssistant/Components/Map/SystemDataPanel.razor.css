@@ -54,6 +54,13 @@
 .trade-table tr[data-category="special"] { --star-colour: #ffb2a6; }
 .trade-table .star-badge { min-width: 1.8rem; width: auto; padding: 0 .2rem; }
 
+.worlds-table th, .worlds-table td { vertical-align: middle; }
+.worlds-table .star-badge { min-width: 1.55rem; width: auto; padding: 0 .2rem; }
+.worlds-table tr[data-status="positive"] { --star-colour: #75d79a; }
+.worlds-table tr[data-status="warning"] { --star-colour: #ffc107; }
+.worlds-table tr[data-status="unknown"] { --star-colour: #abb7c8; }
+.world-count-label { color: var(--star-colour); font-size: .78rem; font-weight: 650; }
+
 @media (max-width: 800px) {
 
     .world-panel { max-height: none; }

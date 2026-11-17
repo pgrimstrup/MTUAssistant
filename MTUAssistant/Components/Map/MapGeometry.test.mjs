@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { HEX_X, hexCenter, findHex, detailLevel, LabelLayout, parseHex, worldPriority, mapAppearance, baseSymbols, isSubsectorCapital, worldName, worldLabelRules, borderSegments, routePoints, insetBorderSegment } from '../../wwwroot/js/MapGeometry.js';
+import { HEX_X, hexCenter, findHex, detailLevel, LabelLayout, parseHex, worldPriority, mapAppearance, baseSymbols, isSubsectorCapital, worldName, worldLabelRules, borderSegments, routePoints, insetBorderSegment, globalHex, hexDistance, jumpLabel } from '../../wwwroot/js/MapGeometry.js';
 import { readFile } from 'node:fs/promises';
 // Collocated browser modules use public /js URLs; map those to physical wwwroot files in Node.
 let rendererSource = await readFile(new URL('./MapView.razor.js', import.meta.url), 'utf8');
-for (const moduleName of ['WorldSelection.js', 'MapGeometry.js', 'PresentationSync.js', 'CastWindow.js'])
+for (const moduleName of ['WorldSelection.js', 'MapGeometry.js', 'PresentationSync.js', 'CastWindow.js', 'HexSelection.js'])
     rendererSource = rendererSource.replaceAll(`../../js/${moduleName}`,
         new URL(`../../wwwroot/js/${moduleName}`, import.meta.url).href);
 const { DynamicMap } = await import(`data:text/javascript;base64,${Buffer.from(rendererSource).toString('base64')}`);
@@ -230,6 +230,8 @@ reloadMap.loadOverview=async()=>{reloadMap.overview={minSectorX:-5,minSectorY:-2
 reloadMap.onResize=()=>resized++;
 reloadMap.update=()=>redrawn++;
 reloadMap.selected={key:'old'};
+let destinationRestores=0;
+reloadMap.restoreDestination=()=>destinationRestores++;
 await reloadMap.reloadData();
 assert.equal(aborted,1);
 assert.equal(reloadMap.sectorCache.size,0);
@@ -238,6 +240,7 @@ assert.ok(Math.abs(moved.x-(100+32*HEX_X))<1e-10);
 assert.equal(moved.y,90);
 assert.equal(resized,1);
 assert.equal(redrawn,1);
+assert.equal(destinationRestores,1,'a catalogue reload re-resolves the saved jump destination');
 
 const ring = borderSegments('0101',0,0);
 assert.equal(ring.length,6);
@@ -357,3 +360,175 @@ presentationMap.presentedPointer = null;
 presentationMap.drawPresentationPointer();
 assert.equal(marker.hidden, true, 'leaving the Admin map clears the marker');
 console.log('Presentation pointer projection, zoom, deduplication and visibility checks passed.');
+
+// Jump distance: whole hexes, checked against a breadth-first walk across sector seams.
+const adjacent = (column, row) => {
+    const centre = hexCenter(column, row), result = [];
+    for (let dc = -1; dc <= 1; dc++) for (let dr = -1; dr <= 1; dr++) {
+        if (!dc && !dr) continue;
+        const other = hexCenter(column + dc, row + dr);
+        if (Math.abs(Math.hypot(other.x - centre.x, other.y - centre.y) - 1) < 1e-9) result.push({ column: column + dc, row: row + dr });
+    }
+    return result;
+};
+for (const origin of [{ column: 30, row: 38 }, { column: 31, row: 39 }, { column: 32, row: 40 }]) {
+    assert.equal(adjacent(origin.column, origin.row).length, 6, 'every hex has six neighbours one parsec away');
+    const steps = new Map([[`${origin.column},${origin.row}`, 0]]), queue = [origin];
+    while (queue.length) {
+        const hex = queue.shift();
+        for (const next of adjacent(hex.column, hex.row)) {
+            const key = `${next.column},${next.row}`;
+            if (next.column < 20 || next.column > 44 || next.row < 28 || next.row > 52 || steps.has(key)) continue;
+            steps.set(key, steps.get(`${hex.column},${hex.row}`) + 1);
+            queue.push(next);
+        }
+    }
+    for (const [key, distance] of steps) {
+        const [column, row] = key.split(',').map(Number);
+        assert.equal(hexDistance(origin, { column, row }), distance, `jump distance ${origin.column},${origin.row} to ${key}`);
+        assert.equal(hexDistance({ column, row }, origin), distance, 'jump distance is symmetric');
+    }
+}
+assert.equal(hexDistance({ column: 0, row: 0 }, { column: 0, row: 0 }), 0);
+assert.equal(hexDistance({ column: 0, row: 0 }, { column: 0, row: 6 }), 6, 'straight down a column');
+assert.equal(hexDistance({ column: 0, row: 0 }, { column: 6, row: 3 }), 6, 'diagonal along alternating columns');
+for (const [column, row] of [[0, 0], [31, 39], [32, 40], [127, 119]]) {
+    const centre = hexCenter(column, row);
+    assert.deepEqual(globalHex(centre.x, centre.y), { column, row }, 'global hex round-trips through hex centres');
+}
+assert.deepEqual([0, 1, 2, 6].map(jumpLabel), ['0 parsecs', '1 parsec', '2 parsecs', '6 parsecs']);
+console.log('Jump distance, global hexes and parsec labels passed.');
+
+// Right-drag measures between snapped hex centres; releasing sets a persisted jump destination.
+const jumpStorage = new Map();
+const savedStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+    getItem: key => jumpStorage.get(key) ?? null,
+    setItem: (key, value) => jumpStorage.set(key, value),
+    removeItem: key => jumpStorage.delete(key)
+}});
+const recorder = () => {
+    const g = { ops: [] };
+    for (const name of ['clear', 'moveTo', 'lineTo', 'stroke', 'circle', 'fill', 'rect', 'beginPath', 'poly'])
+        g[name] = (...args) => { g.ops.push([name, ...args]); return g; };
+    return g;
+};
+const jumpMap = (options = {}) => {
+    const map = new DynamicMap({ clientWidth: 100, clientHeight: 100 }, {}, {}, options);
+    const captured = new Set();
+    map.overview = { columns: 2, rows: 1, minSectorX: -1, minSectorY: 0 };
+    map.sectors = [{ id: 17, col: 0, row: 0 }, { id: 22, col: 1, row: 0 }];
+    map.app = { canvas: { getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }),
+        setPointerCapture: id => captured.add(id), hasPointerCapture: id => captured.has(id), releasePointerCapture: id => captured.delete(id) } };
+    map.captured = captured;
+    map.pointerAt = hexCenter(0, 0);
+    map.viewport = { center: { x: 0, y: 0 }, scale: { x: 10 }, toWorld: () => map.pointerAt, toScreen: point => ({ x: point.x * 10, y: point.y * 10 }) };
+    map.measureGraphics = recorder(); map.measureLabelBackground = recorder();
+    map.measureLabel = { visible: false, position: { set(x, y) { map.labelAt = { x, y }; } } };
+    map.measureLabelText = { text: '', width: 60, height: 16, position: { set() {} } };
+    map.selection = recorder(); map.destinationMarker = recorder();
+    map.snapshots = [];
+    map.presentation = { publish: state => map.snapshots.push(state) };
+    return map;
+};
+const pointer = (map, type, column, row, button = 2) => {
+    map.pointerAt = hexCenter(column, row);
+    let prevented = false;
+    const event = { type, button, pointerId: 7, clientX: 0, clientY: 0, preventDefault: () => { prevented = true; } };
+    if (type === 'pointerdown') map.beginMeasure(event);
+    else if (type === 'pointermove') { if (map.measure?.id === event.pointerId) map.updateMeasure(event); }
+    else map.endMeasure(event);
+    return prevented;
+};
+try {
+    const gm = jumpMap();
+    assert.equal(pointer(gm, 'pointerdown', 3, 4, 0), false, 'left button never measures');
+    assert.equal(gm.measure, undefined);
+    assert.equal(pointer(gm, 'pointerdown', 3, 4), true, 'right button starts a measurement and suppresses the menu');
+    assert.deepEqual(gm.measure, { id: 7, origin: { column: 3, row: 4 }, target: { column: 3, row: 4 } });
+    assert.ok(gm.captured.has(7), 'the measuring pointer is captured');
+    assert.equal(gm.measureLabelText.text, '0 parsecs');
+    assert.equal(gm.measureLabel.visible, true);
+    const published = gm.snapshots.length;
+    pointer(gm, 'pointermove', 3, 4);
+    assert.equal(gm.snapshots.length, published, 'moving within a hex sends no update');
+    pointer(gm, 'pointermove', 9, 4);
+    assert.equal(gm.measureLabelText.text, '6 parsecs', 'the label shows whole parsecs');
+    const strokes = gm.measureGraphics.ops.filter(op => op[0] === 'stroke');
+    assert.deepEqual(strokes.at(-1)[1], { color: 0xffffff, width: 2 }, 'Battlemap measurement style: 2 px white line');
+    assert.deepEqual(gm.measureGraphics.ops.filter(op => op[0] === 'circle').at(-1).slice(3), [4], 'origin dot');
+    const from = hexCenter(3, 4), to = hexCenter(9, 4);
+    assert.ok(Math.abs(gm.labelAt.x - ((from.x + to.x) * 5 - 35)) < 1e-9 && Math.abs(gm.labelAt.y - ((from.y + to.y) * 5 - 11)) < 1e-9,
+        'the label is centred halfway along the line');
+    let snapshot = gm.snapshots.at(-1);
+    assert.deepEqual(snapshot.measure, { from: { x: from.x - 32 * HEX_X, y: from.y }, to: { x: to.x - 32 * HEX_X, y: to.y } },
+        'the live measurement is cast as absolute hex centres');
+    pointer(gm, 'pointerup', 33, 4);
+    assert.equal(gm.measure, null); assert.equal(gm.measureLabel.visible, false);
+    assert.ok(!gm.captured.has(7), 'release frees the pointer');
+    assert.deepEqual(gm.destination, { ...hexCenter(33, 4), key: '22/0205' }, 'release snaps the destination to the hex under the pointer');
+    assert.equal(jumpStorage.get('mtu.map.destination'), '{"sectorId":22,"hex":"0205"}');
+    snapshot = gm.snapshots.at(-1);
+    assert.equal(snapshot.measure, null, 'the cast measurement clears on release');
+    assert.deepEqual(snapshot.destination, { x: hexCenter(33, 4).x - 32 * HEX_X, y: hexCenter(33, 4).y, key: '22/0205' });
+    assert.deepEqual(Object.keys(snapshot).sort(), ['destination', 'measure', 'selected', 'version', 'x', 'y', 'zoom'].sort(),
+        'the snapshot carries only camera, selection, destination and measurement');
+    assert.ok(gm.destinationMarker.ops.some(op => op[0] === 'stroke' && op[1].color === 0xffa500), 'the destination marker is drawn in orange');
+
+    // A cancelled drag keeps the previous destination; a right-click on the destination clears it.
+    pointer(gm, 'pointerdown', 1, 1); pointer(gm, 'pointercancel', 2, 1);
+    assert.equal(gm.destination.key, '22/0205');
+    pointer(gm, 'pointerdown', 4, 4); pointer(gm, 'pointerup', 4, 4);
+    assert.equal(gm.destination.key, '17/0505', 'a right-click elsewhere moves the destination');
+    pointer(gm, 'pointerdown', 4, 4); pointer(gm, 'pointerup', 4, 4);
+    assert.equal(gm.destination, null, 'a right-click on the destination clears it');
+    assert.equal(jumpStorage.has('mtu.map.destination'), false);
+    pointer(gm, 'pointerdown', 4, 4); pointer(gm, 'pointerup', 0, 0, 0);
+    assert.equal(gm.destination, null, 'releasing another button does not choose a destination');
+    assert.equal(gm.measure, null);
+
+    // Dragging off the atlas stops at its edge; a hex without a charted sector is not a destination.
+    pointer(gm, 'pointerdown', 4, 4); pointer(gm, 'pointermove', 90, 70);
+    assert.deepEqual(gm.measure.target, { column: 63, row: 39 }, 'measurement clamps to the atlas');
+    gm.sectors = gm.sectors.filter(sector => sector.id !== 22);
+    pointer(gm, 'pointerup', 90, 70);
+    assert.equal(gm.destination, null);
+    gm.measure = { id: 3, origin: { column: 0, row: 0 }, target: { column: 1, row: 1 } };
+    gm.cancelMeasure();
+    assert.equal(gm.measure, null, 'leaving the window cancels a measurement');
+
+    // The saved destination is restored by sector ID and hex on a new map instance.
+    jumpStorage.set('mtu.map.destination', '{"sectorId":22,"hex":"0205"}');
+    const reopenedJump = jumpMap();
+    reopenedJump.restoreDestination();
+    assert.deepEqual(reopenedJump.destination, { ...hexCenter(33, 4), key: '22/0205' });
+    for (const bad of ['{', '{"sectorId":99,"hex":"0205"}', '{"sectorId":22,"hex":"9999"}', 'null']) {
+        jumpStorage.set('mtu.map.destination', bad);
+        reopenedJump.restoreDestination();
+        assert.equal(reopenedJump.destination, null, `invalid saved destination ${bad}`);
+    }
+
+    // The presentation mirrors the destination and measurement but never measures or reads storage.
+    const cast = jumpMap({ readOnly: true });
+    cast.viewport = { ...cast.viewport, setZoom() {}, moveCenter() {} };
+    cast.update = () => cast.drawSelection(10);
+    cast.updatePresentationSelection = () => {};
+    jumpStorage.set('mtu.map.destination', '{"sectorId":17,"hex":"0101"}');
+    cast.restoreDestination();
+    assert.equal(cast.destination, undefined, 'the presentation never reads the GM destination from storage');
+    cast.applyPresentation({ version: 1, x: 0, y: 0, zoom: 10, selected: null, destination: snapshot.destination,
+        measure: { from: { x: from.x - 32 * HEX_X, y: from.y }, to: { x: to.x - 32 * HEX_X, y: to.y } } });
+    assert.deepEqual(cast.destination, { ...hexCenter(33, 4), key: '22/0205' });
+    assert.deepEqual(cast.measure, { origin: { column: 3, row: 4 }, target: { column: 9, row: 4 } });
+    assert.equal(cast.measureLabelText.text, '6 parsecs');
+    cast.cancelMeasure();
+    assert.ok(cast.measure, 'pointer leave in the presentation keeps the mirrored measurement');
+    assert.equal(pointer(cast, 'pointerdown', 1, 1), false, 'the presentation cannot measure');
+    cast.applyPresentation({ version: 1, x: 0, y: 0, zoom: 10, selected: null });
+    assert.equal(cast.destination, null); assert.equal(cast.measure, null);
+    assert.equal(cast.measureLabel.visible, false, 'older snapshots without these fields clear them');
+} finally {
+    if (savedStorage) Object.defineProperty(globalThis, 'localStorage', savedStorage);
+    else delete globalThis.localStorage;
+}
+console.log('Jump measurement, destination persistence, restore and presentation checks passed.');

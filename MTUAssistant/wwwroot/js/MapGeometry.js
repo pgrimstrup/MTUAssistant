@@ -192,3 +192,20 @@ export function insetBorderSegment(a, b, zoom) {
     const tx=dx/length*extension, ty=dy/length*extension;
     return [{x:a.x+nx-tx,y:a.y+ny-ty},{x:b.x+nx+tx,y:b.y+ny+ty}];
 }
+
+// Global zero-based column/row of the hex containing a map point (see hexCenter).
+export function globalHex(x, y) {
+    const hex = findHex(x, y);
+    return { column: hex.sectorColumn * 32 + hex.column - 1, row: hex.sectorRow * 40 + hex.row - 1 };
+}
+
+// Jump distance in whole parsecs between two global hexes. Odd columns sit half a hex lower,
+// so convert offset coordinates to axial ones and take the hex-grid distance.
+export function hexDistance(a, b) {
+    const axial = ({ column, row }) => ({ q: column, r: row - (column - (((column % 2) + 2) % 2)) / 2 });
+    const from = axial(a), to = axial(b);
+    const dq = to.q - from.q, dr = to.r - from.r;
+    return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
+}
+
+export const jumpLabel = parsecs => `${parsecs} ${parsecs === 1 ? "parsec" : "parsecs"}`;

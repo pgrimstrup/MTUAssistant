@@ -79,7 +79,7 @@
             var system = SystemDataLookup.Describe(world);
             <section class="system-card" aria-labelledby="system-data-heading">
                 <div class="system-card-heading">
-                    <h2 id="system-data-heading">System Data</h2>
+                    <h2 id="system-data-heading">Stellar Data</h2>
                     @if (system.StellarDataKnown)
                     {
                         <span class="star-count">@system.Stars.Count @(system.Stars.Count == 1 ? "star" : "stars")</span>
@@ -106,7 +106,26 @@
                         }
                     </tbody>
                 </table>
-                <p class="system-worlds">@system.WorldDescription</p>
+                <table class="stellar-table worlds-table" aria-label="System worlds">
+                    <tbody>
+                        <tr data-status="@(system.GasGiants switch { null => "unknown", 0 => "warning", _ => "positive" })">
+                            <th scope="row"><span class="star-badge">@(system.GasGiants?.ToString() ?? "?")</span></th>
+                            <td><span class="world-count-label">Gas giants</span></td>
+                        </tr>
+                        <tr data-status="@(system.AsteroidBelts is null ? "unknown" : "neutral")">
+                            <th scope="row"><span class="star-badge">@(system.AsteroidBelts?.ToString() ?? "?")</span></th>
+                            <td><span class="world-count-label">Asteroid belts</span></td>
+                        </tr>
+                        <tr data-status="@(system.OtherWorlds is null ? "unknown" : "neutral")">
+                            <th scope="row"><span class="star-badge">@(system.OtherWorlds?.ToString() ?? "?")</span></th>
+                            <td><span class="world-count-label">Other worlds</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+                @if (system.MainWorldNote is { } note)
+                {
+                    <p class="system-worlds">@note</p>
+                }
             </section>
         }
         else

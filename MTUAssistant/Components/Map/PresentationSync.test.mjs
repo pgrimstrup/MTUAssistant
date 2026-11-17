@@ -42,6 +42,15 @@ liveAdmin.publish(next);
 const late = connectPresentation({ ...options, session: 'no-storage-session-03', storage: blockedStorage, readOnly: true, onState: state => shown = state });
 assert.deepEqual(shown, next, 'late join works without storage');
 assert.equal(validMapState({ ...first, selected: { x: NaN, y: 1 } }), false);
+// Jump destination and measurement: optional, so snapshots cached before they existed stay valid.
+const jump = { ...first, destination: { x: 5, y: 6, key: '17/0203' }, measure: { from: { x: 1, y: 2 }, to: { x: 5, y: 6 } } };
+assert.equal(validMapState(first), true, 'snapshots without destination or measure remain valid');
+assert.equal(validMapState(jump), true);
+assert.equal(validMapState({ ...jump, destination: null, measure: null }), true);
+assert.equal(validMapState({ ...jump, destination: { x: 5, y: Infinity } }), false);
+assert.equal(validMapState({ ...jump, destination: { x: 5, y: 6, key: 7 } }), false);
+assert.equal(validMapState({ ...jump, measure: { from: { x: 1, y: 2 } } }), false);
+assert.equal(validMapState({ ...jump, measure: { from: { x: 1, y: 2 }, to: { x: NaN, y: 6 } } }), false);
 assert.throws(() => connectPresentation({ ...options, session: '' }), /Present map/);
 let pointer, otherPointer;
 const pointerViewer = connectPresentation({ ...options, readOnly: true, onPointer: point => pointer = point });
