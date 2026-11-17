@@ -61,4 +61,18 @@ public static class TradeDestinations
             .ThenBy(item => item.System.Id)
             .ToArray();
     }
+
+    /// <summary>
+    /// The destination at a sector ID and hex, such as the Galaxy Map jump destination, or null
+    /// when that world is not among the candidates (too far, the origin itself, or unknown).
+    /// </summary>
+    public static TradeDestination? Find(
+        IEnumerable<TradeDestination> destinations,
+        int sectorId,
+        string? hex
+    ) =>
+        destinations.FirstOrDefault(item =>
+            item.Sector.Id == sectorId
+            && string.Equals(item.System.Hex, hex, StringComparison.Ordinal)
+        );
 }

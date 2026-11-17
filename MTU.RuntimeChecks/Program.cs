@@ -1014,6 +1014,19 @@ Check(
     "Nearby worlds sorted alphabetically with current world and other milieu excluded"
 );
 Check(nearby.All(d => d.Distance <= 6), "Only nearby destinations included");
+var mapDestination = nearby[0];
+Check(
+    TradeDestinations.Find(nearby, mapDestination.Sector.Id, mapDestination.System.Hex)
+        == mapDestination,
+    "Galaxy Map destination found by sector ID and hex"
+);
+Check(
+    TradeDestinations.Find(nearby, spinward.Id, "1910") is null
+        && TradeDestinations.Find(nearby, mapDestination.Sector.Id + 999, mapDestination.System.Hex)
+            is null
+        && TradeDestinations.Find(nearby, mapDestination.Sector.Id, null) is null,
+    "Origin, unknown sector and missing hex are not destinations"
+);
 commands.Reads = 0;
 
 // Destroy the in-memory database: every consumer must now work solely from the snapshot.

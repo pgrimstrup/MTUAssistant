@@ -3,7 +3,7 @@ import { HEX_X, hexCenter, findHex, detailLevel, LabelLayout, parseHex, worldPri
 import { readFile } from 'node:fs/promises';
 // Collocated browser modules use public /js URLs; map those to physical wwwroot files in Node.
 let rendererSource = await readFile(new URL('./MapView.razor.js', import.meta.url), 'utf8');
-for (const moduleName of ['WorldSelection.js', 'MapGeometry.js', 'PresentationSync.js', 'CastWindow.js', 'HexSelection.js'])
+for (const moduleName of ['WorldSelection.js', 'MapGeometry.js', 'PresentationSync.js', 'CastWindow.js', 'HexSelection.js', 'MapDestination.js'])
     rendererSource = rendererSource.replaceAll(`../../js/${moduleName}`,
         new URL(`../../wwwroot/js/${moduleName}`, import.meta.url).href);
 const { DynamicMap } = await import(`data:text/javascript;base64,${Buffer.from(rendererSource).toString('base64')}`);
@@ -502,6 +502,29 @@ try {
     const reopenedJump = jumpMap();
     reopenedJump.restoreDestination();
     assert.deepEqual(reopenedJump.destination, { ...hexCenter(33, 4), key: '22/0205' });
+
+    // Selecting the destination hex clears the destination; restoring a saved selection does not.
+    reopenedJump.update = () => {};
+    reopenedJump.callback = { invokeMethodAsync: () => Promise.resolve() };
+    assert.equal(reopenedJump.restoreSelection(22, '0205'), true);
+    assert.equal(reopenedJump.destination?.key, '22/0205', 'restoring the selection on load keeps the destination');
+    reopenedJump.pointerAt = hexCenter(32, 4);
+    await reopenedJump.selectWorld({ clientX: 0, clientY: 0 });
+    assert.equal(reopenedJump.destination?.key, '22/0205', 'selecting another hex keeps the destination');
+    reopenedJump.pointerAt = hexCenter(33, 4);
+    await reopenedJump.selectWorld({ clientX: 0, clientY: 0 });
+    assert.equal(reopenedJump.destination, null, 'clicking the destination hex clears it');
+    assert.equal(jumpStorage.has('mtu.map.destination'), false, 'the cleared destination is removed from storage');
+    assert.equal(reopenedJump.snapshots.at(-1).destination, null, 'the presentation stops showing the destination');
+    jumpStorage.set('mtu.map.destination', '{"sectorId":22,"hex":"0205"}');
+    reopenedJump.restoreDestination();
+    reopenedJump.panToPoint = () => true;
+    assert.equal(reopenedJump.focusWorld(17, '0101'), true);
+    assert.equal(reopenedJump.destination?.key, '22/0205', 'searching for another world keeps the destination');
+    assert.equal(reopenedJump.focusWorld(22, '0205'), true);
+    assert.equal(reopenedJump.destination, null, 'selecting the destination from search clears it');
+    assert.equal(jumpStorage.has('mtu.map.destination'), false);
+
     for (const bad of ['{', '{"sectorId":99,"hex":"0205"}', '{"sectorId":22,"hex":"9999"}', 'null']) {
         jumpStorage.set('mtu.map.destination', bad);
         reopenedJump.restoreDestination();

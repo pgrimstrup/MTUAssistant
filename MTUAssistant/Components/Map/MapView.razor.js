@@ -1,6 +1,7 @@
 import { attachCastWindow } from "../../js/CastWindow.js";
 import { observeClicks } from "../../js/WorldSelection.js";
 import { presentationSession, connectPresentation } from "../../js/PresentationSync.js";
+import { loadMapDestination, saveMapDestination } from "../../js/MapDestination.js";
 import { drawHexSelection, hexSelectionGeometry, drawHexDestination, hexDestinationGeometry } from "../../js/HexSelection.js";
 import { HEX_X, SECTOR_WIDTH, SECTOR_HEIGHT, MAP_PADDING, DETAIL_LEVELS,
     hexCenter, findHex, parseHex, detailLevel, intersects, worldPriority, worldLabelRules,
@@ -10,7 +11,6 @@ import { HEX_X, SECTOR_WIDTH, SECTOR_HEIGHT, MAP_PADDING, DETAIL_LEVELS,
 const MAX_ZOOM = 192;
 const VIEW_STORAGE_KEY = "mtu.map.view";
 const SELECTION_STORAGE_KEY = "mtu.map.selection";
-const DESTINATION_STORAGE_KEY = "mtu.map.destination";
 const MAX_CACHED_SECTORS = 24;
 const MAX_REQUESTS = 4;
 let scriptsPromise;
@@ -639,21 +639,28 @@ export class DynamicMap {
         this.publishPresentation();
     }
 
+    // Selecting the destination hex (map click or search) clears the destination. Restoring a
+    // saved selection on load does not count as selecting.
+    clearDestinationIfSelected() {
+        const selected = this.selected, destination = this.destination;
+        if (!selected || !destination || selected.x !== destination.x || selected.y !== destination.y) return;
+        this.destination = null;
+        this.saveDestination(null);
+        if (this.viewport) this.drawSelection(this.viewport.scale.x);
+        this.publishPresentation();
+    }
+
     saveDestination(destination) {
         if (this.readOnly || this.disposed) return;
-        try {
-            if (destination === null) localStorage.removeItem(DESTINATION_STORAGE_KEY);
-            else localStorage.setItem(DESTINATION_STORAGE_KEY, JSON.stringify(destination));
-        } catch { /* The destination remains usable without browser storage. */ }
+        saveMapDestination(destination);
     }
 
     // Restores the saved destination by sector ID and hex, like the selected world.
     restoreDestination() {
         if (this.readOnly) return;
-        let saved = null;
-        try { saved = JSON.parse(localStorage.getItem(DESTINATION_STORAGE_KEY) ?? "null"); } catch { saved = null; }
-        const sector = Number.isInteger(saved?.sectorId) ? this.sectors.find(s => s.id === saved.sectorId) : null;
-        const location = typeof saved?.hex === "string" ? parseHex(saved.hex) : null;
+        const saved = loadMapDestination();
+        const sector = saved ? this.sectors.find(s => s.id === saved.sectorId) : null;
+        const location = saved ? parseHex(saved.hex) : null;
         this.destination = sector && location ? { ...hexCenter(sector.col * 32 + location.column - 1,
             sector.row * 40 + location.row - 1), key: `${sector.id}/${saved.hex}` } : null;
     }
@@ -696,6 +703,7 @@ export class DynamicMap {
         const point = hexCenter(sector.col * 32 + location.column - 1,
             sector.row * 40 + location.row - 1);
         this.selected = { ...point, key: sectorId + "/" + hex };
+        this.clearDestinationIfSelected();
         return this.panToPoint(point);
     }
 
@@ -781,6 +789,7 @@ export class DynamicMap {
         const hex = findHex(point.x, point.y);
         const column = hex.sectorColumn * 32 + hex.column - 1, row = hex.sectorRow * 40 + hex.row - 1;
         this.selected = { ...hexCenter(column, row), key: nearest?.key };
+        this.clearDestinationIfSelected();
         this.lastView = "";
         try {
             await this.callback.invokeMethodAsync("SelectHex", this.overview.minSectorX + hex.sectorColumn,

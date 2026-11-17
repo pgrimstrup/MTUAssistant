@@ -7,6 +7,7 @@
 @inject SystemDataProvider SystemData
 @inject PassengerMarketService PassengerMarkets
 @inject FreightMarketService FreightMarkets
+@inject IJSRuntime JS
 
 <PageTitle>Passengers and Cargo</PageTitle>
 
@@ -235,9 +236,13 @@
         _ => null
     };
 
-    private void ChangeDestination(ChangeEventArgs args)
+    private void ChangeDestination(ChangeEventArgs args) =>
+        SelectDestination(int.TryParse(args.Value?.ToString(), out var id) ? id : 0);
+
+    // Saved results stay with the destination they were rolled for and reappear when it is selected.
+    private void SelectDestination(int id)
     {
-        destinationId = int.TryParse(args.Value?.ToString(), out var id) ? id : 0;
+        destinationId = id;
         passengerResult = destination is { } selected && savedPassengerResult is { } saved
             && saved.DestinationSectorId == selected.Sector.Id && saved.DestinationHex == selected.System.Hex ? saved : null;
         freightResult = destination is { } freightDestination && savedFreightResult is { } savedFreight
@@ -258,6 +263,48 @@
     private bool busy;
 
     protected override async Task OnInitializedAsync()
+    {
+        try { await LoadAsync(); }
+        finally
+        {
+            initialized = true;
+            ApplyMapDestination();
+        }
+    }
+
+    // The Galaxy Map jump destination lives in browser storage, readable only once interactive.
+    private sealed record MapDestination(int SectorId, string Hex);
+    private MapDestination? mapDestination;
+    private bool initialized, mapDestinationRead, mapDestinationApplied;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            await using var module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/MapDestination.js");
+            mapDestination = await module.InvokeAsync<MapDestination?>("loadMapDestination");
+        }
+        catch (JSDisconnectedException) { return; }
+        catch (JSException) { mapDestination = null; }
+        mapDestinationRead = true;
+        if (ApplyMapDestination()) StateHasChanged();
+    }
+
+    // Preselects the map destination once, after saved results load, so it takes precedence over the
+    // destination of saved rolls. A destination out of range keeps the saved-roll destination.
+    private bool ApplyMapDestination()
+    {
+        if (!initialized || !mapDestinationRead || mapDestinationApplied) return false;
+        mapDestinationApplied = true;
+        if (mapDestination is not { } saved
+            || TradeDestinations.Find(destinations, saved.SectorId, saved.Hex) is not { } target
+            || target.System.Id == destinationId) return false;
+        SelectDestination(target.System.Id);
+        return true;
+    }
+
+    private async Task LoadAsync()
     {
         Campaigns.Changed += CampaignChanged;
         activeCampaign = (await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive);

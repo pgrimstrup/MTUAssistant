@@ -97,7 +97,7 @@ Get-ChildItem MTUAssistant -Recurse -Filter *.test.mjs | ForEach-Object { node $
 csharpier check .
 ```
 
-**Baseline (17 Nov 2026):** 0 warnings, 0 errors, all RuntimeChecks pass, all 18 `.mjs` tests pass. A new warning counts as a regression. When you add or remove a test file, update this count and date in the same change. If you can't run something, say so plainly. Paul checks the UI in a browser himself.
+**Baseline (17 Nov 2026):** 0 warnings, 0 errors, all RuntimeChecks pass, all 19 `.mjs` tests pass. A new warning counts as a regression. When you add or remove a test file, update this count and date in the same change. If you can't run something, say so plainly. Paul checks the UI in a browser himself.
 
 ## Documentation
 
