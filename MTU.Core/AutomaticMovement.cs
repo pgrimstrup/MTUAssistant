@@ -8,7 +8,8 @@ public sealed record AutomaticMoveContext(
     double Speed,
     int Moves,
     string Colour,
-    bool IsVisible
+    bool IsVisible,
+    int BurstMoves = 0
 );
 
 public sealed partial class Encounter
@@ -48,7 +49,8 @@ public sealed partial class Encounter
             speed,
             state.MoveSelections,
             state.RangeColour,
-            actor.IsVisible
+            actor.IsVisible,
+            state.SpeedBurst ? state.SpeedBurstsRemaining : 0
         );
     }
 
@@ -75,11 +77,9 @@ public sealed partial class Encounter
             return false;
         var distance =
             Math.Sqrt(Math.Pow(column - originColumn, 2) + Math.Pow(row - originRow, 2)) * 1.5;
-        var moves = (int)
-            Math.Clamp(Math.Ceiling(Math.Max(0, distance - .8) / context.Speed - 1e-9), 1, 3);
-        var state = ActionFor(id) with
+        var moves = AutomaticMoveCount(distance, context.Speed, context.BurstMoves);
+        var state = WithSpeed(ActionFor(id), entries.First(e => e.Id == id)) with
         {
-            Speed = SpeedFor(entries.First(e => e.Id == id)),
             AutomaticMove = true,
             Action = "Move",
             BeforeMajorActions = Enumerable.Repeat("Move", moves).ToArray(),

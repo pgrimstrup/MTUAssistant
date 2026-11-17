@@ -25,7 +25,8 @@ public sealed record SceneCombatant(
     int AnimalHits = 0,
     string AnimalTraits = "",
     IReadOnlyList<NaturalAttack>? NaturalAttacks = null,
-    InjuryTolerance InjuryTolerance = InjuryTolerance.None
+    InjuryTolerance InjuryTolerance = InjuryTolerance.None,
+    string Race = ""
 )
 {
     public bool OnMap => Column.HasValue && Row.HasValue;
@@ -377,10 +378,10 @@ public sealed partial class SceneService
             .Where(a => ids.Contains(a.CharacterId))
             .OrderBy(a => a.Id)
             .ToArrayAsync();
-        var tolerances = await db
+        var characters = await db
             .Characters.AsNoTracking()
             .Where(c => ids.Contains(c.Id))
-            .ToDictionaryAsync(c => c.Id, c => c.InjuryTolerance);
+            .ToDictionaryAsync(c => c.Id, c => new { c.InjuryTolerance, c.Race });
         foreach (var animal in animals.Values)
             if (
                 !skills.Any(s =>
@@ -407,7 +408,10 @@ public sealed partial class SceneService
                     AnimalName = animals.GetValueOrDefault(e.CharacterId)?.Character.Name ?? "",
                     AnimalHits = animals.GetValueOrDefault(e.CharacterId)?.Hits ?? 0,
                     AnimalTraits = animals.GetValueOrDefault(e.CharacterId)?.Traits ?? "",
-                    InjuryTolerance = tolerances.GetValueOrDefault(e.CharacterId),
+                    InjuryTolerance =
+                        characters.GetValueOrDefault(e.CharacterId)?.InjuryTolerance
+                        ?? InjuryTolerance.None,
+                    Race = characters.GetValueOrDefault(e.CharacterId)?.Race ?? "",
                     NaturalAttacks = attacks
                         .Where(a => a.CharacterId == e.CharacterId)
                         .Select(a => new NaturalAttack(

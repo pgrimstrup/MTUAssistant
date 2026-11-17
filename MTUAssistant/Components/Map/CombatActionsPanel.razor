@@ -33,6 +33,7 @@
                     <label><input type="checkbox" checked="@state.SelectedHiding" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => HidingChanged.InvokeAsync(e.Value is true)" /> Hiding</label>
                     <label><input type="checkbox" checked="@state.SelectedElevated" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => ElevatedChanged.InvokeAsync(e.Value is true)" /> Elevated</label>
                     <label><input type="checkbox" checked="@state.SelectedFlying" disabled="@(Disabled || state.ActionsResolved)" @onchange="e => FlyingChanged.InvokeAsync(e.Value is true)" /> Flying</label>
+                    @if (Encounter.Active && Encounter.IsAslan(actor)) { <label><input type="checkbox" checked="@state.SpeedBurst" disabled="@(Disabled || state.ActionsResolved || (!state.SpeedBurst && state.SpeedBurstsRemaining == 0))" @onchange="e => SpeedBurstChanged.InvokeAsync(e.Value is true)" /> Speed Burst (@state.SpeedBurstsAvailable)</label> }
                     <label><input type="checkbox" checked="@state.Unconscious" disabled="@Disabled" @onchange="e => UnconsciousChanged.InvokeAsync(e.Value is true)" /> Unconscious</label>
                 </fieldset>
                 @if (state.SelectedHiding)
@@ -196,6 +197,7 @@
     [Parameter] public EventCallback<bool> HidingChanged { get; set; }
     [Parameter] public EventCallback<bool> UnconsciousChanged { get; set; }
     [Parameter] public EventCallback<bool> FlyingChanged { get; set; }
+    [Parameter] public EventCallback<bool> SpeedBurstChanged { get; set; }
     [Parameter] public EventCallback<int> NaturalAttackChanged { get; set; }
     [Parameter] public EventCallback<bool> ElevatedChanged { get; set; }
     [Parameter] public EventCallback ResetRequested { get; set; }

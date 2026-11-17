@@ -4,6 +4,8 @@ import {Battlemap} from '../../wwwroot/js/Battlemap.js';
 for(const [distance,moves] of [[0,1],[6,1],[6.8,1],[6.8001,2],[12.8,2],[12.8001,3],[99,3]]) assert.equal(automaticMoveCount(distance,6),moves);
 assert.equal(automaticMoveCount(9.8,9),1); assert.equal(automaticMoveCount(9.8001,9),2);
 assert.equal(automaticMoveCount(0,0),null);
+for(const [distance,burst,moves] of [[12.8,2,1],[12.8001,2,2],[24.8,2,2],[24.8001,2,3],[18.8,1,2],[18.8001,1,3],[6.8001,0,2]]) assert.equal(automaticMoveCount(distance,6,burst),moves,`speed bursts ${distance} m with ${burst}`);
+assert.equal(automaticMoveRange({id:1,round:1,column:0,row:0,speed:6,burstMoves:2,colour:"#87cefa",isVisible:true},20,0).range.diameter,61.5,"two bursts and three Moves cover 12 + 12 + 6 m");
 const context={id:1,round:1,column:0,row:0,speed:6,colour:'#87cefa',isVisible:true};
 assert.equal(automaticMoveRange(context,2,4).moves,1);
 assert.equal(automaticMoveRange(context,5,7).moves,3);

@@ -51,7 +51,10 @@ public sealed record CombatantActionState(
     int PreviewTargetIndex = 0,
     bool Flying = false,
     bool? PendingFlying = null,
-    int? NaturalAttackId = null
+    int? NaturalAttackId = null,
+    bool SpeedBurst = false,
+    int SpeedBurstLimit = 0,
+    int SpeedBurstsUsed = 0
 )
 {
     [JsonIgnore]
@@ -182,6 +185,23 @@ public sealed record CombatantActionState(
     public bool SelectedFlying => PendingFlying ?? Flying;
 
     [JsonIgnore]
+    public int MoveCount =>
+        Math.Min(3, ColumnActions(1).Concat(ColumnActions(3)).Count(a => a == "Move"));
+
+    // Speed bursts left before this turn's unresolved Move actions are counted.
+    [JsonIgnore]
+    public int SpeedBurstsRemaining => Math.Max(0, SpeedBurstLimit - SpeedBurstsUsed);
+
+    // Move actions this turn that use a speed burst (double Speed) when resolved.
+    [JsonIgnore]
+    public int PendingSpeedBursts =>
+        SpeedBurst && !ActionsResolved ? Math.Min(MoveCount, SpeedBurstsRemaining) : 0;
+
+    // Speed bursts still available after this turn's selected Move actions.
+    [JsonIgnore]
+    public int SpeedBurstsAvailable => SpeedBurstsRemaining - PendingSpeedBursts;
+
+    [JsonIgnore]
     public string MinorSummary => string.Join(" → ", ColumnActions(1).Concat(ColumnActions(3)));
 
     [JsonIgnore]
@@ -297,14 +317,15 @@ public sealed partial class Encounter
     {
         if (state.ActionsResolved)
             return null;
-        var moves = state.ColumnActions(1).Concat(state.ColumnActions(3)).Count(a => a == "Move");
+        var moves = state.MoveCount;
         var distance = state.SelectedStance switch
         {
             "Crouching" => (double)state.Speed,
             "Prone" => state.Speed / 2.0,
             _ => state.Speed * 2.0,
         };
-        return moves == 0 ? null : 1.5 + distance * Math.Min(3, moves);
+        // Each Move made with a speed burst covers double Speed.
+        return moves == 0 ? null : 1.5 + distance * (moves + state.PendingSpeedBursts);
     }
 
     public void ResetActions(int id, IReadOnlyList<SceneCombatant> entries)
@@ -331,6 +352,9 @@ public sealed partial class Encounter
             NaturalAttackId: state.NaturalAttackId,
             Unconscious: state.Unconscious,
             Speed: state.Speed,
+            SpeedBurst: state.SpeedBurst,
+            SpeedBurstLimit: state.SpeedBurstLimit,
+            SpeedBurstsUsed: state.SpeedBurstsUsed,
             CoverProtection: state.CoverProtection,
             TargetHasBeenHit: state.TargetHasBeenHit
         );
@@ -346,7 +370,7 @@ public sealed partial class Encounter
             ?? throw new ArgumentException("Select a combatant in this scene.");
         if (!Active || IsDead(actor))
             throw new ArgumentException("Choose a living combatant during an encounter.");
-        actions[id] = ActionFor(id) with { Speed = SpeedFor(actor) };
+        actions[id] = WithSpeed(ActionFor(id), actor);
         return actor;
     }
 
@@ -496,7 +520,7 @@ public sealed partial class Encounter
     {
         if (!Active || entries.FirstOrDefault(e => e.Id == id) is not { OnMap: true } actor)
             return false;
-        var state = ActionFor(id) with { Speed = SpeedFor(actor) };
+        var state = WithSpeed(ActionFor(id), actor);
         actions[id] = state;
         if (!reset && state.TurnOriginColumn.HasValue && state.TurnOriginRow.HasValue)
             return false;
@@ -588,6 +612,9 @@ public sealed partial class Encounter
             AutoAttackResults = null,
             PreviewTargetIndex = 0,
             AutomaticMove = false,
+            SpeedBurst = false,
+            // Unresolved Moves made with a speed burst still use it up when the turn ends.
+            SpeedBurstsUsed = state.SpeedBurstsUsed + state.PendingSpeedBursts,
         };
 
     private void ClearMovement(int? id)
@@ -599,14 +626,24 @@ public sealed partial class Encounter
     private void ResetTurnActions()
     {
         foreach (var id in actions.Keys)
-            actions[id] = EndTurn(ActionFor(id), false) with { ReactionCount = 0 };
+            actions[id] = EndTurn(ActionFor(id), false) with
+            {
+                ReactionCount = 0,
+                SpeedBurstsUsed = 0,
+            };
     }
 
     public IReadOnlyList<CombatMovementRange> MovementRanges(IReadOnlyList<SceneCombatant> entries)
     {
         foreach (var entry in entries)
-            if (actions.TryGetValue(entry.Id, out var state) && state.Speed != SpeedFor(entry))
-                actions[entry.Id] = NormalizeActions(state with { Speed = SpeedFor(entry) });
+            if (
+                actions.TryGetValue(entry.Id, out var state)
+                && (
+                    state.Speed != SpeedFor(entry)
+                    || state.SpeedBurstLimit != SpeedBurstLimitFor(entry)
+                )
+            )
+                actions[entry.Id] = NormalizeActions(WithSpeed(state, entry));
         return !Active
             ? []
             : entries

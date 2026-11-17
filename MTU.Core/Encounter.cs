@@ -372,6 +372,7 @@ public sealed partial class Encounter
                             entries.First(e => e.Id == pair.Key),
                             pair.Value.SelectedFlying
                         ),
+                        SpeedBurstLimit = SpeedBurstLimitFor(entries.First(e => e.Id == pair.Key)),
                     }
                 ) with
                 {

@@ -81,6 +81,7 @@ public sealed partial class Encounter
             Stance = state.SelectedStance,
             PendingStance = null,
             ActionsResolved = true,
+            SpeedBurstsUsed = state.SpeedBurstsUsed + state.PendingSpeedBursts,
             AutomaticMove = false,
             RangeColumn = null,
             RangeRow = null,

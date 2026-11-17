@@ -20,7 +20,10 @@ public sealed partial class Encounter
                 AutoAttack: state.AutoAttack,
                 AutoScore: state.AutoScore,
                 ExtraTargets: state.ExtraTargets?.Select(_ => new AutoAttackTarget()).ToArray(),
-                NaturalAttackId: state.NaturalAttackId
+                NaturalAttackId: state.NaturalAttackId,
+                SpeedBurst: state.SpeedBurst,
+                SpeedBurstLimit: state.SpeedBurstLimit,
+                SpeedBurstsUsed: state.SpeedBurstsUsed
             );
         foreach (var pair in cleared.ToArray())
             if (pair.Key != id && pair.Value.TargetIds.Contains(id))
