@@ -211,6 +211,16 @@ public static class CareerRules
         return result;
     }
 
+    /// <summary>One line per service in order of first term: "3 Terms in Navy (O-2)",
+    /// "1 Term in Scout". The rank is left out when it is 0.</summary>
+    public static IReadOnlyList<string> ServiceLines(IEnumerable<CareerTerm>? terms) =>
+        Ranks(terms ?? [])
+            .Select(r =>
+                $"{r.Terms} {(r.Terms == 1 ? "Term" : "Terms")} in {r.Service}"
+                + (r.Highest > 0 ? $" ({r.Label})" : "")
+            )
+            .ToArray();
+
     /// <summary>"Navy 3, Scout 1": terms per service in order of first term.</summary>
     public static string Summary(IEnumerable<CareerTerm>? terms) =>
         string.Join(", ", Ranks(terms ?? []).Select(r => $"{r.Service} {r.Terms}"));

@@ -24,7 +24,9 @@ public sealed record SceneSummary(
     int GridOpacity,
     double GridlineWidth,
     long Revision,
-    int ImageBytes
+    int ImageBytes,
+    // True when an active Traveller is in the scene's roster, placed on the map or not.
+    bool HasTravellers = false
 );
 
 public sealed record SceneImage(byte[] Bytes, string ContentType);
@@ -92,7 +94,14 @@ public sealed partial class SceneService(IServiceScopeFactory scopes)
                 s.GridOpacity,
                 s.GridlineWidth,
                 s.Revision,
-                s.Image.Length
+                s.Image.Length,
+                db.SceneTokens.Any(t =>
+                    t.SceneId == s.Id
+                    && t.Character.CampaignId == campaignId
+                    && !t.Character.IsNpc
+                    && !t.Character.IsAnimal
+                    && !t.Character.Inactive
+                )
             ))
             .ToArrayAsync();
     }
@@ -170,7 +179,14 @@ public sealed partial class SceneService(IServiceScopeFactory scopes)
             entity.GridOpacity,
             entity.GridlineWidth,
             entity.Revision,
-            entity.Image.Length
+            entity.Image.Length,
+            await db.SceneTokens.AnyAsync(t =>
+                t.SceneId == entity.Id
+                && t.Character.CampaignId == entity.CampaignId
+                && !t.Character.IsNpc
+                && !t.Character.IsAnimal
+                && !t.Character.Inactive
+            )
         );
     }
 

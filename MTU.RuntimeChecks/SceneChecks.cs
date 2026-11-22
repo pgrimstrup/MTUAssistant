@@ -787,6 +787,12 @@ public static class SceneChecks
             (await store.CombatantsAsync(1, saved.Id)).Any(e => e.CharacterId == 101),
             "Rejected moves preserve the original scene"
         );
+        Check(
+            (await store.ListAsync(1)).Single(s => s.Id == saved.Id).HasTravellers
+                && !(await store.ListAsync(1)).Single(s => s.Id == large.Id).HasTravellers
+                && (await store.ListAsync(2)).All(s => !s.HasTravellers),
+            "The scene list flags the scene holding active Travellers, and only that one"
+        );
         await store.SaveEncounterAsync(1, large.Id, new Encounter().Snapshot());
         var npcCountBefore = await db.SceneTokens.CountAsync(t => t.Character.IsNpc);
         await store.MoveTravellersHereAsync(1, large.Id);
@@ -805,6 +811,13 @@ public static class SceneChecks
                 && !t.Character.Inactive
             ),
             "Active Travellers are removed from every other scene"
+        );
+        Check(
+            (await store.ListAsync(1))
+                .Where(s => s.HasTravellers)
+                .Select(s => s.Id)
+                .SequenceEqual([large.Id]),
+            "The Travellers flag follows them to the new scene, unplaced tokens included"
         );
         Check(
             await db.SceneTokens.CountAsync(t => t.Character.IsNpc) == npcCountBefore,

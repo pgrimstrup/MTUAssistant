@@ -201,6 +201,20 @@ public static class CareerChecks
                 && CareerRules.Summary(null) == "",
             "Summary lists terms per service in order of first term"
         );
+        Check(
+            CareerRules
+                .ServiceLines(civilian)
+                .SequenceEqual([
+                    "2 Terms in Navy (O-1)",
+                    "1 Term in Scout (Rank 1)",
+                    "2 Terms in Merchant (Rank 1)",
+                ])
+                && CareerRules
+                    .ServiceLines([Term(1, "Drifter"), Term(2, "Army", true)])
+                    .SequenceEqual(["1 Term in Drifter", "1 Term in Army (E-1)"])
+                && CareerRules.ServiceLines(null).Count == 0,
+            "Service lines give terms and rank per service, leaving out a rank of 0"
+        );
         var progress = CareerRules.RankAfterEachTerm(promoted);
         Check(
             promoted

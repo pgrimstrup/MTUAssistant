@@ -43,7 +43,7 @@
             <div class="table-wrap"><table class="table scenes-table"><thead><tr><th>Name</th><th>Grid Size</th><th>Colour</th><th>Opacity</th><th>Line Width</th><th>Image</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
                 <tbody>@foreach (var scene in scenes)
                 {
-                    <tr @key="scene.Id"><th scope="row">@scene.Name @if (Battlemap.Current?.Id == scene.Id && Battlemap.Current.CampaignId == scene.CampaignId) { <span class="badge text-bg-success">Open</span> }</th>
+                    <tr @key="scene.Id"><th scope="row">@scene.Name @if (Battlemap.Current?.Id == scene.Id && Battlemap.Current.CampaignId == scene.CampaignId) { <span class="badge text-bg-success ms-2">Open</span> } @if (scene.HasTravellers) { <span class="badge text-bg-info ms-2">Travellers</span> }</th>
                         <td>@scene.GridSize px</td><td><span class="colour-swatch" style="background:@scene.GridColour"></span> @scene.GridColour</td><td>@scene.GridOpacity%</td><td>@scene.GridlineWidth px</td><td>@((scene.ImageBytes / 1048576d).ToString("0.##")) MB</td>
                         <td class="row-actions"><button class="btn btn-sm btn-primary" @onclick="() => Open(scene)" disabled="@busy">Open</button> <button class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(scene)" disabled="@busy">Edit</button> <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(scene)" disabled="@busy">Delete</button></td>
                     </tr>
