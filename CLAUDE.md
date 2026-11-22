@@ -98,7 +98,7 @@ Get-ChildItem MTUAssistant -Recurse -Filter *.test.mjs | ForEach-Object { node $
 csharpier check .
 ```
 
-**Baseline (17 Nov 2026):** 0 warnings, 0 errors, all RuntimeChecks pass, all 20 `.mjs` tests pass. A new warning counts as a regression. When you add or remove a test file, update this count and date in the same change. If you can't run something, say so plainly. Paul checks the UI in a browser himself, so finish by telling him what to look at.
+**Baseline (22 Nov 2026):** 0 warnings, 0 errors, all RuntimeChecks pass, all 22 `.mjs` tests pass. A new warning counts as a regression. When you add or remove a test file, update this count and date in the same change. If you can't run something, say so plainly. Paul checks the UI in a browser himself, so finish by telling him what to look at.
 
 ## Documentation
 
@@ -114,7 +114,7 @@ The GM's cast icon opens two read-only player pages for a second monitor or TV:
 Each GM tab sends snapshots over a named **BroadcastChannel** and caches them in local storage. Both windows must be in the same browser profile and origin.
 
 - **Read-only.** The GM drives everything, and the presentation has no editing or panning.
-- **No GM-only information.** This is the most important rule. Hidden or unplaced combatants, fogged squares, NPC/creature stats and HP, GM notes, and anything starting or ending in fog (e.g. measurements) must never enter the player snapshot.
+- **No GM-only information.** This is the most important rule. Hidden or unplaced combatants, fogged squares, NPC/creature stats and HP, GM notes, polygons, and anything starting or ending in fog (e.g. measurements) must never enter the player snapshot.
 - **Fog soft edge (the one exception).** Players see the map image fade to black over the first 2 hidden squares. The fade is 3 squares wide and starts 1 square inside the revealed area (`fogGradientSquares` and `fogGradientLead` in `FogOfWar.js`). This is deliberate and covers the image only: tokens, trails, ranges, measurements and the pointer still stop at the hard square edge.
 - **Filter when the snapshot is built** (`fogPublicState`, the `player*` helpers in `BattlemapPresentationSync.js`), and validate in `validBattlemapSnapshot`. Never send GM data and hide it in the presentation page.
 - **Every new snapshot field needs a privacy check** in the matching `.test.mjs`.
@@ -129,4 +129,7 @@ Each GM tab sends snapshots over a named **BroadcastChannel** and caches them in
 - **Fog display:** the GM sees hard-edged squares at 55%. Players see a 3-square fade across the fog edge: it starts 1 square inside the revealed area and is solid 2 squares into the fog.
 - **Fog editing:** Shift+drag clears fog and Ctrl+drag adds it. Shift/Ctrl+wheel changes the brush size (1, 3, 5 or 9).
 - **Right-drag** targets during combatant targeting. Otherwise it measures square centre to square centre, and the measurement is cast to players when both ends are revealed.
+- **Polygon mode (experimental)** is switched on by the Polygon toolbar button. Left-click adds a point snapped to a square corner or centre, and clicking the first point completes the polygon. Right-click takes back the last point, or deletes a finished polygon; Esc cancels the one being drawn. Left-drag still pans. Tokens, fog, measuring and targeting are off while it is on. Polygons are GM-only, saved in `Scenes.PolygonState`, and drawn red with a light fill in Polygon mode and faint blue outside it.
+- **Polygons open and close:** outside Polygon mode, a left-click on a polygon switches it between active (shaded: solid, blocks sight) and inactive (outline only: ignored, like an open door).
+- **Line-of-sight fog (experimental):** with fog on, fog clears from the squares the selected Traveller can see, as far as the higher of the scene's Ambient Visual Distance (toolbar, `Scenes.AmbientVisualDistance`) and the Traveller's own Visual Distance (Traveller dialog, `Characters.VisualDistance`). Both are in metres and default to 0, and when both are 0 the GM reveals the map by hand. It reveals when the selection, a saved move, a distance or a polygon changes. Active polygons block sight, and squares inside them stay hidden. Seen squares stay seen.
 - The browser context menu is suppressed on the GM map.

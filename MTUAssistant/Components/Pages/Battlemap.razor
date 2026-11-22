@@ -15,7 +15,7 @@
 @if (BattlemapState.Current is { } scene)
 {
     <section class="battlemap-page">
-        <header><div><h1>@scene.Name</h1><span class="muted">@scene.GridSize px per square · 1.5 m × 1.5 m@(fogEnabled ? " · Shift+drag clears fog · Ctrl+drag adds fog" : "")</span></div>
+        <header><div><h1>@scene.Name</h1><span class="muted">@scene.GridSize px per square · 1.5 m × 1.5 m@(polygonMode ? " · Polygon mode: click adds a point · click the first point to finish · right-click removes · Esc cancels" : fogEnabled ? " · Shift+drag clears fog · Ctrl+drag adds fog" : "")</span></div>
             <div class="controls">
                 @if (!encounter.Active)
                 {
@@ -30,6 +30,12 @@
                         title="@(fogEnabled ? "Fog of war is on. Click to turn it off in the GM and player views." : "Fog of war is off. Click to turn it on in the GM and player views.")" @onclick="ToggleFog" disabled="@(map is null || busy)">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 19a4.5 4.5 0 0 1-.62-8.96A6 6 0 0 1 17.56 8.6 5.25 5.25 0 0 1 17.75 19H6.5Z" /></svg>
                 </button>
+                @* Experimental: line-of-sight fog. Players only ever receive the resulting revealed squares. *@
+                <label title="Ambient Visual Distance in metres: how far a Traveller can see on this map. With fog of war on, fog clears from every square the selected Traveller can see, as far as the higher of this and their own Visual Distance. Active polygons block sight. 0 for both leaves the fog to you.">Ambient visual (m)<input class="form-control grid-number" type="number" min="0" max="@LineOfSight.MaxVisualDistance" step="1" @bind="ambientVisualDistance" @bind:after="SaveAmbientVisualDistance" disabled="@(map is null || busy)" /></label>
+                @* Experimental and GM-only: polygons are never cast to players. *@
+                <button class="btn @(polygonMode ? "btn-secondary active" : "btn-outline-secondary")" aria-pressed="@(polygonMode ? "true" : "false")"
+                        title="Polygon mode (experimental, GM only). Click to add points, which snap to square corners and centres; click the first point to finish. Right-click takes back the last point, or deletes a finished polygon. Esc cancels the polygon being drawn. Tokens and fog can't be edited while it is on. With the mode off, click a polygon to switch it between active (shaded: it blocks line of sight) and inactive (outline only), like closing and opening a door." @onclick="TogglePolygonMode" disabled="@(map is null || busy)">Polygon</button>
+                @if (polygonMode) { <button class="btn btn-outline-secondary" title="Take back the last point, or the last polygon added, deleted, opened or closed." @onclick="UndoPolygon" disabled="@(map is null || busy)">Undo polygon</button> }
                 <button class="btn btn-outline-secondary" aria-label="Zoom in" title="Zoom in" @onclick='() => Command("zoomIn")' disabled="@(map is null)">+</button>
                 <button class="btn btn-outline-secondary" aria-label="Zoom out" title="Zoom out" @onclick='() => Command("zoomOut")' disabled="@(map is null)">−</button>
                 <button class="btn btn-outline-secondary" @onclick='() => Command("fit")' disabled="@(map is null)">Fit</button>
@@ -370,9 +376,11 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
             module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/Battlemap.js");
             callback ??= DotNetObjectReference.Create(this);
             fogEnabled = await ScenesStore.FogEnabledAsync(scene.CampaignId, scene.Id);
+            ambientVisualDistance = await ScenesStore.AmbientVisualDistanceAsync(scene.CampaignId, scene.Id);
             map = await module.InvokeAsync<IJSObjectReference>("createBattlemap", host,
-                $"api/scenes/{scene.CampaignId}/{scene.Id}/image?v={scene.Revision}", scene, key, entries.Where(e => e.OnMap), callback, new { readOnly = false, fog = fogEnabled ? await ScenesStore.LoadFogAsync(scene.CampaignId, scene.Id) : null }, presentationLink);
+                $"api/scenes/{scene.CampaignId}/{scene.Id}/image?v={scene.Revision}", scene, key, entries.Where(e => e.OnMap), callback, new { readOnly = false, fog = fogEnabled ? await ScenesStore.LoadFogAsync(scene.CampaignId, scene.Id) : null, polygons = await ScenesStore.LoadPolygonsAsync(scene.CampaignId, scene.Id), ambientSight = ambientVisualDistance }, presentationLink);
             await map.InvokeVoidAsync("setFogBrush", fogBrush);
+            if (polygonMode) await map.InvokeVoidAsync("setPolygonMode", true);
             await SyncEncounterMap();
             loadedKey = key;
             if (disposed) { await map.InvokeVoidAsync("dispose"); await map.DisposeAsync(); map = null; }

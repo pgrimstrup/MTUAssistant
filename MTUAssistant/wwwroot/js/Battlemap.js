@@ -1,4 +1,6 @@
 import { fogKey, fogCells, fogVisible, paintFog, fogRectangles, fogPublicState, fogStrokeMode, fogBrushSizes, stepFogBrush, fogEqual, fogGradientSamples, fogGradientField } from './FogOfWar.js';
+import { polygonColour, polygonStyle, polygonClickSlop, polygonHitPixels, samePolygonPoint, validPolygons, polygonSnap, addPolygonPoint, polygonAt } from './Polygons.js';
+import { visibleSquares, sightRangeSquares } from './LineOfSight.js';
 import { DescriptionDialog, playerDescription } from './CombatDescription.js';
 import { automaticMoveRange } from './AutomaticMovement.js';
 import { movementGeometry, weaponRangeBand, measureGeometry, measureLabel, measureCell } from './MovementIndicators.js';
@@ -53,6 +55,10 @@ export async function createBattlemap(host, url, scene, key, tokens = [], callba
     map.callback = callback; map.readOnly = !!options.readOnly;
     map.revealedFog = options.fog == null ? null : new Set(options.fog.map(c=>fogKey(c.column,c.row)));
     map.fogHistory = []; map.fogBrush = 3;
+    // Polygons are GM-only, so a read-only presentation map never holds any.
+    if (!map.readOnly && validPolygons(options.polygons)) map.polygons = options.polygons.map(polygon => ({points:polygon.points.map(({x,y}) => ({x,y})),active:polygon.active !== false}));
+    // The scene's Ambient Visual Distance in metres, for line-of-sight fog. The player view never reveals fog itself.
+    if (!map.readOnly) map.ambientSight = Number(options.ambientSight) > 0 ? Number(options.ambientSight) : 0;
     try { await map.start(url); await Promise.all(tokens.filter(t => t.column != null && t.row != null).map(token => map.upsertToken(token))); if (presentationLink) map.attachPresentation(presentationLink); return map; }
     catch (error) { await map.dispose(); throw error; }
 }
@@ -64,6 +70,7 @@ export class Battlemap {
         this.pendingSaves = new Set();
         this.automaticMoveQueue = Promise.resolve();
         this.movementTrails = new Map(); this.movementLabels = new Map(); this.movementEpoch = 0;
+        this.polygons = []; this.polygonHistory = []; this.polygonDraft = null; this.polygonCursor = null;
     }
     async start(url) {
         if (!globalThis.PIXI) await new Promise((resolve, reject) => {
@@ -112,8 +119,10 @@ export class Battlemap {
         this.measureLabelText = new PIXI.Text({text:'',style:{fontFamily:'Arial',fontSize:14,fontWeight:'bold',fill:0xffffff}});
         this.measureLabel = new PIXI.Container(); this.measureLabel.addChild(this.measureLabelBackground,this.measureLabelText); this.measureLabel.visible = false;
         this.measureOverlay.addChild(this.measureGraphics,this.measureLabel);
+        // GM-only polygons sit above the fog so they stay readable over hidden squares.
+        this.polygonGraphics = new PIXI.Graphics();
         this.world.addChild(this.background);
-        this.app.stage.addChild(this.world, this.grid, this.rangeGraphics, this.movementOverlay, this.ringLayer, this.tokens, this.fog, this.measureOverlay);
+        this.app.stage.addChild(this.world, this.grid, this.rangeGraphics, this.movementOverlay, this.ringLayer, this.tokens, this.fog, this.polygonGraphics, this.measureOverlay);
         this.placementPreview = new PIXI.Graphics();
         this.tokens.addChild(this.placementPreview);
         this.tiles = new Map();
@@ -141,6 +150,8 @@ export class Battlemap {
         this.app.ticker.add(this.animateTurn);
         this.down = event => {
             if (this.readOnly || this.dragging || this.targetDrag || this.measure || this.fogStroke || this.fogSaving) return;
+            // Polygon mode takes the pointer, except while a token is being placed.
+            if (this.polygonMode && !this.placement) { this.polygonDown(event); return; }
             // Shift-drag clears fog and Ctrl-drag sets it; the mode is fixed when the stroke starts.
             const fogMode = event.button === 0 && !this.placement && this.revealedFog != null ? fogStrokeMode(event) : null;
             if (fogMode) {
@@ -177,7 +188,7 @@ export class Battlemap {
             if (token?.saving || (token && this.pendingSaves.size > 0)) return;
             this.dragging = token ? { id:event.pointerId, token, column:token.column, row:token.row,
                 offsetX:point.x-token.column*this.scene.gridSize, offsetY:point.y-token.row*this.scene.gridSize }
-                : { id:event.pointerId, x:event.clientX, y:event.clientY };
+                : { id:event.pointerId, x:event.clientX, y:event.clientY, press:{x:event.clientX,y:event.clientY} };
             if (token) { this.dragging.previousTrail = this.movementTrails.get(token.id); this.dragging.movementEpoch = this.movementEpoch; }
             this.host.setPointerCapture(event.pointerId);
         };
@@ -192,11 +203,16 @@ export class Battlemap {
             if (!this.dragging) {
                 const token = this.hitToken(point);
                 this.host.title = token?.name ?? '';
-                this.hoverToken = token != null; this.updateCursor(event);
+                this.hoverToken = token != null;
+                this.hoverPolygon = !token && this.polygonUnder(point) >= 0;
+                this.updateCursor(event);
                 if (this.placement) this.previewPlacement(point);
+                if (this.polygonMode) this.polygonHover(point);
                 return;
             }
             if (this.dragging.id !== event.pointerId) return;
+            if (this.dragging.polygonClick && !this.polygonDragStarted(event)) return;
+            this.pressMoved(event);
             if (this.dragging.token) {
                 const cell = snapToken(point.x-this.dragging.offsetX, point.y-this.dragging.offsetY,
                     this.scene.gridSize, this.imageWidth, this.imageHeight);
@@ -236,6 +252,12 @@ export class Battlemap {
             const drag = this.dragging;
             this.dragging = null;
             if (this.host.hasPointerCapture(event.pointerId)) this.host.releasePointerCapture(event.pointerId);
+            // A press that never became a pan is a click: it adds a point in Polygon mode, and otherwise
+            // opens or closes the polygon under the pointer.
+            if (event.type === 'pointerup' && event.button === 0) {
+                if (drag.polygonClick) this.polygonClick(event);
+                else if (drag.press) this.togglePolygonAt(event);
+            }
             if (!drag.token) return;
             if (event.type !== 'pointerup') {
                 this.restoreMovementTrail(drag); this.positionToken(drag.token, drag.column, drag.row);
@@ -256,13 +278,14 @@ export class Battlemap {
                         if (!saved) { this.restoreMovementTrail(drag); this.positionToken(drag.token, drag.column, drag.row); }
                         drag.token.saving = false;
                         this.clearAutomaticMovementPreview();
+                        this.revealSight();
                     }
                 }
             })());
         };
         this.wheel = event => {
             event.preventDefault(); if (this.readOnly) return;
-            if (!this.placement && this.revealedFog != null && fogStrokeMode(event)) { this.wheelFogBrush(event); return; }
+            if (!this.placement && !this.polygonMode && this.revealedFog != null && fogStrokeMode(event)) { this.wheelFogBrush(event); return; }
             this.fogWheelDelta = 0;
             const bounds = this.host.getBoundingClientRect();
             this.zoom(Math.exp(-event.deltaY * .0015), { x:event.clientX-bounds.left, y:event.clientY-bounds.top });
@@ -270,9 +293,12 @@ export class Battlemap {
         // Right-drag targets or measures, so the browser menu never opens over the GM map.
         this.contextMenu = event => { if (!this.readOnly) event.preventDefault(); };
         this.host.addEventListener('contextmenu',this.contextMenu);
-        this.pointerLeave = () => { this.cancelFogStroke(); this.cancelTargetDrag(); this.cancelMeasure(); this.pointerPosition = null; this.publishPresentationPointer(); };
+        this.pointerLeave = () => { this.cancelFogStroke(); this.cancelTargetDrag(); this.cancelMeasure(); this.polygonHover(null); this.pointerPosition = null; this.publishPresentationPointer(); };
         this.visibilityChange = () => { if (document.hidden) this.pointerLeave(); };
-        this.modifierKey = event => { if (this.pointerPosition) this.updateCursor(event); };
+        this.modifierKey = event => {
+            if (event.type === 'keydown' && event.key === 'Escape') this.cancelPolygonDraft();
+            if (this.pointerPosition) this.updateCursor(event);
+        };
         globalThis.addEventListener('keydown',this.modifierKey);
         globalThis.addEventListener('keyup',this.modifierKey);
         this.host.addEventListener('pointerleave',this.pointerLeave);
@@ -306,7 +332,7 @@ export class Battlemap {
             y:(event.clientY-rect.top-this.host.clientTop-this.view.y)/this.view.scale };
     }
     async selectTokenAt(event) {
-        if (this.readOnly || this.disposed || this.placement || fogStrokeMode(event) || this.fogSaving || !this.callback || event.button !== 0) return;
+        if (this.readOnly || this.disposed || this.placement || this.polygonMode || fogStrokeMode(event) || this.fogSaving || !this.callback || event.button !== 0) return;
         const token = this.hitToken(this.pointerWorld(event));
         if (!token) return;
         event.preventDefault();
@@ -417,6 +443,7 @@ export class Battlemap {
         const fallback = token.fallback;
         container.addChildAt(fallback,1);
         this.tokenAppearance(token); this.publishPresentation();
+        this.revealSight();
         if (!data.hasTokenImage) return;
         const image = new Image();
         try {
@@ -473,6 +500,7 @@ export class Battlemap {
         if (!this.combatMode || turnChanged) this.cancelPan();
         if (turnChanged && !this.readOnly) this.panToToken(selectedId);
         this.publishPresentation();
+        this.revealSight();
     }
     updateMovementTrail(token,fromColumn,fromRow,toColumn,toRow) {
         if (!this.combatMode || this.readOnly) return;
@@ -521,17 +549,57 @@ export class Battlemap {
     }
     updateCursor(event) {
         if (this.readOnly || this.disposed || this.dragging || this.fogStroke || this.targetDrag) return;
-        const fog = !this.placement && this.revealedFog != null && fogStrokeMode(event) != null;
-        this.host.style.cursor = fog || this.placement ? 'crosshair' : this.hoverToken ? 'move' : 'grab';
+        const fog = !this.placement && !this.polygonMode && this.revealedFog != null && fogStrokeMode(event) != null;
+        this.host.style.cursor = fog || this.placement || this.polygonMode ? 'crosshair' : this.hoverToken ? 'move' : this.hoverPolygon ? 'pointer' : 'grab';
     }
     // Turns fog on (with the saved revealed cells) or off (null) in the GM view and the player snapshot.
     setFogEnabled(cells) {
         if(this.readOnly || this.disposed) return;
-        this.cancelFogStroke();
+        this.sightPending=false; this.cancelFogStroke();
         this.fogEpoch=(this.fogEpoch ?? 0)+1;
         this.revealedFog=cells == null ? null : new Set(cells.map(c=>fogKey(c.column,c.row)));
         this.fogHistory=[]; this.fogWheelDelta=0;
         this.drawFog(); this.publishPresentation(); this.publishPresentationPointer();
+        // Fog that has just been switched on is cleared at once from what the selected Traveller can see.
+        this.sightKey=null; this.revealSight();
+    }
+    // Line-of-sight fog (experimental). While fog is on, the squares the selected Traveller can see are cleared
+    // whenever the selection, that Traveller's position or Visual Distance, the map's Ambient Visual Distance or
+    // the polygons change. The Traveller sees as far as the higher of the two distances; when both are 0 nothing
+    // is cleared and the GM reveals the map by hand. Seen squares stay seen: fog is never put back.
+    setAmbientSight(metres) {
+        if(this.readOnly || this.disposed) return;
+        this.ambientSight=Number(metres) > 0 ? Number(metres) : 0;
+        this.revealSight();
+    }
+    revealSight() {
+        if(this.readOnly || this.disposed || this.revealedFog == null) return;
+        const token=this.characterTokens.get(this.selectedId);
+        // Only a Traveller on the map reveals fog, and only with somewhere to see to. Otherwise the last view is
+        // forgotten, so coming back to the Traveller, or giving them a distance, reveals again.
+        const range=token && token.isNpc === false && token.isAnimal !== true ? sightRangeSquares(this.ambientSight,token.visualDistance) : 0;
+        if(!(range>0)) { this.sightKey=null; return; }
+        // Not while its move is still being dragged or saved.
+        if(this.dragging?.token === token || token.saving) return;
+        // Reveal once per situation, so Undo fog and Ctrl+drag are not overridden straight away.
+        const key=[token.id,token.column,token.row,this.scene.gridSize,range,this.polygonVersion ?? 0].join(':');
+        if(key === this.sightKey) return;
+        // Fog is being painted or saved: reveal as soon as that finishes.
+        if(this.fogStroke || this.fogSaving) { this.sightPending=true; return; }
+        this.sightKey=key;
+        const size=this.scene.gridSize, before=new Set(this.revealedFog);
+        // Only active polygons block sight; an inactive one is an open door.
+        const solid=this.polygons.filter(polygon=>polygon.active !== false);
+        for(const cell of visibleSquares(token,solid,Math.ceil(this.imageWidth/size),Math.ceil(this.imageHeight/size),range))
+            this.revealedFog.add(fogKey(cell.column,cell.row));
+        if(this.revealedFog.size === before.size) return;
+        this.drawFog();
+        // Saved like a fog stroke, so it reaches players once stored and Undo fog takes it back.
+        this.trackSave(this.saveFogEdit(before));
+    }
+    resumeSight() {
+        if(!this.sightPending) return;
+        this.sightPending=false; this.revealSight();
     }
     setFog(cells) {
         this.revealedFog=cells == null ? null : new Set(cells.map(c=>fogKey(c.column,c.row)));
@@ -554,6 +622,7 @@ export class Battlemap {
         this.fogStroke=null; this.revealedFog=stroke.before;
         if(this.host.hasPointerCapture(stroke.id))this.host.releasePointerCapture(stroke.id);
         this.drawFog();
+        this.resumeSight();
     }
     async saveFogEdit(before,undo=false) {
         if(this.revealedFog.size === before.size && [...before].every(key=>this.revealedFog.has(key)))return;
@@ -571,6 +640,7 @@ export class Battlemap {
             else { this.fogHistory.push(before); if(this.fogHistory.length>20)this.fogHistory.shift(); }
             this.fogSaving=false;
             if(!this.disposed) {this.drawFog();this.publishPresentation();this.publishPresentationPointer();}
+            this.resumeSight();
         }
     }
     async undoFog() {
@@ -631,6 +701,157 @@ export class Battlemap {
         const layer=this.fogGradient; if(!layer) return;
         this.fogGradient=null;
         layer.sprite.destroy(); layer.texture.destroy(true);
+    }
+    // Polygon mode (experimental, GM only). Clicks add points snapped to square corners and centres instead of
+    // moving tokens, painting fog, targeting or measuring. Polygons never enter the player snapshot.
+    setPolygonMode(active) {
+        if(this.readOnly || this.disposed) return;
+        this.polygonMode=active === true;
+        this.polygonDraft=null; this.polygonCursor=null;
+        if(this.polygonMode) { this.cancelFogStroke(); this.cancelTargetDrag(); this.cancelMeasure(); }
+        this.host.style.cursor=this.polygonMode ? 'crosshair' : this.hoverToken ? 'move' : 'grab';
+        this.drawPolygons();
+    }
+    // A left press may become a click that adds a point or a drag that pans; a right press removes.
+    polygonDown(event) {
+        if(event.button !== 0 && event.button !== 2) return;
+        event.preventDefault?.(); this.cancelPan?.();
+        if(event.button === 2) { this.polygonRightClick(event); return; }
+        this.dragging={id:event.pointerId,x:event.clientX,y:event.clientY,polygonClick:{x:event.clientX,y:event.clientY}};
+        this.host.setPointerCapture?.(event.pointerId);
+    }
+    // True once a polygon-mode press has moved far enough to be a pan rather than a click.
+    polygonDragStarted(event) {
+        const press=this.dragging?.polygonClick;
+        if(!press) return true;
+        if(Math.hypot(event.clientX-press.x,event.clientY-press.y)<polygonClickSlop) return false;
+        this.dragging.polygonClick=null;
+        return true;
+    }
+    polygonSnapAt(event) {
+        return polygonSnap(this.pointerWorld(event),this.scene.gridSize,this.imageWidth,this.imageHeight);
+    }
+    // Moves the snap marker and the preview line to the snap point nearest a map position.
+    polygonHover(position) {
+        const point=position && this.polygonMode ? polygonSnap(position,this.scene.gridSize,this.imageWidth,this.imageHeight) : null;
+        if(samePolygonPoint(point,this.polygonCursor)) return;
+        this.polygonCursor=point; this.drawPolygons();
+    }
+    polygonClick(event) {
+        if(!this.polygonMode || this.polygonSaving || this.readOnly) return;
+        const point=this.polygonSnapAt(event);
+        if(!point) return;
+        const draft=this.polygonDraft ?? [], next=addPolygonPoint(draft,point);
+        this.polygonCursor=point;
+        if(next.closed) { this.polygonDraft=null; this.trackSave(this.savePolygons([...this.polygons,{points:draft,active:true}])); return; }
+        this.polygonDraft=next.points; this.drawPolygons();
+    }
+    // The most recently drawn polygon under a map position outside Polygon mode, or -1.
+    polygonUnder(position) {
+        if(this.readOnly || this.polygonMode || !this.polygons.length || !this.view) return -1;
+        return polygonAt(this.polygons,position,this.scene.gridSize,polygonHitPixels/this.view.scale);
+    }
+    // A press that has moved this far is a pan, not a click.
+    pressMoved(event) {
+        const press=this.dragging?.press;
+        if(press && Math.hypot(event.clientX-press.x,event.clientY-press.y)>=polygonClickSlop) this.dragging.press=null;
+    }
+    // Outside Polygon mode a click on a polygon switches it between active (solid: it blocks line of sight) and
+    // inactive (ignored), like closing and opening a door. The change is saved like any other polygon edit.
+    togglePolygonAt(event) {
+        if(this.disposed || this.polygonSaving || !this.callback) return;
+        const index=this.polygonUnder(this.pointerWorld(event));
+        if(index<0) return;
+        this.trackSave(this.savePolygons(this.polygons.map((polygon,i)=>i === index ? {...polygon,active:polygon.active === false} : polygon)));
+    }
+    // While drawing, a right-click takes back the last point. Otherwise it deletes the polygon under the pointer.
+    polygonRightClick(event) {
+        if(!this.polygonMode || this.polygonSaving || this.readOnly) return;
+        if(this.polygonDraft) { this.removePolygonPoint(); return; }
+        const index=polygonAt(this.polygons,this.pointerWorld(event),this.scene.gridSize,polygonHitPixels/this.view.scale);
+        if(index>=0) this.trackSave(this.savePolygons(this.polygons.filter((_,i)=>i !== index)));
+    }
+    removePolygonPoint() {
+        if(!this.polygonDraft) return;
+        this.polygonDraft=this.polygonDraft.length>1 ? this.polygonDraft.slice(0,-1) : null;
+        this.drawPolygons();
+    }
+    cancelPolygonDraft() {
+        if(!this.polygonDraft) return;
+        this.polygonDraft=null; this.drawPolygons();
+    }
+    // Shows the new set of polygons at once and goes back to the old set if the save fails.
+    async savePolygons(next,undo=false) {
+        const before=this.polygons, epoch=this.polygonEpoch ?? 0;
+        this.polygons=next; this.polygonSaving=true; this.drawPolygons();
+        let saved=false;
+        try {
+            saved=await this.callback.invokeMethodAsync('SavePolygons',this.scene.campaignId,this.scene.id,this.scene.revision,this.scene.gridSize,DotNet.createJSStreamReference(new TextEncoder().encode(JSON.stringify(next))));
+        } catch(error) { if(!this.disposed) console.warn('Unable to save polygons.',error); }
+        finally {
+            // The grid size changed while saving, which discards polygons; keep that newer state.
+            if(epoch !== (this.polygonEpoch ?? 0)) {}
+            else if(!saved) this.polygons=before;
+            else if(undo) this.polygonHistory.pop();
+            else { this.polygonHistory.push(before); if(this.polygonHistory.length>20)this.polygonHistory.shift(); }
+            this.polygonSaving=false;
+            if(!this.disposed) this.drawPolygons();
+            // Polygons block sight, so a saved change may let the selected Traveller see more.
+            if(saved) { this.polygonVersion=(this.polygonVersion ?? 0)+1; this.revealSight(); }
+        }
+    }
+    // Takes back the last point while drawing; otherwise reverses the last saved add or delete.
+    async undoPolygon() {
+        if(this.readOnly || this.disposed || this.polygonSaving) return;
+        if(this.polygonDraft) { this.removePolygonPoint(); return; }
+        if(!this.polygonHistory.length) return;
+        const save=this.savePolygons(this.polygonHistory.at(-1),true); this.trackSave(save); await save;
+    }
+    // Drawn in screen space so the lines stay the same width at every zoom.
+    drawPolygons() {
+        const graphics=this.polygonGraphics;
+        if(!graphics || !this.view) return;
+        graphics.clear();
+        if(this.readOnly) return;
+        const {x,y,scale}=this.view, half=this.scene.gridSize/2;
+        const screen=point=>({x:x+point.x*half*scale,y:y+point.y*half*scale});
+        const line={color:polygonColour,width:2};
+        // Markers are white with a dark edge so they show on light and dark maps alike.
+        const marker=(point,radius,width)=>{
+            graphics.circle(point.x,point.y,radius).stroke({color:0x000000,width:width+2,alpha:.8});
+            graphics.circle(point.x,point.y,radius).stroke({color:0xffffff,width});
+        };
+        // Red while editing, faint blue otherwise. Active polygons are lightly shaded; inactive ones are outlines.
+        for(const polygon of this.polygons) {
+            const points=polygon.points.map(screen), style=polygonStyle(this.polygonMode === true,polygon.active !== false);
+            graphics.moveTo(points[0].x,points[0].y);
+            for(const point of points.slice(1)) graphics.lineTo(point.x,point.y);
+            graphics.closePath();
+            if(style.fill) graphics.fill({color:style.colour,alpha:style.fill});
+            graphics.stroke({color:style.colour,width:2,alpha:style.line});
+        }
+        const draft=this.polygonDraft, cursor=this.polygonMode ? this.polygonCursor : null;
+        // A click on the first point closes the polygon once it has three points.
+        const closing=draft?.length>=3 && samePolygonPoint(cursor,draft[0]);
+        if(draft?.length) {
+            const points=draft.map(screen), last=points.at(-1);
+            if(points.length>1) {
+                graphics.moveTo(points[0].x,points[0].y);
+                for(const point of points.slice(1)) graphics.lineTo(point.x,point.y);
+                graphics.stroke(line);
+            }
+            // Preview of the next side, from the last point to the snapped pointer.
+            if(cursor && !samePolygonPoint(cursor,draft.at(-1))) {
+                const end=screen(cursor);
+                graphics.moveTo(last.x,last.y).lineTo(end.x,end.y).stroke({...line,alpha:.6});
+            }
+            for(const point of points) graphics.circle(point.x,point.y,3).fill({color:polygonColour});
+            // The first point is ringed in red, and gets a larger white ring when a click there would close the polygon.
+            if(closing) marker(points[0],8,2);
+            else graphics.circle(points[0].x,points[0].y,6).stroke(line);
+        }
+        // Where the next click will land.
+        if(cursor && !closing) marker(screen(cursor),4,1.5);
     }
     beginMeasure(event) {
         if (this.readOnly || this.disposed || this.placement || !this.view) return false;
@@ -896,6 +1117,7 @@ export class Battlemap {
         Object.assign(token, data); this.positionToken(token, data.column, data.row);
         this.refreshFallback(token);
         this.tokenAppearance(token); this.publishPresentation();
+        this.revealSight();
     }
     setGrid(scene) {
         const oldSize = this.scene.gridSize;
@@ -903,6 +1125,9 @@ export class Battlemap {
         if (this.scene.gridSize !== oldSize) {
             this.cancelFogStroke();
             if(this.revealedFog != null) {this.revealedFog=new Set();this.fogHistory=[];this.drawFog();}
+            // Polygons are positioned by the grid, so a new grid size discards them, as the server does.
+            this.polygonEpoch=(this.polygonEpoch ?? 0)+1;
+            this.polygons=[]; this.polygonHistory=[]; this.polygonDraft=null;
             const size = this.scene.gridSize;
             this.placementPreview?.clear();
             for (const token of this.characterTokens.values()) {
@@ -965,7 +1190,7 @@ export class Battlemap {
     draw() {
         const {x,y,scale} = this.view;
         this.drawMovementRanges();
-        this.drawMovementIndicators(); this.drawSelectionRings(); this.drawMeasure();
+        this.drawMovementIndicators(); this.drawSelectionRings(); this.drawMeasure(); this.drawPolygons();
         this.world.position.set(x,y); this.world.scale.set(scale);
         for (const token of this.characterTokens.values()) this.decorateToken(token);
         this.tokens?.position.set(x,y); this.tokens?.scale.set(scale);
@@ -1032,7 +1257,7 @@ export class Battlemap {
         this.apply(); this.disposed = true; this.resizeObserver?.disconnect();
         for (const [name, handler] of [['contextmenu',this.contextMenu],['dblclick',this.doubleClick],['pointerdown',this.down],['pointermove',this.move],['pointerup',this.up],['pointercancel',this.up],['lostpointercapture',this.up],['wheel',this.wheel]])
             if (handler) this.host.removeEventListener(name, handler);
-        this.cancelFogStroke(); this.cancelTargetDrag(); this.cancelMeasure();
+        this.cancelFogStroke(); this.cancelTargetDrag(); this.cancelMeasure(); this.polygonDraft=null;
         if(this.dragging && this.host.hasPointerCapture(this.dragging.id)) this.host.releasePointerCapture(this.dragging.id);
         this.dragging=null;
         for (const token of this.characterTokens.values()) { token.texture?.destroy(true); token.fallbackTexture?.destroy(true); token.filter?.destroy(); }

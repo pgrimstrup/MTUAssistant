@@ -35,6 +35,43 @@ public partial class Battlemap
         }
     }
 
+    // Experimental. The scene's Ambient Visual Distance in metres, saved with the scene. With each
+    // Traveller's own Visual Distance it sets how far line of sight clears fog; 0 for both leaves
+    // the fog to the GM.
+    private int ambientVisualDistance;
+
+    private async Task SaveAmbientVisualDistance()
+    {
+        if (map is null || BattlemapState.Current is not { } scene)
+            return;
+        try
+        {
+            await ScenesStore.SetAmbientVisualDistanceAsync(
+                scene.CampaignId,
+                scene.Id,
+                ambientVisualDistance
+            );
+            await UpdateMap("setAmbientSight", ambientVisualDistance);
+            error = null;
+        }
+        catch (Exception ex)
+        {
+            error =
+                ex is ArgumentException
+                    ? ex.Message
+                    : "Unable to save the Ambient Visual Distance. Please try again.";
+            // Show the stored value again rather than the one that was refused.
+            try
+            {
+                ambientVisualDistance = await ScenesStore.AmbientVisualDistanceAsync(
+                    scene.CampaignId,
+                    scene.Id
+                );
+            }
+            catch (Exception) { }
+        }
+    }
+
     private Task SetFogBrush() => UpdateMap("setFogBrush", fogBrush);
 
     [JSInvokable]

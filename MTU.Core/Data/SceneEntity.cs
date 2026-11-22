@@ -14,6 +14,8 @@ public sealed class SceneEntity
     public double GridlineWidth { get; set; } = 2;
     public string? FogState { get; set; }
     public bool FogEnabled { get; set; }
+    public string? PolygonState { get; set; }
+    public int AmbientVisualDistance { get; set; }
     public string? EncounterState { get; set; }
     public long Revision { get; set; } = 1;
 }

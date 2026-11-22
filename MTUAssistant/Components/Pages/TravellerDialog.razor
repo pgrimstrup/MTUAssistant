@@ -28,6 +28,7 @@
             <div class="ratings">
                 <label title="Day of the year, 1 to 365">Birthday (day) <input class="form-control" type="number" min="1" max="@CharacterAge.DaysInYear" step="1" @bind="birthday" disabled="@busy" /></label>
                 <label>Speed (m) <input class="form-control" type="number" min="0" step="1" @bind="speed" disabled="@busy" /></label>
+                <label title="How far this Traveller can see by their own means, in metres, when fog is cleared by line of sight. The higher of this and the map's Ambient Visual Distance is used. 0 leaves it to the map.">Visual Distance (m) <input class="form-control" type="number" min="0" max="@LineOfSight.MaxVisualDistance" step="1" @bind="visualDistance" disabled="@busy" /></label>
                 <label>Natural DR <input class="form-control" type="number" min="0" @bind="naturalDr" disabled="@busy" /></label>
             </div>
         </div>
@@ -65,7 +66,7 @@
     // The UPP is stored as text. The scores are edited apart and joined on save; digits after SOC (such as PSI) are kept.
     private int?[] scores = [], savedScores = [];
     private string extraDigits = "";
-    private int naturalDr, birthday = 1, speed = 6, tokenInputKey;
+    private int naturalDr, birthday = 1, speed = 6, visualDistance, tokenInputKey;
     private InjuryTolerance injuryTolerance;
     private byte[]? tokenImage;
     private bool inactive, busy, disposed;
@@ -78,7 +79,7 @@
     {
         current = Item;
         playerName = Item.PlayerName; travellerName = Item.Name; race = Item.Race;
-        naturalDr = Item.NaturalDr; birthday = Item.Birthday; speed = Item.Speed;
+        naturalDr = Item.NaturalDr; birthday = Item.Birthday; speed = Item.Speed; visualDistance = Item.VisualDistance;
         injuryTolerance = Item.InjuryTolerance; description = Item.Description; tokenImage = Item.TokenImage; inactive = Item.Inactive;
         (scores, extraDigits) = CharacteristicProfile.Split(Item.Upp);
         savedScores = [.. scores];
@@ -125,7 +126,7 @@
         {
             var isNew = current.Id == 0;
             var saved = current with { PlayerName = playerName, Name = travellerName, Race = race, Upp = Upp(),
-                NaturalDr = naturalDr, Birthday = birthday, Speed = speed,
+                NaturalDr = naturalDr, Birthday = birthday, Speed = speed, VisualDistance = visualDistance,
                 InjuryTolerance = injuryTolerance, TokenImage = tokenImage, Inactive = inactive, Description = description };
             var id = await CharacterStore.SaveAsync(saved);
             error = null;

@@ -170,6 +170,10 @@ public class CharacterEntity
     public int Birthday { get; set; } = 1;
     public int NaturalDr { get; set; }
     public int Speed { get; set; } = 6;
+
+    /// <summary>How far the character can see by its own means, in metres, when clearing fog by
+    /// line of sight. 0 leaves it to the scene's Ambient Visual Distance.</summary>
+    public int VisualDistance { get; set; }
     public InjuryTolerance InjuryTolerance { get; set; }
     public byte[]? TokenImage { get; set; }
     public bool Inactive { get; set; }

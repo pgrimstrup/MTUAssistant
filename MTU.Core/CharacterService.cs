@@ -20,7 +20,9 @@ public sealed record Character(
     int Speed = 6,
     string Description = "",
     int Birthday = 1,
-    IReadOnlyList<CareerTerm>? Career = null
+    IReadOnlyList<CareerTerm>? Career = null,
+    // Metres the character can see by its own means when clearing fog by line of sight.
+    int VisualDistance = 0
 );
 
 public sealed record CharacterSkill(int Id, int CharacterId, string Name, int Level);
@@ -57,7 +59,8 @@ public sealed class CharacterService(MtuDbContext db)
                 t.Speed,
                 t.Description,
                 t.Birthday,
-                null
+                null,
+                t.VisualDistance
             ))
             .ToArrayAsync();
         var career = (
@@ -210,6 +213,7 @@ public sealed class CharacterService(MtuDbContext db)
         InjuryToleranceRules.Validate(character.InjuryTolerance);
         if (character.Speed < 0)
             throw new ArgumentException("Speed must be zero or greater.");
+        LineOfSight.Validate(character.VisualDistance, "Visual Distance");
         var name = character.Name?.Trim() ?? "";
         var player = character.PlayerName?.Trim() ?? "";
         var race = character.Race?.Trim() ?? "";
@@ -246,6 +250,7 @@ public sealed class CharacterService(MtuDbContext db)
         entity.NaturalDr = character.NaturalDr;
         entity.InjuryTolerance = character.InjuryTolerance;
         entity.Speed = character.Speed;
+        entity.VisualDistance = character.VisualDistance;
         entity.TokenImage = character.TokenImage;
         entity.Inactive = character.Inactive;
         await db.SaveChangesAsync();

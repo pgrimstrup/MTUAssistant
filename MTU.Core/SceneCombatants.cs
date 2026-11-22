@@ -26,7 +26,9 @@ public sealed record SceneCombatant(
     string AnimalTraits = "",
     IReadOnlyList<NaturalAttack>? NaturalAttacks = null,
     InjuryTolerance InjuryTolerance = InjuryTolerance.None,
-    string Race = ""
+    string Race = "",
+    // The character's own Visual Distance in metres, for clearing fog by line of sight.
+    int VisualDistance = 0
 )
 {
     public bool OnMap => Column.HasValue && Row.HasValue;
@@ -381,7 +383,15 @@ public sealed partial class SceneService
         var characters = await db
             .Characters.AsNoTracking()
             .Where(c => ids.Contains(c.Id))
-            .ToDictionaryAsync(c => c.Id, c => new { c.InjuryTolerance, c.Race });
+            .ToDictionaryAsync(
+                c => c.Id,
+                c => new
+                {
+                    c.InjuryTolerance,
+                    c.Race,
+                    c.VisualDistance,
+                }
+            );
         foreach (var animal in animals.Values)
             if (
                 !skills.Any(s =>
@@ -412,6 +422,8 @@ public sealed partial class SceneService
                         characters.GetValueOrDefault(e.CharacterId)?.InjuryTolerance
                         ?? InjuryTolerance.None,
                     Race = characters.GetValueOrDefault(e.CharacterId)?.Race ?? "",
+                    VisualDistance =
+                        characters.GetValueOrDefault(e.CharacterId)?.VisualDistance ?? 0,
                     NaturalAttacks = attacks
                         .Where(a => a.CharacterId == e.CharacterId)
                         .Select(a => new NaturalAttack(
@@ -476,6 +488,10 @@ public sealed partial class SceneService
             .Scenes.Where(s => s.Id == sceneId && s.CampaignId == campaignId)
             .ExecuteUpdateAsync(s =>
                 s.SetProperty(s => s.FogState, s => s.GridSize == size ? s.FogState : null)
+                    .SetProperty(
+                        s => s.PolygonState,
+                        s => s.GridSize == size ? s.PolygonState : null
+                    )
                     .SetProperty(s => s.GridSize, size)
                     .SetProperty(s => s.GridColour, colour)
                     .SetProperty(s => s.GridlineWidth, width)

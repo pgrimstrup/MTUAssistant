@@ -157,8 +157,12 @@ public sealed partial class SceneService(IServiceScopeFactory scopes)
         if (input.Id == 0)
             db.Scenes.Add(entity);
         entity.Name = name;
+        // Fog and polygons are positioned by the grid, so a new grid size or image discards them.
         if (entity.GridSize != input.GridSize || image is not null)
+        {
             entity.FogState = null;
+            entity.PolygonState = null;
+        }
         entity.GridSize = input.GridSize;
         entity.GridColour = input.GridColour;
         entity.GridOpacity = input.GridOpacity;

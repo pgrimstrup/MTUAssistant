@@ -319,6 +319,8 @@ namespace MTU.Core.Data.Migrations
 
                     b.Property<string>("Upp").IsRequired().HasColumnType("TEXT");
 
+                    b.Property<int>("VisualDistance").HasColumnType("INTEGER");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CampaignId", "Name");
@@ -546,6 +548,8 @@ namespace MTU.Core.Data.Migrations
                 {
                     b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("INTEGER");
 
+                    b.Property<int>("AmbientVisualDistance").HasColumnType("INTEGER");
+
                     b.Property<int>("CampaignId").HasColumnType("INTEGER");
 
                     b.Property<string>("ContentType").IsRequired().HasColumnType("TEXT");
@@ -567,6 +571,8 @@ namespace MTU.Core.Data.Migrations
                     b.Property<byte[]>("Image").IsRequired().HasColumnType("BLOB");
 
                     b.Property<string>("Name").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<string>("PolygonState").HasColumnType("TEXT");
 
                     b.Property<long>("Revision").HasColumnType("INTEGER");
 

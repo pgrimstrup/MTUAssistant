@@ -12,7 +12,7 @@
                     @if (actor.HasTokenImage) { <img src="@($"api/characters/{CampaignId}/{actor.CharacterId}/token")" alt="" /> }
                     else { <span class="initials">@Initials(actor.Name)</span> }
                 </span>
-                <div><h3>@actor.Name</h3><p>@(actor.IsNpc ? actor.Occupation : actor.PlayerName)</p><small>Stance: @state.Stance</small></div>
+                <div><h3>@actor.Name</h3><p>@(actor.IsNpc ? actor.Occupation : actor.PlayerName)</p><small>Stance: @state.Stance</small>@if (!actor.IsNpc) { <small class="visual-distance" title="This Traveller's own Visual Distance. Fog clears as far as the higher of this and the map's Ambient Visual Distance.">Visual Distance: @actor.VisualDistance m</small> }</div>
             </header>
             <div class="action-columns">
                 @foreach (var group in Groups)
