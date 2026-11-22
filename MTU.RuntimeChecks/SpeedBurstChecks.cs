@@ -175,7 +175,7 @@ public static class SpeedBurstChecks
         db.Campaigns.Add(new CampaignEntity { Id = 1, Name = "Bursts" });
         await db.SaveChangesAsync();
         await new CharacterService(db).SaveAsync(
-            new Character(0, 1, "", "Ftahalr", "Aslan", "775777", "0", 0, 0, 0)
+            new Character(0, 1, "", "Ftahalr", "Aslan", "775777", 0)
         );
         var scenes = scope.ServiceProvider.GetRequiredService<SceneService>();
         var scene = await scenes.SaveAsync(

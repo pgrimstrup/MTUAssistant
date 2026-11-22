@@ -71,10 +71,11 @@ public sealed partial class SceneService
             var npc = await db
                 .NPCs.AsNoTracking()
                 .SingleOrDefaultAsync(n => n.CharacterId == character.Id);
-            var year = await db
+            var today = await db
                 .Campaigns.Where(c => c.Id == campaignId)
-                .Select(c => c.Year)
+                .Select(c => new { c.Year, c.Day })
                 .SingleAsync();
+            var terms = await db.CareerTerms.CountAsync(t => t.CharacterId == character.Id);
             overview.Add(
                 new("Species", string.IsNullOrWhiteSpace(character.Race) ? "—" : character.Race)
             );
@@ -84,7 +85,9 @@ public sealed partial class SceneService
                     "Age",
                     npc is not null
                         ? npc.Age?.ToString() ?? "—"
-                        : CharacterAge.Calculate(character.TermsServed, year)?.ToString() ?? "—"
+                        : CharacterAge
+                            .Calculate(terms, character.Birthday, today.Year, today.Day)
+                            .ToString()
                 )
             );
             var labels = new[] { "STR", "DEX", "END", "INT", "EDU", "SOC", "PSI" };

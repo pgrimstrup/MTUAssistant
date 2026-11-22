@@ -41,9 +41,6 @@ public static class AnimalCombatChecks
                     "Tentacled Hunter",
                     "Animal",
                     "",
-                    "0",
-                    0,
-                    0,
                     0,
                     Skills:
                     [

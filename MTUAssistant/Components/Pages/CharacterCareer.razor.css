@@ -1,0 +1,19 @@
+.career-list { overflow-x:auto; }
+.career-table { width:100%; margin:0; font-size:.86rem; }
+.career-table th, .career-table td { vertical-align:middle; white-space:nowrap; }
+/* A term and its notes read as one block: the notes row has no rule above it. */
+.career-table tbody tr:not(:last-child) > th, .career-table tbody tr:not(:last-child) > td:not(.row-actions) { border-bottom-width:0; }
+.career-table .notes-row td { padding-top:0; color:var(--app-muted); font-size:.85em; white-space:pre-wrap; overflow-wrap:anywhere; }
+.career-table tbody.editing > tr > * { --bs-table-bg:var(--app-accent-soft); }
+.row-actions { text-align:right; }
+.standing { margin:.6rem 0 0; color:var(--app-muted); font-size:.85rem; }
+.term-editor { margin-top:1rem; }
+.term-fields { display:flex; flex-wrap:wrap; align-items:end; gap:.7rem 1.2rem; }
+.term-fields label, .notes-field { display:grid; gap:.3rem; color:var(--app-muted); font-size:.8rem; }
+.term-fields label.check { display:flex; align-items:center; gap:.45rem; min-height:2.4rem; color:var(--app-text); font-size:.9rem; }
+.term-fields label.unavailable { color:var(--app-muted); }
+.service-select { min-width:12rem; }
+.notes-field { margin-top:.7rem; }
+.term-actions { display:flex; gap:.5rem; margin-top:.7rem; }
+.empty-message { color:var(--app-muted); margin:.4rem 0; }
+.error { color:#ffaaaa; }

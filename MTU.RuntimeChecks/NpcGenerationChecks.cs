@@ -695,20 +695,7 @@ public static class NpcGenerationChecks
         }
         catch (ArgumentException) { }
         var manual = new Npc(
-            new Character(
-                0,
-                1,
-                "",
-                "Manual robot",
-                "Robot",
-                "",
-                "0",
-                0,
-                0,
-                0,
-                Skills: [],
-                IsNpc: true
-            )
+            new Character(0, 1, "", "Manual robot", "Robot", "", 0, Skills: [], IsNpc: true)
         );
         await store.SaveAsync(manual);
         var manualSaved = (await store.ListAsync(1)).Single(n =>

@@ -284,11 +284,12 @@ namespace MTU.Core.Data.Migrations
                 {
                     b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("INTEGER");
 
+                    b.Property<int>("Birthday")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(1);
+
                     b.Property<int>("CampaignId").HasColumnType("INTEGER");
-
-                    b.Property<int>("HighestNavalRank").HasColumnType("INTEGER");
-
-                    b.Property<int>("HighestScoutRank").HasColumnType("INTEGER");
 
                     b.Property<bool>("Inactive").HasColumnType("INTEGER");
 
@@ -313,8 +314,6 @@ namespace MTU.Core.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(6);
-
-                    b.Property<string>("TermsServed").IsRequired().HasColumnType("TEXT");
 
                     b.Property<byte[]>("TokenImage").HasColumnType("BLOB");
 
@@ -365,6 +364,34 @@ namespace MTU.Core.Data.Migrations
                     b.HasIndex("EquipmentId");
 
                     b.ToTable("CharacterEquipment");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.CareerTermEntity",
+                b =>
+                {
+                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("INTEGER");
+
+                    b.Property<bool>("AdvancementCheck").HasColumnType("INTEGER");
+
+                    b.Property<int>("CharacterId").HasColumnType("INTEGER");
+
+                    b.Property<bool>("CommissionCheck").HasColumnType("INTEGER");
+
+                    b.Property<string>("Notes").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<int>("Sequence").HasColumnType("INTEGER");
+
+                    b.Property<string>("Service").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<bool>("SurvivalCheck").HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CharacterId", "Sequence");
+
+                    b.ToTable("CareerTerms");
                 }
             );
 
@@ -898,6 +925,20 @@ namespace MTU.Core.Data.Migrations
                     b.Navigation("Character");
 
                     b.Navigation("Equipment");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.CareerTermEntity",
+                b =>
+                {
+                    b.HasOne("MTU.Core.Data.CharacterEntity", "Character")
+                        .WithMany()
+                        .HasForeignKey("CharacterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Character");
                 }
             );
 

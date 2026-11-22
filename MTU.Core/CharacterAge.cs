@@ -1,50 +1,22 @@
-using System.Globalization;
-
 namespace MTU.Core;
 
 public static class CharacterAge
 {
-    // Each comma-separated service ends in its number of terms; a plain number is also valid.
-    public static long? Calculate(string? termsServed, int year)
+    /// <summary>The year careers are counted back from: a character with N terms is
+    /// 16 + 4N years old on day 1 of this year.</summary>
+    public const int BaseYear = 1105;
+    public const int DaysInYear = 365;
+
+    /// <summary>Age on the given campaign date. A career starts at 16 and each term adds four
+    /// years, which gives the age on day 1 of 1105. After that the character is a year older on
+    /// each birthday (a day of the year, 1 to 365).</summary>
+    public static long Calculate(int terms, int birthday, int year, int day = 1)
     {
-        if (string.IsNullOrWhiteSpace(termsServed))
-            return null;
-        long total = 0;
-        foreach (var part in termsServed.Split(','))
-        {
-            var entry = part.Trim();
-            if (entry.Length == 0)
-                return null;
-            var index = entry.Length;
-            while (index > 0 && char.IsAsciiDigit(entry[index - 1]))
-                index--;
-            if (
-                index == entry.Length
-                || (index > 0 && !char.IsWhiteSpace(entry[index - 1]))
-                || !long.TryParse(
-                    entry[index..],
-                    NumberStyles.None,
-                    CultureInfo.InvariantCulture,
-                    out var count
-                )
-            )
-                return null;
-            try
-            {
-                total = checked(total + count);
-            }
-            catch (OverflowException)
-            {
-                return null;
-            }
-        }
-        try
-        {
-            return checked(16L + 4L * total + year - 1105L);
-        }
-        catch (OverflowException)
-        {
-            return null;
-        }
+        var born = Math.Clamp(birthday, 1, DaysInYear);
+        var start = CareerRules.StartingAge + (long)CareerRules.YearsPerTerm * Math.Max(0, terms);
+        // Birthdays since day 1 of the base year. A day-1 birthday falls on that first day, which
+        // the starting age already includes; any later birthday in the current year counts once reached.
+        var birthdays = (long)year - BaseYear + (born > 1 && day >= born ? 1 : 0);
+        return start + birthdays;
     }
 }

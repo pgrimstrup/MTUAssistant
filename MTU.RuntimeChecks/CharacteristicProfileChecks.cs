@@ -91,18 +91,7 @@ public static class CharacteristicProfileChecks
         await db.SaveChangesAsync();
         var store = new CharacterService(db);
         var id = await store.SaveAsync(
-            new Character(
-                0,
-                1,
-                "",
-                "Newcomer",
-                "",
-                CharacteristicProfile.Join(scores),
-                "0",
-                0,
-                0,
-                0
-            )
+            new Character(0, 1, "", "Newcomer", "", CharacteristicProfile.Join(scores), 0)
         );
         var created = (await store.ListAsync(1)).Single();
         Check(
@@ -126,9 +115,6 @@ public static class CharacteristicProfileChecks
                     "Contact",
                     "Human",
                     "",
-                    "0",
-                    0,
-                    0,
                     0,
                     Skills: [new CharacterSkill(0, 0, "Streetwise", 1)]
                 )
@@ -159,9 +145,6 @@ public static class CharacteristicProfileChecks
                     "Kian",
                     "Animal",
                     "",
-                    "0",
-                    0,
-                    0,
                     0,
                     Skills: [new CharacterSkill(0, 0, "Recon", 1)]
                 ),

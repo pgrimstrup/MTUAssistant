@@ -16,7 +16,6 @@
             <label>Traveller Name <input class="form-control" maxlength="120" @bind="travellerName" disabled="@busy" /></label>
             <label>Player Name <input class="form-control" maxlength="120" @bind="playerName" disabled="@busy" /></label>
             <label>Race <input class="form-control" maxlength="120" @bind="race" disabled="@busy" /></label>
-            <label>Terms Served <input class="form-control" maxlength="240" placeholder="Navy 3, Diplomat 1" @bind="terms" disabled="@busy" /></label>
         </div>
         <div class="numbers">
             <div class="characteristics" role="group" aria-label="Characteristics">
@@ -27,8 +26,7 @@
                 }
             </div>
             <div class="ratings">
-                <label>Naval Rank <input class="form-control" type="number" min="0" @bind="naval" disabled="@busy" /></label>
-                <label>Scout Rank <input class="form-control" type="number" min="0" @bind="scout" disabled="@busy" /></label>
+                <label title="Day of the year, 1 to 365">Birthday (day) <input class="form-control" type="number" min="1" max="@CharacterAge.DaysInYear" step="1" @bind="birthday" disabled="@busy" /></label>
                 <label>Speed (m) <input class="form-control" type="number" min="0" step="1" @bind="speed" disabled="@busy" /></label>
                 <label>Natural DR <input class="form-control" type="number" min="0" @bind="naturalDr" disabled="@busy" /></label>
             </div>
@@ -43,8 +41,8 @@
         </div>
     </section>
     <TabBar TValue="TravellerTab" Tabs="Tabs" @bind-Active="activeTab" IdPrefix="traveller" AriaLabel="Traveller records">
-        @if (activeTab == TravellerTab.Career) { <p class="empty-message">Career history will be added here.</p> }
-        else if (current.Id == 0) { <p class="empty-message">Add the Traveller first, then record @(activeTab == TravellerTab.Skills ? "skills" : activeTab == TravellerTab.Armour ? "armour" : "weapons") here.</p> }
+        @if (current.Id == 0) { <p class="empty-message">Add the Traveller first, then record @(activeTab == TravellerTab.Career ? "career terms" : activeTab == TravellerTab.Skills ? "skills" : activeTab == TravellerTab.Armour ? "armour" : "weapons") here.</p> }
+        else if (activeTab == TravellerTab.Career) { <CharacterCareer @key="activeTab" Character="current" OnChanged="OnChanged" /> }
         else if (activeTab == TravellerTab.Skills) { <CharacterSkills @key="activeTab" Character="current" Embedded="true" OnChanged="OnChanged" /> }
         else { <CharacterEquipment @key="activeTab" Character="current" Kind="@(activeTab == TravellerTab.Armour ? EquipmentKind.Armour : EquipmentKind.Weapon)" OnChanged="OnChanged" /> }
     </TabBar>
@@ -61,14 +59,13 @@
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
-    // Career is empty for now, so the dialog opens on Skills.
-    private TravellerTab activeTab = TravellerTab.Skills;
+    private TravellerTab activeTab = TravellerTab.Career;
     private Character current = default!;
-    private string playerName = "", travellerName = "", race = "", terms = "0", description = "";
+    private string playerName = "", travellerName = "", race = "", description = "";
     // The UPP is stored as text. The scores are edited apart and joined on save; digits after SOC (such as PSI) are kept.
     private int?[] scores = [], savedScores = [];
     private string extraDigits = "";
-    private int naval, scout, naturalDr, speed = 6, tokenInputKey;
+    private int naturalDr, birthday = 1, speed = 6, tokenInputKey;
     private InjuryTolerance injuryTolerance;
     private byte[]? tokenImage;
     private bool inactive, busy, disposed;
@@ -80,8 +77,8 @@
     protected override void OnInitialized()
     {
         current = Item;
-        playerName = Item.PlayerName; travellerName = Item.Name; race = Item.Race; terms = Item.TermsServed;
-        naval = Item.HighestNavalRank; scout = Item.HighestScoutRank; naturalDr = Item.NaturalDr; speed = Item.Speed;
+        playerName = Item.PlayerName; travellerName = Item.Name; race = Item.Race;
+        naturalDr = Item.NaturalDr; birthday = Item.Birthday; speed = Item.Speed;
         injuryTolerance = Item.InjuryTolerance; description = Item.Description; tokenImage = Item.TokenImage; inactive = Item.Inactive;
         (scores, extraDigits) = CharacteristicProfile.Split(Item.Upp);
         savedScores = [.. scores];
@@ -128,7 +125,7 @@
         {
             var isNew = current.Id == 0;
             var saved = current with { PlayerName = playerName, Name = travellerName, Race = race, Upp = Upp(),
-                TermsServed = terms, HighestNavalRank = naval, HighestScoutRank = scout, NaturalDr = naturalDr, Speed = speed,
+                NaturalDr = naturalDr, Birthday = birthday, Speed = speed,
                 InjuryTolerance = injuryTolerance, TokenImage = tokenImage, Inactive = inactive, Description = description };
             var id = await CharacterStore.SaveAsync(saved);
             error = null;

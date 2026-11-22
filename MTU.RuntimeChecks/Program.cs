@@ -21,6 +21,7 @@ await SpeedBurstChecks.RunAsync();
 AutoAttackChecks.Run();
 await SkillChecks.RunAsync();
 await CharacteristicProfileChecks.RunAsync();
+await CareerChecks.RunAsync();
 await NpcGenerationChecks.RunAsync();
 await SceneChecks.RunAsync();
 await AnimalCombatChecks.RunAsync();
@@ -651,16 +652,8 @@ Check(
 );
 
 Check(
-    CharacterAge.Calculate("Navy 3, Diplomat 1", 1105) == 32
-        && CharacterAge.Calculate("3", 1106) == 29,
+    CharacterAge.Calculate(4, 1, 1105) == 32 && CharacterAge.Calculate(3, 1, 1106) == 29,
     "Age combines terms and campaign year"
-);
-Check(
-    CharacterAge.Calculate("Navy", 1105) is null
-        && CharacterAge.Calculate("", 1105) is null
-        && CharacterAge.Calculate("Navy -3", 1105) is null
-        && CharacterAge.Calculate("Navy 3,", 1105) is null,
-    "Unparseable terms do not invent an age"
 );
 
 Check(PoliticalColor.Resolve(null, "ImDd", false) == "red", "Imperial border fallback");
@@ -1594,9 +1587,6 @@ var brokerExample = new Character(
     "Broker",
     "",
     "7777A7",
-    "",
-    0,
-    0,
     0,
     Skills: [new CharacterSkill(0, 0, "Broker", 1), new CharacterSkill(0, 0, "Streetwise", 0)]
 );
@@ -1740,7 +1730,9 @@ using (var renameConnection = new SqliteConnection("Data Source=:memory:"))
             player.Id == 1
                 && player.Name == "Player character"
                 && player.Inactive
-                && player.TermsServed == "Navy 2"
+                && CareerRules.Summary(player.Career) == "Navy 2"
+                && CareerRules.HighestRank(player.Career, "Navy") == 2
+                && CareerRules.HighestRank(npc.Character.Career, "Scout") == 1
                 && player.TokenImage is { Length: 8 }
                 && player.Skills!.Single() is { Id: 1, Name: "Broker", Level: 2 },
             "Rename preserves player details and skills"
@@ -1832,21 +1824,10 @@ using (var termsConnection = new SqliteConnection("Data Source=:memory:"))
     var upgraded = (await new CharacterService(termsDb).ListAsync(1)).Single();
     Check(!upgraded.Inactive, "Existing Travellers default to active after migration");
     Check(
-        upgraded.TermsServed == "3"
+        CareerRules.Summary(upgraded.Career) == "Unknown 3"
             && upgraded.TokenImage is { Length: 8 }
             && upgraded.Skills!.Single() is { Name: "Pilot", Level: 2 },
-        "Terms migration preserves numeric value, token and skills"
-    );
-    await new CharacterService(termsDb).SaveAsync(
-        upgraded with
-        {
-            TermsServed = "Navy 3, Diplomat 1",
-        }
-    );
-    Check(
-        (await new CharacterService(termsDb).ListAsync(1)).Single().TermsServed
-            == "Navy 3, Diplomat 1",
-        "Text terms persist"
+        "Terms migrations turn a numeric value into that many terms and keep token and skills"
     );
 }
 
@@ -2185,9 +2166,7 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
     }
     catch (ArgumentException) { }
     var optionsTravellers = new CharacterService(rangeDb);
-    await optionsTravellers.SaveAsync(
-        new Character(0, 1, "", "Options Other", "", "777777", "0", 0, 0, 0)
-    );
+    await optionsTravellers.SaveAsync(new Character(0, 1, "", "Options Other", "", "777777", 0));
     var optionsOther = (await optionsTravellers.ListAsync(1)).Single(t =>
         t.Name == "Options Other"
     );
@@ -2316,7 +2295,7 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
     );
     await npcStore.SaveAsync(
         new Npc(
-            new Character(0, 1, "", " Zana ", " Human ", "", "0", 0, 0, 0, TokenImage: npcToken),
+            new Character(0, 1, "", " Zana ", " Human ", "", 0, TokenImage: npcToken),
             " Broker ",
             " Female ",
             " Always smiling ",
@@ -2457,9 +2436,7 @@ using (var rangeConnection = new SqliteConnection("Data Source=:memory:"))
         "Deleting NPC cascades skills and equipment assignments while preserving catalogue"
     );
     await npcStore.SaveAsync(
-        new Npc(
-            new Character(0, npcOtherCampaign.Id, "", "Other patron", "", "777777", "0", 0, 0, 0)
-        )
+        new Npc(new Character(0, npcOtherCampaign.Id, "", "Other patron", "", "777777", 0))
     );
     await npcCampaigns.DeleteAsync(npcOtherCampaign.Id);
     Check(
@@ -2670,8 +2647,21 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
     var characterService = new CharacterService(db);
     var secondCampaign = (await campaignService.ListAsync()).Single(c => c.Id != firstCampaign.Id);
     await characterService.SaveAsync(
-        new Character(0, firstCampaign.Id, "Player", "Kira", "Human", "a98765", "3", 2, 1, 4)
+        new Character(0, firstCampaign.Id, "Player", "Kira", "Human", "a98765", 4)
     );
+    var careerService = new CareerService(db);
+    // Each term has a successful Advancement Check, so the rank equals the number of terms.
+    async Task Serve(int campaignId, string name, string service, int terms)
+    {
+        var id = (await characterService.ListAsync(campaignId)).Single(c => c.Name == name).Id;
+        for (var term = 0; term < terms; term++)
+            await careerService.SaveAsync(
+                campaignId,
+                new CareerTerm(0, id, 0, service, Advancement: true)
+            );
+    }
+    await Serve(firstCampaign.Id, "Kira", "Navy", 2);
+    await Serve(firstCampaign.Id, "Kira", "Scout", 1);
     var character = (await characterService.ListAsync(firstCampaign.Id)).Single();
     Check(
         character
@@ -2680,12 +2670,13 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
                 Name: "Kira",
                 Race: "Human",
                 Upp: "A98765",
-                TermsServed: "3",
-                HighestNavalRank: 2,
-                HighestScoutRank: 1,
+                Birthday: 1,
                 NaturalDr: 4
-            },
-        "Traveller fields are saved"
+            }
+            && CareerRules.Summary(character.Career) == "Navy 2, Scout 1"
+            && CareerRules.HighestRank(character.Career, "Navy") == 2
+            && CareerRules.HighestRank(character.Career, "Scout") == 1,
+        "Traveller fields and career are saved"
     );
     Check(
         (await characterService.ListAsync(secondCampaign.Id)).Count == 0,
@@ -2704,11 +2695,13 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
         "SOC DM boundaries and incomplete UPP"
     );
     await characterService.SaveAsync(
-        new Character(0, firstCampaign.Id, "", "Second", "", "12345C", "", 0, 4, 0)
+        new Character(0, firstCampaign.Id, "", "Second", "", "12345C", 0)
     );
     await characterService.SaveAsync(
-        new Character(0, secondCampaign.Id, "", "Other", "", "12345F", "", 9, 0, 0)
+        new Character(0, secondCampaign.Id, "", "Other", "", "12345F", 0)
     );
+    await Serve(firstCampaign.Id, "Second", "Scout", 4);
+    await Serve(secondCampaign.Id, "Other", "Navy", 9);
     Check(
         (await characterService.MailModifiersAsync(firstCampaign.Id)) == (4, 2),
         "Campaign mail modifiers select highest rank and SOC"
@@ -2957,9 +2950,7 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
         throw new Exception("Cross-campaign edit allowed");
     }
     catch (InvalidOperationException) { }
-    await characterService.SaveAsync(
-        new Character(0, secondCampaign.Id, "P", "Other", "", "", "0", 0, 0, 0)
-    );
+    await characterService.SaveAsync(new Character(0, secondCampaign.Id, "P", "Other", "", "", 0));
     var otherTraveller = (await characterService.ListAsync(secondCampaign.Id)).Single();
     var equipmentStore = new EquipmentService(db);
     var armour = await equipmentStore.SaveAsync(

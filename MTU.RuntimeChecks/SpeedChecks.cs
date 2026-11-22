@@ -110,7 +110,7 @@ public static class SpeedChecks
         var traveller = (await characters.ListAsync(1)).Single();
         await characters.SaveAsync(traveller with { Speed = 9 });
         await npcs.SaveAsync(
-            new Npc(new Character(0, 1, "", "Speed creature", "", "777777", "0", 0, 0, 0, Speed: 4))
+            new Npc(new Character(0, 1, "", "Speed creature", "", "777777", 0, Speed: 4))
         );
         var npc = (await npcs.ListAsync(1)).Single();
         Check(

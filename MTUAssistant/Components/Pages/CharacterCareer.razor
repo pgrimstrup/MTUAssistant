@@ -1,0 +1,141 @@
+@inject CareerService Careers
+
+<section class="career-panel" aria-label="@($"{Character.Name} career")">
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    @if (loading) { <p class="empty-message">Loading career…</p> }
+    else if (terms.Count == 0) { <p class="empty-message">No career terms recorded.</p> }
+    else
+    {
+        var progress = CareerRules.RankAfterEachTerm(terms);
+        <div class="career-list"><table class="table career-table">
+            <thead><tr><th scope="col">Term</th><th scope="col">Age</th><th scope="col">Service</th><th scope="col">Survival</th><th scope="col">Commission</th><th scope="col">Advancement</th><th scope="col">Rank</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+            @foreach (var term in terms)
+            {
+                // A check the term does not have is left blank rather than shown as failed.
+                // The commission comes first; when it passes there is no Advancement Check that term.
+                var hasCommission = CareerRules.CommissionAvailable(terms, term.Id, term.Service);
+                var hasAdvancement = CareerServices.HasAdvancement(term.Service) && !(hasCommission && term.Commission);
+                var hasRank = CareerServices.HasAdvancement(term.Service) || CareerServices.IsMilitary(term.Service);
+                var hasNotes = !string.IsNullOrWhiteSpace(term.Notes);
+                // One body per term keeps a term and its notes row together.
+                <tbody @key="term.Id" class="@(editingId == term.Id ? "editing" : null)">
+                    <tr>
+                        <th scope="row">@term.Number</th>
+                        <td>@CareerRules.AgeAtStart(term.Number)</td>
+                        <td>@term.Service</td>
+                        <td>@Outcome(term.Survival)</td>
+                        <td>@(hasCommission ? Outcome(term.Commission) : null)</td>
+                        <td>@(hasAdvancement ? Outcome(term.Advancement) : null)</td>
+                        <td>@(hasRank ? progress[term.Id].Label : null)</td>
+                        <td class="row-actions" rowspan="@(hasNotes ? 2 : 1)"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(term)" disabled="@busy">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(term)" disabled="@busy">Delete</button></td>
+                    </tr>
+                    @if (hasNotes) { <tr class="notes-row"><td colspan="7">@term.Notes</td></tr> }
+                </tbody>
+            }
+        </table></div>
+        @if (Standing.Count > 0) { <p class="standing">Highest rank: @string.Join(" · ", Standing)</p> }
+    }
+    <div class="term-editor" role="group" aria-label="@(editingId == 0 ? "Add a career term" : "Edit career term")">
+        <div class="term-fields">
+            <label>Service <select class="form-select service-select" value="@service" @onchange="ChangeService" disabled="@busy">
+                @foreach (var name in CareerServices.All) { <option value="@name">@name</option> }
+                <option value="@CareerServices.Other">Other</option>
+            </select></label>
+            @if (service == CareerServices.Other) { <label>Service Name <input class="form-control" maxlength="120" @bind="otherService" disabled="@busy" /></label> }
+            <label class="check"><input type="checkbox" class="form-check-input" @bind="survival" disabled="@busy" /> Survival Check</label>
+            <label class="check @(CanCommission ? null : "unavailable")" title="@(CanCommission ? null : Military ? "Already commissioned in another term" : "Only military services have a Commission Check")"><input type="checkbox" class="form-check-input" checked="@Commissioned" @onchange="e => commission = e.Value is true" disabled="@(busy || !CanCommission)" /> Commission Check</label>
+            <label class="check @(CanAdvance ? null : "unavailable")" title="@(CanAdvance ? null : Commissioned ? "Commissioned this term, so there is no Advancement Check" : $"{ServiceName} has no Advancement Check")"><input type="checkbox" class="form-check-input" checked="@(advancement && CanAdvance)" @onchange="e => advancement = e.Value is true" disabled="@(busy || !CanAdvance)" /> Advancement Check</label>
+        </div>
+        <label class="notes-field">Notes <textarea class="form-control" rows="2" maxlength="4000" placeholder="Events during this term" @bind="notes" disabled="@busy"></textarea></label>
+        <div class="term-actions">
+            <button type="button" class="btn btn-primary" @onclick="Save" disabled="@(busy || loading)">@(editingId == 0 ? "Add Term" : "Save Term")</button>
+            @if (editingId != 0) { <button type="button" class="btn btn-outline-secondary" @onclick="CancelEdit" disabled="@busy">Cancel</button> }
+        </div>
+    </div>
+    @if (pendingDelete is { } deleting)
+    {
+        <DeleteConfirmDialog @key="deleting.Id" Title="Delete Career Term" ConfirmText="Delete Term" Busy="busy" Error="@error" OnConfirm="Delete" OnCancel="CancelDelete"><p>Delete term <strong>@deleting.Number</strong> (@deleting.Service)? Later terms move up, so their ages change. This cannot be undone.</p></DeleteConfirmDialog>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public Character Character { get; set; } = default!;
+    [Parameter] public EventCallback OnChanged { get; set; }
+    private IReadOnlyList<CareerTerm> terms = [];
+    private CareerTerm? pendingDelete;
+    private string service = CareerServices.All[0], otherService = "", notes = "";
+    private bool survival = true, advancement, commission, busy, loading = true;
+    private int editingId;
+    private string? error;
+    private string ServiceName => service == CareerServices.Other ? otherService.Trim() : service;
+    private bool Military => CareerServices.IsMilitary(ServiceName);
+    // A character is commissioned once: the box is only live on a military term while no other term holds the commission.
+    private bool CanCommission => CareerRules.CommissionAvailable(terms, editingId, ServiceName);
+    private bool Commissioned => commission && CanCommission;
+    // The commission comes first. If it passes, the character cannot also advance that term.
+    private bool CanAdvance => CareerServices.HasAdvancement(ServiceName) && !Commissioned;
+    private static string Outcome(bool passed) => passed ? "✓ Passed" : "✗ Failed";
+    // Services where the character holds a rank, e.g. "Navy O2 · Scout Rank 1".
+    private IReadOnlyList<string> Standing => CareerRules.RankLabels(terms);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { terms = await Careers.ListAsync(Character.CampaignId, Character.Id); Reset(); }
+        catch (Exception) { error = "Unable to load career terms."; }
+        finally { loading = false; }
+    }
+    private void ChangeService(ChangeEventArgs args) { service = args.Value?.ToString() ?? CareerServices.All[0]; if (!CanCommission) commission = false; if (!CanAdvance) advancement = false; }
+    private void SetService(string name)
+    {
+        var listed = CareerServices.All.FirstOrDefault(s => s.Equals(name, StringComparison.OrdinalIgnoreCase));
+        service = listed ?? CareerServices.Other;
+        otherService = listed is null ? name : "";
+    }
+    // A new term starts in the service of the last one, since most careers continue.
+    private void Reset()
+    {
+        editingId = 0; survival = true; advancement = false; commission = false; notes = "";
+        SetService(terms.Count > 0 ? terms[^1].Service : CareerServices.All[0]);
+    }
+    private void Edit(CareerTerm term)
+    {
+        editingId = term.Id; survival = term.Survival; advancement = term.Advancement; commission = term.Commission; notes = term.Notes; error = null;
+        SetService(term.Service);
+    }
+    private void CancelEdit() { Reset(); error = null; }
+    private void ConfirmDelete(CareerTerm term) { pendingDelete = term; error = null; }
+    private void CancelDelete() { pendingDelete = null; error = null; }
+    private async Task Save()
+    {
+        if (busy) return;
+        busy = true;
+        try
+        {
+            if (service == CareerServices.Other && ServiceName.Length == 0) throw new ArgumentException("Enter the name of the other service.");
+            await Careers.SaveAsync(Character.CampaignId, new CareerTerm(editingId, Character.Id, 0, ServiceName, survival, advancement && CanAdvance, Commissioned, notes));
+            terms = await Careers.ListAsync(Character.CampaignId, Character.Id);
+            Reset();
+            error = null;
+            await OnChanged.InvokeAsync();
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to save this career term."; }
+        finally { busy = false; }
+    }
+    private async Task Delete()
+    {
+        if (busy || pendingDelete is not { } term) return;
+        busy = true;
+        try
+        {
+            await Careers.DeleteAsync(Character.CampaignId, Character.Id, term.Id);
+            terms = await Careers.ListAsync(Character.CampaignId, Character.Id);
+            pendingDelete = null;
+            if (editingId == term.Id || editingId == 0) Reset();
+            error = null;
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception) { error = "Unable to delete this career term."; }
+        finally { busy = false; }
+    }
+}

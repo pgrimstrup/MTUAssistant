@@ -157,9 +157,6 @@ public static class InjuryToleranceChecks
                     "Creature",
                     "",
                     "777777",
-                    "0",
-                    0,
-                    0,
                     0,
                     InjuryTolerance: reductions | InjuryTolerance.Laser | InjuryTolerance.Energy
                 )
@@ -194,9 +191,6 @@ public static class InjuryToleranceChecks
                     "Armoured Beast",
                     "Animal",
                     "",
-                    "0",
-                    0,
-                    0,
                     0,
                     InjuryTolerance: reductions | InjuryTolerance.Kinetic
                 ),

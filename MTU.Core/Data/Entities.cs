@@ -165,14 +165,28 @@ public class CharacterEntity
     public string Name { get; set; } = "";
     public string Race { get; set; } = "";
     public string Upp { get; set; } = "";
-    public string TermsServed { get; set; } = "0";
-    public int HighestNavalRank { get; set; }
-    public int HighestScoutRank { get; set; }
+
+    /// <summary>Day of the year the character was born on, 1 to 365.</summary>
+    public int Birthday { get; set; } = 1;
     public int NaturalDr { get; set; }
     public int Speed { get; set; } = 6;
     public InjuryTolerance InjuryTolerance { get; set; }
     public byte[]? TokenImage { get; set; }
     public bool Inactive { get; set; }
+}
+
+/// <summary>One four-year term of a character's career, in Sequence order.</summary>
+public class CareerTermEntity
+{
+    public int Id { get; set; }
+    public int CharacterId { get; set; }
+    public CharacterEntity Character { get; set; } = null!;
+    public int Sequence { get; set; }
+    public string Service { get; set; } = "";
+    public bool SurvivalCheck { get; set; }
+    public bool AdvancementCheck { get; set; }
+    public bool CommissionCheck { get; set; }
+    public string Notes { get; set; } = "";
 }
 
 public class CharacterSkillEntity

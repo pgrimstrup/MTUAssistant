@@ -116,6 +116,8 @@ public sealed class NpcService(MtuDbContext db, CharacterService characterStore)
             throw new ArgumentException("Select a valid NPC type.");
         if (character.Age < 0)
             throw new ArgumentException("Age must be zero or greater.");
+        if (actor.Birthday is < 1 or > CharacterAge.DaysInYear)
+            throw new ArgumentException("Birthday must be a day of the year from 1 to 365.");
         // Save generated skills atomically, replacing existing skills only when
         // the caller explicitly requests it after a reroll.
         var initialSkills =
@@ -230,6 +232,7 @@ public sealed class NpcService(MtuDbContext db, CharacterService characterStore)
         entity.TokenImage = actor.TokenImage;
         entity.InjuryTolerance = actor.InjuryTolerance;
         entity.Speed = actor.Speed;
+        entity.Birthday = actor.Birthday;
         details.Occupation = occupation;
         details.Gender = gender;
         details.Quirks1 = quirks1;

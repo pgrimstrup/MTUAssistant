@@ -26,22 +26,12 @@ public static class InstanceNameChecks
         await db.GetService<IMigrator>().MigrateAsync("20261107020000_SceneFog");
         db.Campaigns.Add(new CampaignEntity { Id = 1, Name = "Test" });
         await db.SaveChangesAsync();
-        var guard = new CharacterEntity
-        {
-            CampaignId = 1,
-            Name = "Guard",
-            IsNpc = true,
-            Upp = "777777",
-        };
-        var beast = new CharacterEntity
-        {
-            CampaignId = 1,
-            Name = "Beast",
-            IsNpc = true,
-            IsAnimal = true,
-        };
-        db.Characters.AddRange(guard, beast);
-        await db.SaveChangesAsync();
+        // Insert with SQL: the Characters table still has the SceneFog-era columns.
+        await db.Database.ExecuteSqlRawAsync(
+            "INSERT INTO Characters (Id, CampaignId, Name, PlayerName, Race, Upp, TermsServed, HighestNavalRank, HighestScoutRank, NaturalDr, Inactive, IsNpc, IsAnimal, InjuryTolerance, Speed, Description) VALUES (1,1,'Guard','','','777777','0',0,0,0,0,1,0,0,6,''),(2,1,'Beast','','','','0',0,0,0,0,1,1,0,6,'')"
+        );
+        var guard = new { Id = 1, Name = "Guard" };
+        var beast = new { Id = 2, Name = "Beast" };
         db.Animals.Add(new AnimalEntity { CharacterId = beast.Id, Hits = 10 });
         await db.SaveChangesAsync();
         var store = scope.ServiceProvider.GetRequiredService<SceneService>();

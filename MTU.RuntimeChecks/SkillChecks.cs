@@ -13,7 +13,7 @@ public static class SkillChecks
             if (!condition)
                 throw new Exception(message);
         }
-        var character = new Character(1, 1, "", "Tester", "Human", "777777", "0", 0, 0, 0);
+        var character = new Character(1, 1, "", "Tester", "Human", "777777", 0);
         int Dm(string required, params CharacterSkill[] skills) =>
             CharacterService.SkillDm(character with { Skills = skills }, required);
         CharacterSkill Skill(string name, int rank) => new(0, 1, name, rank);

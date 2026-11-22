@@ -23,6 +23,7 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
     public DbSet<EquipmentItem> Equipment => Set<EquipmentItem>();
     public DbSet<CharacterEquipmentEntity> CharacterEquipment => Set<CharacterEquipmentEntity>();
     public DbSet<CharacterSkillEntity> CharacterSkills => Set<CharacterSkillEntity>();
+    public DbSet<CareerTermEntity> CareerTerms => Set<CareerTermEntity>();
     public DbSet<SectorRefreshState> SectorRefreshState => Set<SectorRefreshState>();
     public DbSet<SectorEntity> Sectors => Set<SectorEntity>();
     public DbSet<SectorNameEntity> SectorNames => Set<SectorNameEntity>();
@@ -196,6 +197,14 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
             .Property(c => c.InjuryTolerance)
             .HasDefaultValue(InjuryTolerance.None);
         modelBuilder.Entity<CharacterEntity>().Property(c => c.Speed).HasDefaultValue(6);
+        modelBuilder.Entity<CharacterEntity>().Property(c => c.Birthday).HasDefaultValue(1);
+        modelBuilder
+            .Entity<CareerTermEntity>()
+            .HasOne(t => t.Character)
+            .WithMany()
+            .HasForeignKey(t => t.CharacterId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<CareerTermEntity>().HasIndex(t => new { t.CharacterId, t.Sequence });
         modelBuilder.Entity<CharacterEntity>().HasIndex(t => new { t.CampaignId, t.Name });
         modelBuilder
             .Entity<CampaignEntity>()

@@ -669,20 +669,7 @@ public static partial class NpcGenerator
         var name = GenerateName(race, gender, d6);
         var quirks = GenerateQuirks(d6);
         return new Npc(
-            new Character(
-                0,
-                campaignId,
-                "",
-                name,
-                race,
-                upp,
-                "0",
-                0,
-                0,
-                0,
-                Skills: skills,
-                IsNpc: true
-            ),
+            new Character(0, campaignId, "", name, race, upp, 0, Skills: skills, IsNpc: true),
             archetype.Occupation,
             gender,
             Quirks1: quirks.First,

@@ -90,9 +90,6 @@ public static class AnimalGenerator
             size.Name,
             "Animal",
             "",
-            "0",
-            0,
-            0,
             0,
             Skills: skills,
             Speed: speed

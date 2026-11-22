@@ -10,9 +10,6 @@ public sealed record Character(
     string Name,
     string Race,
     string Upp,
-    string TermsServed,
-    int HighestNavalRank,
-    int HighestScoutRank,
     int NaturalDr,
     byte[]? TokenImage = null,
     IReadOnlyList<CharacterSkill>? Skills = null,
@@ -21,7 +18,9 @@ public sealed record Character(
     bool IsNpc = false,
     InjuryTolerance InjuryTolerance = InjuryTolerance.None,
     int Speed = 6,
-    string Description = ""
+    string Description = "",
+    int Birthday = 1,
+    IReadOnlyList<CareerTerm>? Career = null
 );
 
 public sealed record CharacterSkill(int Id, int CharacterId, string Name, int Level);
@@ -48,9 +47,6 @@ public sealed class CharacterService(MtuDbContext db)
                 t.Name,
                 t.Race,
                 t.Upp,
-                t.TermsServed,
-                t.HighestNavalRank,
-                t.HighestScoutRank,
                 t.NaturalDr,
                 t.TokenImage,
                 null,
@@ -59,9 +55,19 @@ public sealed class CharacterService(MtuDbContext db)
                 t.IsNpc,
                 t.InjuryTolerance,
                 t.Speed,
-                t.Description
+                t.Description,
+                t.Birthday,
+                null
             ))
             .ToArrayAsync();
+        var career = (
+            await db
+                .CareerTerms.AsNoTracking()
+                .Where(t => t.Character.CampaignId == campaignId && t.Character.IsNpc == npcs)
+                .OrderBy(t => t.Sequence)
+                .ThenBy(t => t.Id)
+                .ToArrayAsync()
+        ).ToLookup(t => t.CharacterId);
         var skills = await db
             .CharacterSkills.AsNoTracking()
             .Where(s => s.Character.CampaignId == campaignId && s.Character.IsNpc == npcs)
@@ -90,6 +96,7 @@ public sealed class CharacterService(MtuDbContext db)
                 {
                     Skills = byCharacter[t.Id].ToArray(),
                     Equipment = byEquipment[t.Id].ToArray(),
+                    Career = CareerService.Numbered(career[t.Id]),
                 }
             )
             .ToArray();
@@ -100,15 +107,29 @@ public sealed class CharacterService(MtuDbContext db)
         var characters = await db
             .Characters.AsNoTracking()
             .Where(t => t.CampaignId == campaignId && !t.Inactive && !t.IsNpc)
-            .Select(t => new
-            {
-                t.HighestNavalRank,
-                t.HighestScoutRank,
-                t.Upp,
-            })
+            .Select(t => new { t.Id, t.Upp })
             .ToArrayAsync();
+        var career = (
+            await db
+                .CareerTerms.AsNoTracking()
+                .Where(t =>
+                    t.Character.CampaignId == campaignId
+                    && !t.Character.Inactive
+                    && !t.Character.IsNpc
+                )
+                .OrderBy(t => t.Sequence)
+                .ThenBy(t => t.Id)
+                .ToArrayAsync()
+        ).ToLookup(t => t.CharacterId);
+        // The highest Naval or Scout rank is worked out from each Traveller's career terms.
         var rank = characters
-            .Select(t => Math.Max(t.HighestNavalRank, t.HighestScoutRank))
+            .Select(t => CareerService.Numbered(career[t.Id]))
+            .Select(terms =>
+                Math.Max(
+                    CareerRules.HighestRank(terms, "Navy"),
+                    CareerRules.HighestRank(terms, "Scout")
+                )
+            )
             .DefaultIfEmpty(0)
             .Max();
         var soc = characters.Select(t => SocialDm(t.Upp)).Where(dm => dm.HasValue).Max();
@@ -197,15 +218,10 @@ public sealed class CharacterService(MtuDbContext db)
             throw new ArgumentException("Enter a Traveller name of up to 120 characters.");
         if (player.Length > 120 || race.Length > 120 || upp.Length > 40)
             throw new ArgumentException("One of the text fields is too long.");
-        var terms = character.TermsServed?.Trim() ?? "";
-        if (terms.Length > 240)
-            throw new ArgumentException("Terms served must be at most 240 characters.");
-        if (
-            character.HighestNavalRank < 0
-            || character.HighestScoutRank < 0
-            || character.NaturalDr < 0
-        )
-            throw new ArgumentException("Ranks and Natural DR must be zero or greater.");
+        if (character.NaturalDr < 0)
+            throw new ArgumentException("Natural DR must be zero or greater.");
+        if (character.Birthday is < 1 or > CharacterAge.DaysInYear)
+            throw new ArgumentException("Birthday must be a day of the year from 1 to 365.");
         if (
             character.TokenImage is { } image
             && (image.Length > CharacterToken.MaxBytes || CharacterToken.ContentType(image) is null)
@@ -226,9 +242,7 @@ public sealed class CharacterService(MtuDbContext db)
         entity.Description = character.Description;
         entity.Race = race;
         entity.Upp = upp;
-        entity.TermsServed = terms;
-        entity.HighestNavalRank = character.HighestNavalRank;
-        entity.HighestScoutRank = character.HighestScoutRank;
+        entity.Birthday = character.Birthday;
         entity.NaturalDr = character.NaturalDr;
         entity.InjuryTolerance = character.InjuryTolerance;
         entity.Speed = character.Speed;

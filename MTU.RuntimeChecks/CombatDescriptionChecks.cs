@@ -38,9 +38,6 @@ public static class CombatDescriptionChecks
                 "Traveller",
                 "Human",
                 "A98765",
-                "2",
-                0,
-                0,
                 0,
                 Description: "First line\nSecond line"
             )
@@ -60,9 +57,6 @@ public static class CombatDescriptionChecks
                     "Guard",
                     "Human",
                     "987654",
-                    "0",
-                    0,
-                    0,
                     0,
                     Description: "Guard description"
                 ),
@@ -137,7 +131,7 @@ public static class CombatDescriptionChecks
         var animals = new AnimalService(db);
         await animals.SaveAsync(
             new Animal(
-                new Character(0, 1, "", "Beast", "Animal", "", "0", 0, 0, 0, Speed: 9),
+                new Character(0, 1, "", "Beast", "Animal", "", 0, Speed: 9),
                 20,
                 "Carnivore",
                 "Hunter",

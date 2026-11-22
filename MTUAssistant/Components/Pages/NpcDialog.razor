@@ -40,6 +40,7 @@
             <div class="ratings">
                 <label>Gender <input class="form-control" @bind="gender" @bind:after="RefreshGeneratedName" maxlength="120" disabled="@busy" /></label>
                 <label>Age <input class="form-control" type="number" min="0" @bind="age" disabled="@busy" /></label>
+                <label title="Day of the year, 1 to 365">Birthday (day) <input class="form-control" type="number" min="1" max="@CharacterAge.DaysInYear" step="1" @bind="birthday" disabled="@busy" /></label>
                 <label>Speed (m) <input class="form-control" type="number" min="0" step="1" @bind="speed" disabled="@busy" /></label>
             </div>
         </div>
@@ -56,7 +57,11 @@
         </div>
     </section>
     <TabBar TValue="NpcTab" Tabs="Tabs" @bind-Active="activeTab" IdPrefix="npc" AriaLabel="Character records">
-        @if (activeTab == NpcTab.Career) { <p class="empty-message">Career history will be added here.</p> }
+        @if (activeTab == NpcTab.Career)
+        {
+            @if (IsNew) { <p class="empty-message">Add the character first, then record career terms here.</p> }
+            else { <CharacterCareer @key="activeTab" Character="current.Character" OnChanged="OnChanged" /> }
+        }
         else if (!IsNew && activeTab == NpcTab.Skills) { <CharacterSkills @key="activeTab" Character="current.Character" Embedded="true" OnChanged="OnChanged" /> }
         else if (!IsNew) { <CharacterEquipment @key="activeTab" Character="current.Character" Kind="@TabKind" OnChanged="OnChanged" /> }
         else if (activeTab == NpcTab.Skills)
@@ -93,8 +98,7 @@
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
-    // Career is empty for now, so the dialog opens on Skills.
-    private NpcTab activeTab = NpcTab.Skills;
+    private NpcTab activeTab = NpcTab.Career;
     private Npc current = default!;
     private bool IsNew => current.Character.Id == 0;
     private EquipmentKind TabKind => activeTab == NpcTab.Armour ? EquipmentKind.Armour : EquipmentKind.Weapon;
@@ -111,7 +115,7 @@
     private NpcType npcType;
     private NpcSkillLevel skillLevel = NpcSkillLevel.Novice;
     private int? age;
-    private int speed = 6, tokenInputKey;
+    private int speed = 6, birthday = 1, tokenInputKey;
     private InjuryTolerance injuryTolerance;
     private byte[]? tokenImage;
     private bool busy, disposed;
@@ -123,8 +127,9 @@
     protected override void OnInitialized()
     {
         Load(Item);
-        // A new NPC always comes from the generator, so show what its skills were rolled from.
-        if (IsNew) generatedArchetype = NpcGenerator.ArchetypeFor(Item);
+        // A new NPC always comes from the generator, so show what its skills were rolled from,
+        // and open on Skills: it has no career to show until it is saved.
+        if (IsNew) { generatedArchetype = NpcGenerator.ArchetypeFor(Item); activeTab = NpcTab.Skills; }
     }
     private void Load(Npc item)
     {
@@ -133,7 +138,7 @@
         name = item.Character.Name; occupation = item.Occupation; race = item.Character.Race; gender = item.Gender;
         automaticName = item.Character.Id == 0 ? name : null;
         quirks1 = item.Quirks1; quirks2 = item.Quirks2; skillLevel = item.SkillLevel; age = item.Age; npcType = item.Type;
-        injuryTolerance = item.Character.InjuryTolerance; description = item.Character.Description; speed = item.Character.Speed;
+        injuryTolerance = item.Character.InjuryTolerance; description = item.Character.Description; speed = item.Character.Speed; birthday = item.Character.Birthday;
         tokenImage = item.Character.TokenImage; tokenInputKey++;
         SetUpp(item.Character.Upp);
     }
@@ -236,7 +241,7 @@
         {
             var isNew = IsNew;
             var campaignId = current.Character.CampaignId;
-            var id = await Characters.SaveAsync(current with { Character = current.Character with { Name = name, Race = race, Upp = Upp(), Speed = speed, InjuryTolerance = injuryTolerance, TokenImage = tokenImage, Description = description }, Occupation = occupation, Gender = gender, Quirks1 = quirks1, Quirks2 = quirks2, SkillLevel = skillLevel, Age = age, Type = npcType }, replaceSkills: skillsRerolled);
+            var id = await Characters.SaveAsync(current with { Character = current.Character with { Name = name, Race = race, Upp = Upp(), Speed = speed, Birthday = birthday, InjuryTolerance = injuryTolerance, TokenImage = tokenImage, Description = description }, Occupation = occupation, Gender = gender, Quirks1 = quirks1, Quirks2 = quirks2, SkillLevel = skillLevel, Age = age, Type = npcType }, replaceSkills: skillsRerolled);
             error = null;
             if (!isNew) { await OnSaved.InvokeAsync(); return; }
             // A new NPC stays open so its generated skills and equipment can be adjusted straight away.
