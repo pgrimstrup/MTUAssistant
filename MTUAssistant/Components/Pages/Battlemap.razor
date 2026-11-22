@@ -7,6 +7,7 @@
 @inject EquipmentService EquipmentStore
 @inject CharacterService CharactersStore
 @inject AnimalService AnimalsStore
+@inject NpcService NpcStore
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 
@@ -52,10 +53,12 @@
                 }
                 <div class="battlemap-host" @ref="host" aria-label="Battlemap image with square grid"></div>
             </div>
-            <div class="action-column"><CombatActionsPanel CampaignId="scene.CampaignId" Actor="SelectedActor" Loadout="SelectedLoadout" Entries="entries" Encounter="encounter" Disabled="@(map is null || busy || !encounter.Active || SelectedActor is null || encounter.IsDead(SelectedActor))" CoverChanged="SetBehindCover" HidingChanged="SetHiding" CoverProtectionChanged="SetCoverProtection" ElevatedChanged="SetElevated" FlyingChanged="SetFlying" SpeedBurstChanged="SetSpeedBurst" NaturalAttackChanged="SetNaturalAttack" UnconsciousChanged="SetUnconscious" DescribeRequested="DescribeCombatant" SkillsRequested="OpenSkills" EquipRequested="OpenEquipment" EquipDisabled="@(busy || SelectedActor is null)" ResolveRequested="ResolveActions" ResetRequested="ResetActions" ActionSelected="ChooseAction" AutoAttackChanged="SetAutoAttack" AttackTargetChanged="SetAttackTarget" AttackReactionChanged="SetAttackReaction" AttackReactionStanceChanged="SetAttackReactionStance" AttackReactionCoverChanged="SetAttackReactionCover" TargetReactionChanged="SetTargetReaction" TargetReactionStanceChanged="SetTargetReactionStance" TargetReactionCoverChanged="SetTargetReactionCover" TargetChanged="SetTarget" StanceChanged="SetStance" /></div>
+            <div class="action-column"><CombatActionsPanel CampaignId="scene.CampaignId" Actor="SelectedActor" Loadout="SelectedLoadout" Entries="entries" Encounter="encounter" Disabled="@(map is null || busy || !encounter.Active || SelectedActor is null || encounter.IsDead(SelectedActor))" CoverChanged="SetBehindCover" HidingChanged="SetHiding" CoverProtectionChanged="SetCoverProtection" ElevatedChanged="SetElevated" FlyingChanged="SetFlying" SpeedBurstChanged="SetSpeedBurst" NaturalAttackChanged="SetNaturalAttack" UnconsciousChanged="SetUnconscious" DescribeRequested="DescribeCombatant" EditRequested="OpenEdit" EquipDisabled="@(busy || SelectedActor is null)" ResolveRequested="ResolveActions" ResetRequested="ResetActions" ActionSelected="ChooseAction" AutoAttackChanged="SetAutoAttack" AttackTargetChanged="SetAttackTarget" AttackReactionChanged="SetAttackReaction" AttackReactionStanceChanged="SetAttackReactionStance" AttackReactionCoverChanged="SetAttackReactionCover" TargetReactionChanged="SetTargetReaction" TargetReactionStanceChanged="SetTargetReactionStance" TargetReactionCoverChanged="SetTargetReactionCover" TargetChanged="SetTarget" StanceChanged="SetStance" /></div>
         </div>
-        @if (editingSkills is { } skilled) { <CombatSkillsDialog @key="skilled.Id" Character="skilled" OnChanged="SkillsChanged" OnClose="() => editingSkills = null" /> }
-        @if (equipping is { } equipped) { <CombatEquipmentDialog @key="equipped.Id" Character="equipped" OnChanged="EquipmentChanged" OnClose="() => equipping = null" /> }
+        @* GM-only: these dialogs are rendered on this page and never enter the player snapshot. *@
+        @if (editingTraveller is { } editedTraveller) { <TravellerDialog @key="editedTraveller" Item="editedTraveller" OnSaved="() => CharacterEdited(editedTraveller.Id, close: true)" OnChanged="() => CharacterEdited(editedTraveller.Id, close: false)" OnClose="CloseEdit" /> }
+        @if (editingNpc is { } editedNpc) { <NpcDialog @key="editedNpc" Item="editedNpc" OnSaved="() => CharacterEdited(editedNpc.Character.Id, close: true)" OnChanged="() => CharacterEdited(editedNpc.Character.Id, close: false)" OnClose="CloseEdit" /> }
+        @if (editingAnimal is { } editedAnimal) { <AnimalDialog @key="editedAnimal" Item="editedAnimal" CampaignId="scene.CampaignId" OnSaved="() => CharacterEdited(editedAnimal.Character.Id, close: true)" OnChanged="() => CharacterEdited(editedAnimal.Character.Id, close: false)" OnClose="CloseEdit" /> }
         @if (attackResolution is { } attack) { <AttackResolutionDialog @key="attack" Resolution="attack" TargetNumber="@(attackVolleyIndex + 1)" TargetCount="@(attackVolley?.Count ?? 1)" Busy="busy" Error="@error" OnChanged="AttackPreviewChanged" OnApply="ApplyAttackDamage" OnCancel="CancelAttack" /> }
         @if (preEngagement)
         {
@@ -125,34 +128,34 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
         var description = await ScenesStore.DescribeCombatantAsync(scene.CampaignId, scene.Id, actor.Id);
         await UpdateMap("showDescription", description);
     });
-    private Character? editingSkills;
-    private Character? equipping;
-    private Task OpenEquipment() => Run(async scene =>
-    {
-        if (SelectedActor is not { } actor) return;
-        var character = await FindCharacter(scene.CampaignId, actor)
-            ?? throw new ArgumentException("This combatant is no longer in the campaign.");
-        editingSkills = null;
-        equipping = character with { Name = actor.Name };
-    });
-    private Task OpenSkills() => Run(async scene =>
+    // Edit opens the same dialog as the combatant's own page: Travellers, Patrons and Enemies, or Animals
+    // and Creatures. It edits the stored character, so it shows the character's name, not an instance name.
+    private Character? editingTraveller;
+    private Npc? editingNpc;
+    private Animal? editingAnimal;
+    private void CloseEdit() { editingTraveller = null; editingNpc = null; editingAnimal = null; }
+    private Task OpenEdit() => Run(async scene =>
     {
         if (SelectedActor is not { } actor) return;
         if (!await FlushTokenMoves()) return;
-        var character = await FindCharacter(scene.CampaignId, actor)
-            ?? throw new ArgumentException("This combatant is no longer in the campaign.");
-        equipping = null;
-        editingSkills = character with { Name = actor.Name };
+        CloseEdit();
+        if (actor.IsAnimal) editingAnimal = (await AnimalsStore.ListAsync(scene.CampaignId)).FirstOrDefault(a => a.Character.Id == actor.CharacterId);
+        else if (actor.IsNpc) editingNpc = (await NpcStore.ListAsync(scene.CampaignId)).FirstOrDefault(n => n.Character.Id == actor.CharacterId);
+        else editingTraveller = (await CharactersStore.ListAsync(scene.CampaignId)).FirstOrDefault(c => c.Id == actor.CharacterId);
+        if (editingTraveller is null && editingNpc is null && editingAnimal is null)
+            throw new ArgumentException("This combatant is no longer in the campaign.");
     });
-    private Task SkillsChanged() => Run(async scene =>
+    // Details, skills, equipment or attacks changed: reload the roster and that character's loadout.
+    private Task CharacterEdited(int characterId, bool close)
+    {
+        if (close) CloseEdit();
+        return RefreshCharacter(characterId);
+    }
+    private Task RefreshCharacter(int characterId) => Run(async scene =>
     {
         entries = (await ScenesStore.CombatantsAsync(scene.CampaignId, scene.Id)).ToList();
-        await SyncEncounterMap();
-    });
-    private Task EquipmentChanged() => Run(async scene =>
-    {
-        if (equipping is not { } character) return;
-        loadouts[character.Id] = new CombatLoadout(await EquipmentStore.ListDetailsForCharacterAsync(scene.CampaignId, character.Id));
+        if (entries.FirstOrDefault(e => e.CharacterId == characterId) is { } entry)
+            loadouts[characterId] = await LoadoutFor(scene.CampaignId, entry);
         await SyncEncounterMap();
     });
     private AttackResolution? attackResolution;
