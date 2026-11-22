@@ -68,34 +68,30 @@ export function fogEqual(a,b) {
     for(const key of a) if(!b.has(key)) return false;
     return true;
 }
-// Players see fog fade in over this many squares from the revealed area. The GM view keeps hard edges.
-export const fogGradientSquares = 5;
+// Players see fog fade in over this many squares in total. The GM view keeps hard edges.
+export const fogGradientSquares = 3;
+// How many of those squares lie inside the revealed area, so the fade straddles the hard edge of the fog.
+// 0 starts the fade at the hard edge.
+export const fogGradientLead = 1;
 // Shape of the fade: 1 darkens evenly; below 1 darkens sooner, hiding more of the map near the edge.
 export const fogGradientCurve = 1;
 // Texels per square in the gradient texture: 4 normally, fewer on huge grids to keep it near 1024 across.
 export function fogGradientSamples(columns,rows) {
     return Math.max(1,Math.min(4,Math.floor(1024/Math.max(columns,rows,1))));
 }
-// Fog darkness per texel (0 clear, 255 black) at `samples` texels per square, or null when fog is off.
-// Revealed squares are clear. Hidden squares darken with straight-line distance from the nearest revealed
-// square and are fully black from `depth` squares in. It is built from the revealed squares alone.
-export function fogGradientField(keys,columns,rows,samples,depth=fogGradientSquares,curve=fogGradientCurve) {
-    if(keys == null) return null;
-    const width=columns*samples, height=rows*samples, alpha=new Uint8Array(width*height);
-    // Everything further than `reach` texels from a revealed texel is black, so distances stop there.
-    const reach=Math.ceil(depth*samples)+1, far=reach+1, span=Math.ceil(depth)+1;
-    const revealed=new Uint8Array(columns*rows);
-    for(const key of keys) {
-        const [column,row]=key.split(',').map(Number);
-        if(column>=0 && column<columns && row>=0 && row<rows) revealed[row*columns+column]=1;
-    }
-    // For each row of squares: texels from each texel to the nearest revealed one on its left or right.
-    const run=new Uint16Array(width*rows);
+// Squared straight-line distance in texels from each texel to the nearest texel of a square whose revealed
+// flag is `target` (0 inside such a square). `squares` is how far the caller needs exact distances.
+function fogDistances(revealed,columns,rows,samples,target,squares) {
+    const width=columns*samples, height=rows*samples;
+    // Everything further than `reach` texels away shades the same, so distances stop there.
+    const reach=Math.ceil(squares*samples)+1, far=reach+1, span=Math.ceil(squares)+1;
+    // For each row of squares: texels from each texel to the nearest target one on its left or right.
+    const run=new Uint16Array(width*rows), nearest=new Uint32Array(width*height);
     for(let row=0;row<rows;row++) {
         const start=row*width;
         let distance=far;
         for(let x=0;x<width;x++) {
-            distance=revealed[row*columns+Math.floor(x/samples)] ? 0 : Math.min(far,distance+1);
+            distance=revealed[row*columns+Math.floor(x/samples)] === target ? 0 : Math.min(far,distance+1);
             run[start+x]=distance;
         }
         distance=far;
@@ -116,10 +112,31 @@ export function fogGradientField(keys,columns,rows,samples,depth=fogGradientSqua
                 const squared=across*across+down*down;
                 if(squared<best) best=squared;
             }
-            // Distances run between texel centres; half a texel back is the edge of the revealed square.
-            const shade=Math.min(1,Math.max(0,Math.sqrt(best)-.5)/(samples*depth));
-            alpha[y*width+x]=Math.round(255*(curve === 1 ? shade : Math.pow(shade,curve)));
+            nearest[y*width+x]=best;
         }
+    }
+    return nearest;
+}
+// Fog darkness per texel (0 clear, 255 black) at `samples` texels per square, or null when fog is off.
+// Darkness rises with straight-line distance across the hard edge of the fog: the fade starts `lead` squares
+// inside the revealed area and is fully black `depth` squares later, `depth - lead` squares into the fog.
+// Revealed squares further than `lead` from any fog are clear. It is built from the revealed squares alone.
+export function fogGradientField(keys,columns,rows,samples,depth=fogGradientSquares,lead=fogGradientLead,curve=fogGradientCurve) {
+    if(keys == null) return null;
+    const width=columns*samples, height=rows*samples, alpha=new Uint8Array(width*height);
+    const revealed=new Uint8Array(columns*rows);
+    for(const key of keys) {
+        const [column,row]=key.split(',').map(Number);
+        if(column>=0 && column<columns && row>=0 && row<rows) revealed[row*columns+column]=1;
+    }
+    lead=Math.min(Math.max(lead,0),depth);
+    // Hidden texels measure to the nearest revealed square, revealed texels to the nearest hidden one.
+    const outside=fogDistances(revealed,columns,rows,samples,1,depth-lead), inside=fogDistances(revealed,columns,rows,samples,0,lead);
+    for(let i=0;i<alpha.length;i++) {
+        // Distances run between texel centres; half a texel back is the hard edge. Negative is the revealed side.
+        const edge=outside[i] ? Math.sqrt(outside[i])-.5 : .5-Math.sqrt(inside[i]);
+        const shade=Math.min(1,Math.max(0,(edge/samples+lead)/depth));
+        alpha[i]=Math.round(255*(curve === 1 ? shade : Math.pow(shade,curve)));
     }
     return {width,height,alpha};
 }

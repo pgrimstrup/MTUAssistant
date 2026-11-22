@@ -590,7 +590,7 @@ export class Battlemap {
             graphics.rect(rect.x,rect.y,rect.width,rect.height);
         graphics.fill({color:0x000000,alpha:this.readOnly ? 1 : .55});
     }
-    // Player view: one black sprite over the map whose alpha fades from the revealed squares into full fog.
+    // Player view: one black sprite over the map whose alpha fades across the edge of the revealed squares into full fog.
     // Returns false when it could not be drawn.
     drawFogGradient() {
         if(this.fogGradientFailed) return false;

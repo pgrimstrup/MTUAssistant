@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {fogKey,fogCells,fogVisible,validFog,paintFog,fogRectangles,fogPublicState,fogStrokeMode,stepFogBrush,fogEqual,fogGradientSquares,fogGradientSamples,fogGradientField} from '../../wwwroot/js/FogOfWar.js';
+import {fogKey,fogCells,fogVisible,validFog,paintFog,fogRectangles,fogPublicState,fogStrokeMode,stepFogBrush,fogEqual,fogGradientSquares,fogGradientLead,fogGradientSamples,fogGradientField} from '../../wwwroot/js/FogOfWar.js';
 import {Battlemap} from '../../wwwroot/js/Battlemap.js';
 import {validBattlemapSnapshot} from '../../wwwroot/js/BattlemapPresentationSync.js';
 const revealed=new Set();
@@ -82,7 +82,7 @@ assert.equal(map.revealedFog,null,'a save finishing after fog is turned off does
 map.readOnly=true;map.setFogEnabled([]);assert.equal(map.revealedFog,null,'read-only maps ignore the fog switch');map.readOnly=false;
 console.log('Fog painting, interpolation, clipping, rectangle coverage, privacy, sync, cancellation, save rollback, undo, Shift/Ctrl stroke modes, brush, wheel brush sizing, fog on/off and read-only guards passed.');
 // Fog gradient: darkness comes from the revealed squares alone.
-assert.equal(fogGradientSquares,5);
+assert.equal(fogGradientSquares,3);assert.equal(fogGradientLead,1);
 assert.ok(fogEqual(null,null));assert.equal(fogEqual(null,new Set()),false);assert.ok(fogEqual(new Set(['0,0','1,0']),new Set(['1,0','0,0'])));
 assert.equal(fogEqual(new Set(['0,0']),new Set(['1,0'])),false);assert.equal(fogEqual(new Set(['0,0']),new Set(['0,0','1,0'])),false);
 assert.equal(fogGradientSamples(40,30),4);assert.equal(fogGradientSamples(300,200),3);assert.equal(fogGradientSamples(10,4096),1,'huge grids fall back to one texel per square');assert.equal(fogGradientSamples(0,0),4);
@@ -91,40 +91,56 @@ assert.ok(fogGradientField(new Set(),4,3,2).alpha.every(a=>a === 255),'an unreve
 const everySquare=new Set();for(let row=0;row<3;row++)for(let column=0;column<4;column++)everySquare.add(fogKey(column,row));
 assert.ok(fogGradientField(everySquare,4,3,2).alpha.every(a=>a === 0),'a fully revealed map has no fog');
 assert.ok(fogGradientField(new Set(['-1,1','4,0','0,3','0.5,0','x,y']),4,3,2).alpha.every(a=>a === 255),'squares off the grid reveal nothing');
-// One revealed square in the middle of a 15 x 15 map at 4 texels per square: texels 28-31 on each axis.
-const centre=fogGradientField(new Set(['7,7']),15,15,4), at=(x,y)=>centre.alpha[y*centre.width+x];
+// Darkness for a texel `edge` texels past the hard edge of the fog (negative on the revealed side).
+const shade=(edge,samples=4,depth=3,lead=1)=>Math.round(255*Math.min(1,Math.max(0,(edge/samples+lead)/depth)));
+// A revealed 3 x 3 block in the middle of a 15 x 15 map at 4 texels per square: texels 24-35 on each axis.
+const block=new Set();for(let row=6;row<=8;row++)for(let column=6;column<=8;column++)block.add(fogKey(column,row));
+const centre=fogGradientField(block,15,15,4), at=(x,y)=>centre.alpha[y*centre.width+x];
 assert.equal(centre.width,60);assert.equal(centre.height,60);
-for(let y=28;y<32;y++)for(let x=28;x<32;x++)assert.equal(at(x,y),0,'revealed squares stay fully clear');
-for(let k=1;k<=28;k++) {
-    const expected=Math.round(255*Math.min(1,(k-.5)/20));
-    assert.equal(at(31+k,29),expected);assert.equal(at(28-k,30),expected);assert.equal(at(29,31+k),expected);assert.equal(at(30,28-k),expected);
+for(let y=28;y<32;y++)for(let x=28;x<32;x++)assert.equal(at(x,y),0,'revealed squares a full square from the fog stay fully clear');
+// Outwards from the hard edge into the fog, then inwards from it across the revealed block.
+for(let k=1;k<=24;k++) {
+    const expected=shade(k-.5);
+    assert.equal(at(35+k,29),expected);assert.equal(at(24-k,30),expected);assert.equal(at(29,35+k),expected);assert.equal(at(30,24-k),expected);
 }
-assert.ok(at(32,29)>0 && at(32,29)<26,'the first hidden texel is only just darkened');
-assert.ok(at(51,29)<255,'the fifth hidden square is not yet solid');assert.equal(at(52,29),255,'fog is solid from five squares in');
-assert.ok(at(47,29)<255 && at(47,47) === 255,'corners are rounded: four squares along is dim, four along and four down is solid');
+for(let k=1;k<=6;k++) {
+    const expected=shade(.5-k);
+    assert.equal(at(36-k,29),expected);assert.equal(at(23+k,30),expected);assert.equal(at(29,36-k),expected);assert.equal(at(30,23+k),expected);
+}
+assert.ok(at(32,29)>0 && at(31,29) === 0,'the fade starts one square inside the revealed area');
+assert.ok(at(35,29)<85 && at(36,29)>85,'the fade is a third dark where it crosses the hard edge');
+assert.ok(at(43,29)<255,'the second hidden square is not yet solid');assert.equal(at(44,29),255,'fog is solid from two squares in');
+assert.ok(at(42,29)<255 && at(42,42) === 255,'corners are rounded: seven texels along is dim, seven along and seven down is solid');
 for(let y=0;y<60;y++)for(let x=0;x<60;x++){assert.equal(at(x,y),at(59-x,y));assert.equal(at(x,y),at(y,x));}
-const sooner=fogGradientField(new Set(['7,7']),15,15,4,5,.5);
-assert.equal(sooner.alpha[29*60+36],Math.round(255*Math.sqrt(4.5/20)),'a curve below 1 darkens sooner');assert.equal(sooner.alpha[29*60+29],0);assert.equal(sooner.alpha[29*60+52],255);
-// Every texel matches the straight-line distance to the nearest revealed texel, on maps larger than the fade.
-const nearestShade=(keys,columns,rows,samples,depth)=>{
-    const width=columns*samples, height=rows*samples, seeds=[];
-    for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(keys.has(fogKey(Math.floor(x/samples),Math.floor(y/samples))))seeds.push([x,y]);
-    return Array.from({length:width*height},(_,i)=>{
+const lone=fogGradientField(new Set(['7,7']),15,15,4);
+assert.equal(lone.alpha[29*60+29],shade(-1.5),'a lone revealed square is within a square of fog all over, so it is dimmed throughout');assert.equal(lone.alpha[29*60+28],shade(-.5));
+const sooner=fogGradientField(block,15,15,4,3,1,.5);
+assert.equal(sooner.alpha[29*60+39],Math.round(255*Math.sqrt((3.5/4+1)/3)),'a curve below 1 darkens sooner');assert.equal(sooner.alpha[29*60+29],0);assert.equal(sooner.alpha[29*60+44],255);
+const unled=fogGradientField(new Set(['7,7']),15,15,4,5,0);
+for(let y=28;y<32;y++)for(let x=28;x<32;x++)assert.equal(unled.alpha[y*60+x],0,'with no lead-in the revealed squares stay fully clear');
+for(let k=1;k<=28;k++)assert.equal(unled.alpha[29*60+31+k],shade(k-.5,4,5,0),'with no lead-in the fade starts at the hard edge');
+assert.deepEqual(fogGradientField(block,15,15,4,3,9),fogGradientField(block,15,15,4,3,3),'the lead-in is never longer than the fade');
+// Every texel matches the straight-line distance across the nearest hard edge, on sparse and crowded maps.
+const nearestShade=(keys,columns,rows,samples,depth,lead)=>{
+    const width=columns*samples, height=rows*samples, clear=new Uint8Array(width*height);
+    for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(keys.has(fogKey(Math.floor(x/samples),Math.floor(y/samples))))clear[y*width+x]=1;
+    return Array.from(clear,(own,i)=>{
         const x=i%width, y=Math.floor(i/width);
-        const nearest=Math.min(Infinity,...seeds.map(([sx,sy])=>Math.sqrt((sx-x)*(sx-x)+(sy-y)*(sy-y))));
-        return Math.round(255*Math.min(1,Math.max(0,nearest-.5)/(samples*depth)));
+        let nearest=Infinity;
+        for(let sy=0;sy<height;sy++)for(let sx=0;sx<width;sx++)if(clear[sy*width+sx] !== own)nearest=Math.min(nearest,(sx-x)*(sx-x)+(sy-y)*(sy-y));
+        return shade(own ? .5-Math.sqrt(nearest) : Math.sqrt(nearest)-.5,samples,depth,lead);
     });
 };
 let random=12345;const next=()=>(random=(random*1103515245+12345)%2147483648)/2147483648;
-for(const [samples,depth] of [[1,5],[2,5],[3,5],[4,5],[4,2],[3,1.5]]) {
+for(const [samples,depth,lead,share] of [[1,3,1,.04],[2,3,1,.3],[3,3,1,.6],[4,3,1,.85],[4,5,0,.04],[4,2,.5,.5],[3,1.5,1.5,.7],[2,4,2,.9]]) {
     const keys=new Set();
-    for(let row=0;row<14;row++)for(let column=0;column<18;column++)if(next()<.04)keys.add(fogKey(column,row));
-    assert.deepEqual([...fogGradientField(keys,18,14,samples,depth).alpha],nearestShade(keys,18,14,samples,depth),`${samples} texels per square, ${depth} squares deep`);
+    for(let row=0;row<14;row++)for(let column=0;column<18;column++)if(next()<share)keys.add(fogKey(column,row));
+    assert.deepEqual([...fogGradientField(keys,18,14,samples,depth,lead).alpha],nearestShade(keys,18,14,samples,depth,lead),`${samples} texels per square, ${depth} squares wide, ${lead} inside`);
 }
 // The band where the map shows dimly is still hidden: a token one square into it never reaches players.
 const lurker={...enemy,column:1};
 map.revealedFog=new Set(['0,0']);map.characterTokens=new Map([[1,actor],[2,lurker]]);
-assert.ok(fogGradientField(map.revealedFog,3,2,4).alpha[1*12+5]<64,'the lurker stands where the map is only lightly dimmed');
+assert.ok(fogGradientField(map.revealedFog,3,2,4).alpha[1*12+5]<128,'the lurker stands where the map still shows through the fade');
 assert.deepEqual(fogPublicState(map).tokens,[actor]);
 map.publishPresentation();assert.equal(published.tokens.length,1);assert.deepEqual(published.fog,[{column:0,row:0}],'players are sent the revealed squares and nothing about the gradient');
 assert.ok(validBattlemapSnapshot(published));
@@ -151,9 +167,10 @@ assert.equal(sprite.width,250);assert.equal(sprite.height,180);assert.equal(spri
 assert.deepEqual({...sprite.texture.frame},{x:0,y:0,width:10,height:7.2},'the gradient is cropped to the image');
 assert.equal(player.fogGradient.canvas.width,12);assert.equal(player.fogGradient.canvas.height,8);
 assert.ok(pixels().every((value,i)=>i%4 === 3 || value === 0),'fog is black');
-assert.equal(pixels()[3],0,'the revealed square is clear');assert.equal(pixels()[11*4+3],96,'hidden squares darken with distance');
+assert.equal(pixels()[3],shade(-3.5),'the revealed square is nearly clear away from the fog');assert.equal(pixels()[3*4+3],shade(-.5));
+assert.equal(pixels()[4*4+3],shade(.5),'hidden squares darken with distance');assert.equal(pixels()[11*4+3],shade(7.5));
 assert.equal(uploads,1);player.setFog([{column:0,row:0}]);assert.equal(uploads,1,'unchanged fog is not redrawn');
-player.setFog([{column:0,row:0},{column:1,row:0}]);assert.equal(uploads,2);assert.equal(canvases,1,'the texture is reused when the squares change');assert.equal(pixels()[7*4+3],0);
+player.setFog([{column:0,row:0},{column:1,row:0}]);assert.equal(uploads,2);assert.equal(canvases,1,'the texture is reused when the squares change');assert.equal(pixels()[4*4+3],shade(-3.5),'a newly revealed square clears');
 player.setFog(null);assert.equal(sprite.visible,false,'no gradient when fog is off');assert.deepEqual(player.fogGraphics.rects,[]);
 player.setFog([{column:1,row:0},{column:0,row:0}]);assert.equal(sprite.visible,true);assert.equal(uploads,2);
 player.setFog([]);assert.equal(uploads,3);assert.ok(pixels().every((value,i)=>i%4 !== 3 || value === 255),'re-fogged squares go solid at once');
@@ -168,4 +185,4 @@ console.warn=warn;
 assert.equal(warnings.length,1,'a failed gradient is not retried');assert.equal(broken.fog.children.length,0);
 assert.deepEqual(broken.fogGraphics.fills,[{color:0,alpha:1}]);assert.equal(broken.fogGraphics.rects.length,2,'players fall back to solid squares');
 globalThis.PIXI=savedPixi;globalThis.document=savedDocument;
-console.log('Fog gradient distance, depth, rounded corners, curve, off-grid squares, band privacy, player-only rendering, caching, grid change and solid fallback passed.');
+console.log('Fog gradient distance, width, lead-in inside the revealed area, rounded corners, curve, off-grid squares, band privacy, player-only rendering, caching, grid change and solid fallback passed.');

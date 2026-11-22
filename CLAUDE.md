@@ -115,7 +115,7 @@ Each GM tab sends snapshots over a named **BroadcastChannel** and caches them in
 
 - **Read-only.** The GM drives everything, and the presentation has no editing or panning.
 - **No GM-only information.** This is the most important rule. Hidden or unplaced combatants, fogged squares, NPC/creature stats and HP, GM notes, and anything starting or ending in fog (e.g. measurements) must never enter the player snapshot.
-- **Fog soft edge (the one exception).** Players see the map image fade to black over the first 5 hidden squares (`fogGradientSquares` in `FogOfWar.js`). This is deliberate and covers the image only: tokens, trails, ranges, measurements and the pointer still stop at the hard square edge.
+- **Fog soft edge (the one exception).** Players see the map image fade to black over the first 2 hidden squares. The fade is 3 squares wide and starts 1 square inside the revealed area (`fogGradientSquares` and `fogGradientLead` in `FogOfWar.js`). This is deliberate and covers the image only: tokens, trails, ranges, measurements and the pointer still stop at the hard square edge.
 - **Filter when the snapshot is built** (`fogPublicState`, the `player*` helpers in `BattlemapPresentationSync.js`), and validate in `validBattlemapSnapshot`. Never send GM data and hide it in the presentation page.
 - **Every new snapshot field needs a privacy check** in the matching `.test.mjs`.
 - **Display-friendly:** large, high-contrast text with no hover-only information, and it should work full-screen on a TV.
@@ -126,7 +126,7 @@ Each GM tab sends snapshots over a named **BroadcastChannel** and caches them in
 
 - **Left-drag** moves a token or pans the map. **Wheel** zooms.
 - **Fog** is switched on or off per scene by the cloud toolbar button (`Scenes.FogEnabled`, off by default). When fog is off, the map gets `fog = null`.
-- **Fog display:** the GM sees hard-edged squares at 55%. Players see fog fade in over 5 squares from the revealed area, solid beyond that.
+- **Fog display:** the GM sees hard-edged squares at 55%. Players see a 3-square fade across the fog edge: it starts 1 square inside the revealed area and is solid 2 squares into the fog.
 - **Fog editing:** Shift+drag clears fog and Ctrl+drag adds it. Shift/Ctrl+wheel changes the brush size (1, 3, 5 or 9).
 - **Right-drag** targets during combatant targeting. Otherwise it measures square centre to square centre, and the measurement is cast to players when both ends are revealed.
 - The browser context menu is suppressed on the GM map.
