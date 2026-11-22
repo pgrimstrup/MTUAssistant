@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {fogKey,fogCells,fogVisible,validFog,paintFog,fogRectangles,fogPublicState,fogStrokeMode,stepFogBrush} from '../../wwwroot/js/FogOfWar.js';
+import {fogKey,fogCells,fogVisible,validFog,paintFog,fogRectangles,fogPublicState,fogStrokeMode,stepFogBrush,fogEqual,fogGradientSquares,fogGradientSamples,fogGradientField} from '../../wwwroot/js/FogOfWar.js';
 import {Battlemap} from '../../wwwroot/js/Battlemap.js';
 import {validBattlemapSnapshot} from '../../wwwroot/js/BattlemapPresentationSync.js';
 const revealed=new Set();
@@ -81,3 +81,91 @@ map.revealedFog.add('1,0');const pending=map.saveFogEdit(new Set(['0,0']));map.s
 assert.equal(map.revealedFog,null,'a save finishing after fog is turned off does not bring fog back');
 map.readOnly=true;map.setFogEnabled([]);assert.equal(map.revealedFog,null,'read-only maps ignore the fog switch');map.readOnly=false;
 console.log('Fog painting, interpolation, clipping, rectangle coverage, privacy, sync, cancellation, save rollback, undo, Shift/Ctrl stroke modes, brush, wheel brush sizing, fog on/off and read-only guards passed.');
+// Fog gradient: darkness comes from the revealed squares alone.
+assert.equal(fogGradientSquares,5);
+assert.ok(fogEqual(null,null));assert.equal(fogEqual(null,new Set()),false);assert.ok(fogEqual(new Set(['0,0','1,0']),new Set(['1,0','0,0'])));
+assert.equal(fogEqual(new Set(['0,0']),new Set(['1,0'])),false);assert.equal(fogEqual(new Set(['0,0']),new Set(['0,0','1,0'])),false);
+assert.equal(fogGradientSamples(40,30),4);assert.equal(fogGradientSamples(300,200),3);assert.equal(fogGradientSamples(10,4096),1,'huge grids fall back to one texel per square');assert.equal(fogGradientSamples(0,0),4);
+assert.equal(fogGradientField(null,3,3,4),null,'no gradient when fog is off');
+assert.ok(fogGradientField(new Set(),4,3,2).alpha.every(a=>a === 255),'an unrevealed map is fully black');
+const everySquare=new Set();for(let row=0;row<3;row++)for(let column=0;column<4;column++)everySquare.add(fogKey(column,row));
+assert.ok(fogGradientField(everySquare,4,3,2).alpha.every(a=>a === 0),'a fully revealed map has no fog');
+assert.ok(fogGradientField(new Set(['-1,1','4,0','0,3','0.5,0','x,y']),4,3,2).alpha.every(a=>a === 255),'squares off the grid reveal nothing');
+// One revealed square in the middle of a 15 x 15 map at 4 texels per square: texels 28-31 on each axis.
+const centre=fogGradientField(new Set(['7,7']),15,15,4), at=(x,y)=>centre.alpha[y*centre.width+x];
+assert.equal(centre.width,60);assert.equal(centre.height,60);
+for(let y=28;y<32;y++)for(let x=28;x<32;x++)assert.equal(at(x,y),0,'revealed squares stay fully clear');
+for(let k=1;k<=28;k++) {
+    const expected=Math.round(255*Math.min(1,(k-.5)/20));
+    assert.equal(at(31+k,29),expected);assert.equal(at(28-k,30),expected);assert.equal(at(29,31+k),expected);assert.equal(at(30,28-k),expected);
+}
+assert.ok(at(32,29)>0 && at(32,29)<26,'the first hidden texel is only just darkened');
+assert.ok(at(51,29)<255,'the fifth hidden square is not yet solid');assert.equal(at(52,29),255,'fog is solid from five squares in');
+assert.ok(at(47,29)<255 && at(47,47) === 255,'corners are rounded: four squares along is dim, four along and four down is solid');
+for(let y=0;y<60;y++)for(let x=0;x<60;x++){assert.equal(at(x,y),at(59-x,y));assert.equal(at(x,y),at(y,x));}
+const sooner=fogGradientField(new Set(['7,7']),15,15,4,5,.5);
+assert.equal(sooner.alpha[29*60+36],Math.round(255*Math.sqrt(4.5/20)),'a curve below 1 darkens sooner');assert.equal(sooner.alpha[29*60+29],0);assert.equal(sooner.alpha[29*60+52],255);
+// Every texel matches the straight-line distance to the nearest revealed texel, on maps larger than the fade.
+const nearestShade=(keys,columns,rows,samples,depth)=>{
+    const width=columns*samples, height=rows*samples, seeds=[];
+    for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(keys.has(fogKey(Math.floor(x/samples),Math.floor(y/samples))))seeds.push([x,y]);
+    return Array.from({length:width*height},(_,i)=>{
+        const x=i%width, y=Math.floor(i/width);
+        const nearest=Math.min(Infinity,...seeds.map(([sx,sy])=>Math.sqrt((sx-x)*(sx-x)+(sy-y)*(sy-y))));
+        return Math.round(255*Math.min(1,Math.max(0,nearest-.5)/(samples*depth)));
+    });
+};
+let random=12345;const next=()=>(random=(random*1103515245+12345)%2147483648)/2147483648;
+for(const [samples,depth] of [[1,5],[2,5],[3,5],[4,5],[4,2],[3,1.5]]) {
+    const keys=new Set();
+    for(let row=0;row<14;row++)for(let column=0;column<18;column++)if(next()<.04)keys.add(fogKey(column,row));
+    assert.deepEqual([...fogGradientField(keys,18,14,samples,depth).alpha],nearestShade(keys,18,14,samples,depth),`${samples} texels per square, ${depth} squares deep`);
+}
+// The band where the map shows dimly is still hidden: a token one square into it never reaches players.
+const lurker={...enemy,column:1};
+map.revealedFog=new Set(['0,0']);map.characterTokens=new Map([[1,actor],[2,lurker]]);
+assert.ok(fogGradientField(map.revealedFog,3,2,4).alpha[1*12+5]<64,'the lurker stands where the map is only lightly dimmed');
+assert.deepEqual(fogPublicState(map).tokens,[actor]);
+map.publishPresentation();assert.equal(published.tokens.length,1);assert.deepEqual(published.fog,[{column:0,row:0}],'players are sent the revealed squares and nothing about the gradient');
+assert.ok(validBattlemapSnapshot(published));
+assert.equal(validBattlemapSnapshot({...published,tokens:[...published.tokens,{...published.tokens[0],id:2,characterId:2,column:1}]}),false,'tokens in the dim band are rejected');
+// Rendering: players get the gradient sprite, the GM keeps hard squares.
+const savedPixi=globalThis.PIXI, savedDocument=globalThis.document;
+let uploads=0, canvases=0;
+globalThis.document={createElement:()=>{canvases++;return {width:0,height:0,getContext:()=>({createImageData:(w,h)=>({data:new Uint8ClampedArray(w*h*4)}),putImageData(){}})};}};
+globalThis.PIXI={CanvasSource:class{constructor(options){Object.assign(this,options);}update(){uploads++;}},
+    Texture:class{constructor(options){Object.assign(this,options);}destroy(){this.destroyed=true;}},
+    Rectangle:class{constructor(x,y,width,height){Object.assign(this,{x,y,width,height});}},
+    Sprite:class{constructor(texture){this.texture=texture;this.visible=true;}destroy(){this.destroyed=true;}}};
+const fogView=(readOnly,fog)=>{
+    const view=new Battlemap({style:{},hasPointerCapture:()=>false},{gridSize:100},'gradient');
+    return Object.assign(view,{readOnly,imageWidth:250,imageHeight:180,revealedFog:fog,fog:{children:[],addChild(child){this.children.push(child);}},
+        fogGraphics:{rects:[],fills:[],clear(){this.rects=[];this.fills=[];},rect(...rect){this.rects.push(rect);},fill(fill){this.fills.push(fill);}}});
+};
+const gm=fogView(false,new Set(['0,0']));gm.drawFog();
+assert.equal(gm.fog.children.length,0,'the GM view has no gradient');assert.deepEqual(gm.fogGraphics.fills,[{color:0,alpha:.55}]);assert.equal(gm.fogGraphics.rects.length,2,'the GM keeps hard squares');
+const player=fogView(true,new Set(['0,0']));player.drawFog();
+const sprite=player.fog.children[0], pixels=()=>player.fogGradient.image.data;
+assert.equal(player.fog.children.length,1);assert.deepEqual(player.fogGraphics.rects,[],'players get the gradient instead of hard squares');assert.deepEqual(player.fogGraphics.fills,[]);
+assert.equal(sprite.width,250);assert.equal(sprite.height,180);assert.equal(sprite.texture.source.scaleMode,'linear');
+assert.deepEqual({...sprite.texture.frame},{x:0,y:0,width:10,height:7.2},'the gradient is cropped to the image');
+assert.equal(player.fogGradient.canvas.width,12);assert.equal(player.fogGradient.canvas.height,8);
+assert.ok(pixels().every((value,i)=>i%4 === 3 || value === 0),'fog is black');
+assert.equal(pixels()[3],0,'the revealed square is clear');assert.equal(pixels()[11*4+3],96,'hidden squares darken with distance');
+assert.equal(uploads,1);player.setFog([{column:0,row:0}]);assert.equal(uploads,1,'unchanged fog is not redrawn');
+player.setFog([{column:0,row:0},{column:1,row:0}]);assert.equal(uploads,2);assert.equal(canvases,1,'the texture is reused when the squares change');assert.equal(pixels()[7*4+3],0);
+player.setFog(null);assert.equal(sprite.visible,false,'no gradient when fog is off');assert.deepEqual(player.fogGraphics.rects,[]);
+player.setFog([{column:1,row:0},{column:0,row:0}]);assert.equal(sprite.visible,true);assert.equal(uploads,2);
+player.setFog([]);assert.equal(uploads,3);assert.ok(pixels().every((value,i)=>i%4 !== 3 || value === 255),'re-fogged squares go solid at once');
+player.setGrid({gridSize:50});assert.ok(sprite.destroyed && sprite.texture.destroyed,'a new grid size replaces the texture');
+assert.equal(player.fog.children.length,2);assert.equal(player.fogGradient.canvas.width,20);assert.equal(player.fogGradient.canvas.height,16);
+assert.deepEqual({...player.fogGradient.texture.frame},{x:0,y:0,width:20,height:14.4});
+// If the gradient cannot be drawn, players get solid fog rather than none.
+globalThis.PIXI={...globalThis.PIXI,Sprite:class{constructor(){throw Error('No sprite.');}}};
+const warn=console.warn, warnings=[];console.warn=message=>warnings.push(message);
+const broken=fogView(true,new Set(['0,0']));broken.drawFog();broken.drawFog();
+console.warn=warn;
+assert.equal(warnings.length,1,'a failed gradient is not retried');assert.equal(broken.fog.children.length,0);
+assert.deepEqual(broken.fogGraphics.fills,[{color:0,alpha:1}]);assert.equal(broken.fogGraphics.rects.length,2,'players fall back to solid squares');
+globalThis.PIXI=savedPixi;globalThis.document=savedDocument;
+console.log('Fog gradient distance, depth, rounded corners, curve, off-grid squares, band privacy, player-only rendering, caching, grid change and solid fallback passed.');

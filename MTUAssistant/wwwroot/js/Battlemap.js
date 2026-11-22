@@ -1,4 +1,4 @@
-import { fogKey, fogCells, fogVisible, paintFog, fogRectangles, fogPublicState, fogStrokeMode, fogBrushSizes, stepFogBrush } from './FogOfWar.js';
+import { fogKey, fogCells, fogVisible, paintFog, fogRectangles, fogPublicState, fogStrokeMode, fogBrushSizes, stepFogBrush, fogEqual, fogGradientSamples, fogGradientField } from './FogOfWar.js';
 import { DescriptionDialog, playerDescription } from './CombatDescription.js';
 import { automaticMoveRange } from './AutomaticMovement.js';
 import { movementGeometry, weaponRangeBand, measureGeometry, measureLabel, measureCell } from './MovementIndicators.js';
@@ -583,9 +583,54 @@ export class Battlemap {
         const graphics=this.fogGraphics;
         if(!graphics) return;
         graphics.clear();
+        // Players get a soft edge. The GM keeps exact square edges for painting, and players get solid
+        // squares too if the gradient cannot be drawn, so a failure never shows them more of the map.
+        if(this.readOnly && this.drawFogGradient()) return;
         for(const rect of fogRectangles(this.revealedFog,this.imageWidth,this.imageHeight,this.scene.gridSize))
             graphics.rect(rect.x,rect.y,rect.width,rect.height);
         graphics.fill({color:0x000000,alpha:this.readOnly ? 1 : .55});
+    }
+    // Player view: one black sprite over the map whose alpha fades from the revealed squares into full fog.
+    // Returns false when it could not be drawn.
+    drawFogGradient() {
+        if(this.fogGradientFailed) return false;
+        try {
+            const keys=this.revealedFog, size=this.scene.gridSize;
+            let layer=this.fogGradient;
+            if(keys == null) { if(layer) layer.sprite.visible=false; return true; }
+            // The presentation re-sends fog with every pan and zoom, so only rebuild when the squares change.
+            if(layer && layer.size === size && fogEqual(layer.keys,keys)) { layer.sprite.visible=true; return true; }
+            const columns=Math.ceil(this.imageWidth/size), rows=Math.ceil(this.imageHeight/size), samples=fogGradientSamples(columns,rows);
+            const field=fogGradientField(keys,columns,rows,samples);
+            if(!layer || layer.canvas.width !== field.width || layer.canvas.height !== field.height) {
+                this.destroyFogGradient();
+                const canvas=document.createElement('canvas'); canvas.width=field.width; canvas.height=field.height;
+                const context=canvas.getContext('2d');
+                // Crop to the image so a partial last square does not draw fog past the map edge.
+                const texture=new PIXI.Texture({source:new PIXI.CanvasSource({resource:canvas,scaleMode:'linear'}),
+                    frame:new PIXI.Rectangle(0,0,this.imageWidth*samples/size,this.imageHeight*samples/size)});
+                const sprite=new PIXI.Sprite(texture);
+                sprite.width=this.imageWidth; sprite.height=this.imageHeight;
+                this.fog.addChild(sprite);
+                layer=this.fogGradient={canvas,context,image:context.createImageData(field.width,field.height),texture,sprite};
+            }
+            // The pixels stay black; only their alpha carries the fog.
+            for(let i=0;i<field.alpha.length;i++) layer.image.data[i*4+3]=field.alpha[i];
+            layer.context.putImageData(layer.image,0,0);
+            layer.texture.source.update();
+            layer.keys=new Set(keys); layer.size=size; layer.sprite.visible=true;
+            return true;
+        } catch(error) {
+            console.warn('Unable to draw the fog gradient; showing solid fog instead.',error);
+            this.fogGradientFailed=true;
+            if(this.fogGradient?.sprite) this.fogGradient.sprite.visible=false;
+            return false;
+        }
+    }
+    destroyFogGradient() {
+        const layer=this.fogGradient; if(!layer) return;
+        this.fogGradient=null;
+        layer.sprite.destroy(); layer.texture.destroy(true);
     }
     beginMeasure(event) {
         if (this.readOnly || this.disposed || this.placement || !this.view) return false;
@@ -1011,6 +1056,7 @@ export class Battlemap {
         destroyRingTextures(this.ringTextures); this.ringTextures=null; this.ringPools?.clear();
         for(const tile of this.tiles?.values() ?? []) tile.texture.destroy(true);
         this.tiles?.clear(); this.overviewTexture?.destroy(true); this.image=null;
+        this.fogGradient?.texture.destroy(true); this.fogGradient=null;
         if(this.preventDrag) {
             this.host.removeEventListener('dragstart',this.preventDrag);
             this.host.removeEventListener('selectstart',this.preventDrag);

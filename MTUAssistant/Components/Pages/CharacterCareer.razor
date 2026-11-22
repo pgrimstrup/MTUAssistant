@@ -7,14 +7,11 @@
     else
     {
         var progress = CareerRules.RankAfterEachTerm(terms);
+        var promotions = CareerRules.PromotionInEachTerm(terms);
         <div class="career-list"><table class="table career-table">
-            <thead><tr><th scope="col">Term</th><th scope="col">Age</th><th scope="col">Service</th><th scope="col">Survival</th><th scope="col">Commission</th><th scope="col">Advancement</th><th scope="col">Rank</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+            <thead><tr><th scope="col">Term</th><th scope="col">Age</th><th scope="col">Service</th><th scope="col">Survival</th><th scope="col">Promotion</th><th scope="col">Rank</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
             @foreach (var term in terms)
             {
-                // A check the term does not have is left blank rather than shown as failed.
-                // The commission comes first; when it passes there is no Advancement Check that term.
-                var hasCommission = CareerRules.CommissionAvailable(terms, term.Id, term.Service);
-                var hasAdvancement = CareerServices.HasAdvancement(term.Service) && !(hasCommission && term.Commission);
                 var hasRank = CareerServices.HasAdvancement(term.Service) || CareerServices.IsMilitary(term.Service);
                 var hasNotes = !string.IsNullOrWhiteSpace(term.Notes);
                 // One body per term keeps a term and its notes row together.
@@ -24,12 +21,12 @@
                         <td>@CareerRules.AgeAtStart(term.Number)</td>
                         <td>@term.Service</td>
                         <td>@Outcome(term.Survival)</td>
-                        <td>@(hasCommission ? Outcome(term.Commission) : null)</td>
-                        <td>@(hasAdvancement ? Outcome(term.Advancement) : null)</td>
+                        @* Blank unless the term brought a commission or a promotion. *@
+                        <td>@promotions.GetValueOrDefault(term.Id)</td>
                         <td>@(hasRank ? progress[term.Id].Label : null)</td>
                         <td class="row-actions" rowspan="@(hasNotes ? 2 : 1)"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(term)" disabled="@busy">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(term)" disabled="@busy">Delete</button></td>
                     </tr>
-                    @if (hasNotes) { <tr class="notes-row"><td colspan="7">@term.Notes</td></tr> }
+                    @if (hasNotes) { <tr class="notes-row"><td colspan="6">@term.Notes</td></tr> }
                 </tbody>
             }
         </table></div>
@@ -75,7 +72,7 @@
     // The commission comes first. If it passes, the character cannot also advance that term.
     private bool CanAdvance => CareerServices.HasAdvancement(ServiceName) && !Commissioned;
     private static string Outcome(bool passed) => passed ? "✓ Passed" : "✗ Failed";
-    // Services where the character holds a rank, e.g. "Navy O2 · Scout Rank 1".
+    // Services where the character holds a rank, e.g. "Navy O-2 · Scout Rank 1".
     private IReadOnlyList<string> Standing => CareerRules.RankLabels(terms);
 
     protected override async Task OnInitializedAsync()

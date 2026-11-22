@@ -42,22 +42,22 @@ public static class CareerChecks
                     Enlisted: 0,
                     Officer: null,
                     Highest: 0,
-                    Label: "E0",
+                    Label: "E-0",
                     Military: true
                 },
-            "A recruit with no terms is E0"
+            "A recruit with no terms is E-0"
         );
         var enlisted = new[] { Term(1, "Navy", true), Term(2, "Navy"), Term(3, "Navy", true) };
         Check(
             CareerRules.Rank(enlisted, "navy")
-                is { Terms: 3, Enlisted: 2, Officer: null, Label: "E2" },
+                is { Terms: 3, Enlisted: 2, Officer: null, Label: "E-2" },
             "Each successful Advancement Check adds one enlisted rank"
         );
         var commissioned = enlisted.Append(Term(4, "Navy", commission: true)).ToArray();
         Check(
             CareerRules.Rank(commissioned, "Navy")
-                is { Enlisted: 2, Officer: 1, Highest: 2, Label: "E2" },
-            "A commission starts officer rank at O1, and the highest rank is the larger number"
+                is { Enlisted: 2, Officer: 1, Highest: 2, Label: "E-2" },
+            "A commission starts officer rank at O-1, and the highest rank is the larger number"
         );
         var promoted = commissioned
             .Append(Term(5, "Navy", true))
@@ -65,12 +65,12 @@ public static class CareerChecks
             .ToArray();
         Check(
             CareerRules.Rank(promoted, "Navy")
-                is { Enlisted: 2, Officer: 3, Highest: 3, Label: "O3" },
+                is { Enlisted: 2, Officer: 3, Highest: 3, Label: "O-3" },
             "Advancement after a commission raises officer rank, not enlisted rank"
         );
         Check(
             CareerRules.Rank([Term(1, "Marine", true, true)], "Marine")
-                is { Enlisted: 0, Officer: 1, Label: "O1" },
+                is { Enlisted: 0, Officer: 1, Label: "O-1" },
             "A commission is the term's one promotion, so an advancement in the same term is ignored"
         );
         Check(
@@ -110,16 +110,16 @@ public static class CareerChecks
         };
         Check(
             CareerRules.Rank(graduate.Take(1), "Navy") is { Terms: 0, Highest: 0 }
-                && CareerRules.Rank(graduate, "Navy") is { Terms: 1, Officer: 2, Label: "O2" }
+                && CareerRules.Rank(graduate, "Navy") is { Terms: 1, Officer: 2, Label: "O-2" }
                 && CareerRules.HighestRank(graduate, "Navy") == 2,
-            "A commissioned Academy graduate starts the Navy at O1 and advances to O2 in the first term"
+            "A commissioned Academy graduate starts the Navy at O-1 and advances to O-2 in the first term"
         );
         Check(
-            CareerRules.RankLabels(graduate).SequenceEqual(["Military Academy O1", "Navy O2"])
-                && CareerRules.RankLabels(graduate.Take(1)).SequenceEqual(["Military Academy O1"])
+            CareerRules.RankLabels(graduate).SequenceEqual(["Military Academy O-1", "Navy O-2"])
+                && CareerRules.RankLabels(graduate.Take(1)).SequenceEqual(["Military Academy O-1"])
                 && CareerRules.RankLabels([Term(1, "Military Academy")]).Count == 0
                 && CareerRules.RankLabels(null).Count == 0,
-            "Military Academy rank is displayed, so a graduate who never serves keeps O1"
+            "Military Academy rank is displayed, so a graduate who never serves keeps O-1"
         );
         Check(
             !CareerServices.HasAdvancement(" university ")
@@ -156,12 +156,12 @@ public static class CareerChecks
             Term(3, "Marine", true),
         };
         Check(
-            CareerRules.Rank(transfer, "Army") is { Terms: 1, Officer: 1, Label: "O1" }
-                && CareerRules.Rank(transfer, "Navy") is { Terms: 1, Officer: 1, Label: "O1" }
-                && CareerRules.Rank(transfer, "Marine") is { Terms: 1, Officer: 2, Label: "O2" }
+            CareerRules.Rank(transfer, "Army") is { Terms: 1, Officer: 1, Label: "O-1" }
+                && CareerRules.Rank(transfer, "Navy") is { Terms: 1, Officer: 1, Label: "O-1" }
+                && CareerRules.Rank(transfer, "Marine") is { Terms: 1, Officer: 2, Label: "O-2" }
                 && CareerRules
                     .RankLabels(transfer)
-                    .SequenceEqual(["Army O1", "Navy O1", "Marine O2"]),
+                    .SequenceEqual(["Army O-1", "Navy O-1", "Marine O-2"]),
             "An officer moving from the Army to the Navy starts there at the same rank"
         );
         var enlistedTransfer = new[]
@@ -172,8 +172,8 @@ public static class CareerChecks
             Term(4, "Army", true),
         };
         Check(
-            CareerRules.Rank(enlistedTransfer, "Navy") is { Enlisted: 2, Label: "E2" }
-                && CareerRules.Rank(enlistedTransfer, "Army") is { Enlisted: 4, Label: "E4" },
+            CareerRules.Rank(enlistedTransfer, "Navy") is { Enlisted: 2, Label: "E-2" }
+                && CareerRules.Rank(enlistedTransfer, "Army") is { Enlisted: 4, Label: "E-4" },
             "Enlisted rank transfers too, and a service keeps the rank held when the character left it"
         );
         var civilian = new[]
@@ -193,7 +193,7 @@ public static class CareerChecks
         );
         var transferProgress = CareerRules.RankAfterEachTerm(transfer);
         Check(
-            transfer.Select(t => transferProgress[t.Id].Label).SequenceEqual(["O1", "O1", "O2"]),
+            transfer.Select(t => transferProgress[t.Id].Label).SequenceEqual(["O-1", "O-1", "O-2"]),
             "Rank after each term carries across military services"
         );
         Check(
@@ -205,8 +205,46 @@ public static class CareerChecks
         Check(
             promoted
                 .Select(t => progress[t.Id].Label)
-                .SequenceEqual(["E1", "E1", "E2", "E2", "O2", "O3"]),
+                .SequenceEqual(["E-1", "E-1", "E-2", "E-2", "O-2", "O-3"]),
             "Rank after each term follows the career in order"
+        );
+        var promotions = CareerRules.PromotionInEachTerm(promoted);
+        Check(
+            promoted
+                .Select(t => promotions.GetValueOrDefault(t.Id))
+                .SequenceEqual([
+                    "Promoted to E-1",
+                    null,
+                    "Promoted to E-2",
+                    "Commissioned to O-1",
+                    "Promoted to O-2",
+                    "Promoted to O-3",
+                ]),
+            "Each term shows its commission or promotion, naming the rank gained, or nothing"
+        );
+        var civilianPromotions = CareerRules.PromotionInEachTerm(civilian);
+        Check(
+            civilian
+                .Select(t => civilianPromotions.GetValueOrDefault(t.Id))
+                .SequenceEqual([
+                    "Commissioned to O-1",
+                    "Promoted to Rank 1",
+                    null,
+                    "Promoted to Rank 1",
+                    null,
+                ]),
+            "A commission hides the same term's advancement, and other services promote to Rank n"
+        );
+        Check(
+            CareerRules
+                .PromotionInEachTerm([
+                    Term(1, "University", true, true),
+                    Term(2, "Military Academy", true),
+                    Term(3, "Army", commission: true),
+                    Term(4, "Navy", true, true),
+                ])
+                .Values.SequenceEqual(["Commissioned to O-1", "Promoted to O-2"]),
+            "Study terms never promote, and only the first commission counts"
         );
         Check(
             CareerServices.All.Count == 15
@@ -328,7 +366,8 @@ public static class CareerChecks
                 edited is { Id: var editedId, Number: 2, Commission: true, Advancement: false }
                     && editedId == second.Id
                     && listed.Select(t => t.Service).SequenceEqual(["Navy", "Navy", "Belter"])
-                    && CareerRules.Rank(listed, "Navy") is { Enlisted: 1, Officer: 1, Label: "O1" },
+                    && CareerRules.Rank(listed, "Navy")
+                        is { Enlisted: 1, Officer: 1, Label: "O-1" },
                 "Editing a term keeps its place and updates the rank"
             );
             // Checks a term does not have are stored as not passed.
@@ -350,7 +389,7 @@ public static class CareerChecks
                     && service is { Advancement: true, Commission: false }
                     && CareerRules
                         .RankLabels(await careers.ListAsync(2, otherId))
-                        .SequenceEqual(["Military Academy O1", "Navy O2"]),
+                        .SequenceEqual(["Military Academy O-1", "Navy O-2"]),
                 "University and Academy drop Advancement, and a second commission is not stored"
             );
             Check(

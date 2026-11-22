@@ -25,11 +25,15 @@ public sealed record CareerRank(
 {
     public int Highest => Math.Max(Enlisted, Officer ?? 0);
 
-    /// <summary>"O2" or "E3" for military services, "Rank 2" for the others.</summary>
+    /// <summary>"O-2" or "E-3" for military services, "Rank 2" for the others.</summary>
     public string Label =>
         !Military ? $"Rank {Enlisted}"
-        : Officer is int officer && officer >= Enlisted ? $"O{officer}"
-        : $"E{Enlisted}";
+        : Officer is int officer && officer >= Enlisted ? OfficerLabel(officer)
+        : EnlistedLabel(Enlisted);
+
+    public static string OfficerLabel(int rank) => $"O-{rank}";
+
+    public static string EnlistedLabel(int rank) => $"E-{rank}";
 }
 
 public static class CareerServices
@@ -88,8 +92,8 @@ public static class CareerRules
         StartingAge + YearsPerTerm * Math.Max(0, termNumber - 1);
 
     /// <summary>Standing in one service. Each successful Advancement Check adds one rank.
-    /// Military rank is carried between the military services: recruits start at E0, a successful
-    /// Commission Check ends enlisted advancement and starts officer rank at O1, and a character
+    /// Military rank is carried between the military services: recruits start at E-0, a successful
+    /// Commission Check ends enlisted advancement and starts officer rank at O-1, and a character
     /// who moves from one military service to another keeps the rank they hold. The standing in a
     /// military service is the rank held at the end of the last term served in it. Other services
     /// each keep their own rank, starting at 0, counted over that service's terms.</summary>
@@ -139,7 +143,7 @@ public static class CareerRules
         CareerServices.IsMilitary(service)
         && !terms.Any(t => t.Id != termId && t.Commission && CareerServices.IsMilitary(t.Service));
 
-    /// <summary>The ranks to display, e.g. "Military Academy O1", "Navy O2", "Scout Rank 1":
+    /// <summary>The ranks to display, e.g. "Military Academy O-1", "Navy O-2", "Scout Rank 1":
     /// every service where the character holds a rank above 0.</summary>
     public static IReadOnlyList<string> RankLabels(IEnumerable<CareerTerm>? terms) =>
         Ranks(terms ?? [])
@@ -170,6 +174,40 @@ public static class CareerRules
         var result = new Dictionary<int, CareerRank>();
         for (var i = 0; i < all.Length; i++)
             result[all[i].Id] = Rank(all.Take(i + 1), all[i].Service);
+        return result;
+    }
+
+    /// <summary>What each term did to the character's rank, keyed by term ID: "Commissioned to
+    /// O-1" for the term that holds the commission, "Promoted to E-2", "Promoted to O-3" or
+    /// "Promoted to Rank 1" for a passed Advancement Check, and nothing for a term with neither.
+    /// A promotion names the rank just gained, so an officer below their old enlisted number is
+    /// still "Promoted to O-2".</summary>
+    public static IReadOnlyDictionary<int, string> PromotionInEachTerm(
+        IEnumerable<CareerTerm> terms
+    )
+    {
+        var all = terms.OrderBy(t => t.Number).ThenBy(t => t.Id).ToArray();
+        var result = new Dictionary<int, string>();
+        var commissioned = false;
+        for (var i = 0; i < all.Length; i++)
+        {
+            var term = all[i];
+            var military = CareerServices.IsMilitary(term.Service);
+            if (military && term.Commission && !commissioned)
+            {
+                commissioned = true;
+                result[term.Id] = $"Commissioned to {CareerRank.OfficerLabel(1)}";
+            }
+            else if (term.Advancement && CareerServices.HasAdvancement(term.Service))
+            {
+                var rank = Rank(all.Take(i + 1), term.Service);
+                var gained =
+                    !military ? rank.Label
+                    : rank.Officer is int officer ? CareerRank.OfficerLabel(officer)
+                    : CareerRank.EnlistedLabel(rank.Enlisted);
+                result[term.Id] = $"Promoted to {gained}";
+            }
+        }
         return result;
     }
 
