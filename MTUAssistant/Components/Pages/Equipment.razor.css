@@ -1,9 +1,6 @@
 .equipment-page { max-width:100rem; margin:0 auto; }
 .page-header { margin-bottom:1.5rem; }
 h1 { font-size:1.8rem; margin:0; }
-h2 { font-size:1.2rem; margin:0; }
-.equipment-section { margin-bottom:2rem; }
-.section-header { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:1rem; }
 .table-wrap { overflow-x:auto; border:1px solid var(--app-border); border-radius:var(--app-radius); }
 .equipment-table { margin:0; font-size:.86rem; }
 .equipment-table th, .equipment-table td { vertical-align:middle; }

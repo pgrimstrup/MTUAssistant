@@ -183,7 +183,8 @@ public sealed class CharacterService(MtuDbContext db)
         return new(best, hasSkill, missing);
     }
 
-    public async Task SaveAsync(Character character)
+    /// <summary>Returns the saved Traveller's ID, which is new when character.Id was 0.</summary>
+    public async Task<int> SaveAsync(Character character)
     {
         InjuryToleranceRules.Validate(character.InjuryTolerance);
         if (character.Speed < 0)
@@ -234,6 +235,7 @@ public sealed class CharacterService(MtuDbContext db)
         entity.TokenImage = character.TokenImage;
         entity.Inactive = character.Inactive;
         await db.SaveChangesAsync();
+        return entity.Id;
     }
 
     public async Task<IReadOnlyList<CharacterSkill>> ListSkillsAsync(

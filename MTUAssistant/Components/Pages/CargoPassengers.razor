@@ -79,9 +79,22 @@
     {
         <p class="empty-message">Select a world on the map to begin.</p>
     }
-    <div class="sections">
-        <section class="cargo-panel" aria-labelledby="passengers-heading">
-            <header class="passenger-header"><h2 id="passengers-heading">Passengers</h2>@if (passengerResult is not null) { <FreshnessBadge TargetDay="passengerResult.TargetDay" Campaign="activeCampaign" /> }</header>
+    <TabBar TValue="CargoTab" Tabs="Tabs" @bind-Active="activeTab" IdPrefix="cargo" AriaLabel="Passengers and freight">
+        <Extras>
+            @if (activeTab == CargoTab.Passengers)
+            {
+                @if (passengerResult is not null) { <FreshnessBadge TargetDay="passengerResult.TargetDay" Campaign="activeCampaign" /> }
+            }
+            else
+            {
+                @if (freightResult?.Mail is { } mailStatus) { <span class="outdated-badge @(mailStatus.InsufficientSpace ? "mail-danger" : mailStatus.Containers > 0 ? "mail-available" : "")">@(mailStatus.InsufficientSpace ? "Insufficient cargo space for mail" : mailStatus.Containers == 0 ? "No Mail Traffic" : $"{mailStatus.Containers * 5} T Mail Traffic")</span> }
+                @if (freightResult is not null) { <FreshnessBadge TargetDay="freightResult.TargetDay" Campaign="activeCampaign" /> }
+            }
+        </Extras>
+        <ChildContent>
+        @if (activeTab == CargoTab.Passengers)
+        {
+        <div class="cargo-panel" @key="CargoTab.Passengers">
             <div class="panel-body">
                 <div class="passenger-controls">
                     <label>Effect of Broker/Carouse/Streetwise <input class="form-control" type="number" min="-100" max="100" @bind="effect" disabled="@busy" /></label>
@@ -121,9 +134,11 @@
                     </tbody>
                 </table></div>
             </div>
-        </section>
-        <section class="cargo-panel" aria-labelledby="freight-heading">
-            <header class="passenger-header"><h2 id="freight-heading">Freight</h2><div class="freight-status">@if (freightResult?.Mail is { } mailStatus) { <span class="outdated-badge @(mailStatus.InsufficientSpace ? "mail-danger" : mailStatus.Containers > 0 ? "mail-available" : "")">@(mailStatus.InsufficientSpace ? "Insufficient cargo space for mail" : mailStatus.Containers == 0 ? "No Mail Traffic" : $"{mailStatus.Containers * 5} T Mail Traffic")</span> } @if (freightResult is not null) { <FreshnessBadge TargetDay="freightResult.TargetDay" Campaign="activeCampaign" /> }</div></header>
+        </div>
+        }
+        else
+        {
+        <div class="cargo-panel" @key="CargoTab.Freight">
             <div class="panel-body">
                 <div class="passenger-controls">
                     <label>Effect of Broker/Streetwise <input class="form-control" type="number" min="-100" max="100" @bind="freightEffect" disabled="@busy" /></label>
@@ -171,11 +186,16 @@
                     </tbody>
                 </table></div>
             </div>
-        </section>
-    </div>
+        </div>
+        }
+        </ChildContent>
+    </TabBar>
 </div>
 
 @code {
+    private enum CargoTab { Passengers, Freight }
+    private static readonly CargoTab[] Tabs = [CargoTab.Passengers, CargoTab.Freight];
+    private CargoTab activeTab = CargoTab.Passengers;
     private Campaign? activeCampaign;
     private void CampaignChanged(Campaign? campaign) => _ = InvokeAsync(async () =>
     {

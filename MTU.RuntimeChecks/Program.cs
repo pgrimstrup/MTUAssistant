@@ -20,6 +20,7 @@ await AutomaticMovementChecks.RunAsync();
 await SpeedBurstChecks.RunAsync();
 AutoAttackChecks.Run();
 await SkillChecks.RunAsync();
+await CharacteristicProfileChecks.RunAsync();
 await NpcGenerationChecks.RunAsync();
 await SceneChecks.RunAsync();
 await AnimalCombatChecks.RunAsync();
@@ -3032,7 +3033,7 @@ using (var importConnection = new SqliteConnection("Data Source=:memory:"))
                     Rad: 5,
                     Kg: 2.5m,
                     Cost: 500.5m,
-                    RequiredSkill: "Vacc Suit 0",
+                    RequiredSkill: "Vacc Suit",
                     Notes: "First line\nSecond line"
                 },
             "All armour attributes persist"

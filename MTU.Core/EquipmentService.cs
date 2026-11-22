@@ -132,6 +132,9 @@ public sealed class EquipmentService(MtuDbContext db)
             value.Range = 0;
             value.Damage = value.Magazine = value.Traits = "";
             value.MagCost = 0;
+            // Level 0 is assumed, so "Vacc Suit 0" is stored as "Vacc Suit".
+            var (skill, level) = EquipmentSkillRules.ParseArmourRequirement(value.RequiredSkill);
+            value.RequiredSkill = EquipmentSkillRules.FormatArmourRequirement(skill, level);
         }
         else
         {

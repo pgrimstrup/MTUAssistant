@@ -1,0 +1,163 @@
+@implements IAsyncDisposable
+@inject AnimalService Animals
+@inject IJSRuntime JS
+
+<dialog @ref="dialog" class="animal-dialog" aria-labelledby="animal-dialog-heading">
+    <header class="dialog-header">
+        <h2 id="animal-dialog-heading">@(IsNew ? "Add Animal" : "Edit Animal")</h2>
+        <div class="actions">
+            <button type="button" class="btn btn-outline-secondary" @onclick="Cancel" disabled="@busy">@(IsNew ? "Cancel" : "Close")</button>
+            <button type="button" class="btn btn-primary" @onclick="Save" disabled="@busy">@(IsNew ? "Add Animal" : "Save")</button>
+        </div>
+    </header>
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    <section class="details" aria-label="Animal details">
+        <div class="fields">
+            <label>Name <input class="form-control" @bind="name" maxlength="120" disabled="@busy" /></label>
+            <label>Animal Type <select class="form-select" @bind="animalType" disabled="@busy">@foreach (var value in AnimalTypes.All) { <option value="@value">@value</option> }</select></label>
+            <label>Behaviour <select class="form-select" @bind="behaviour" disabled="@busy">@foreach (var value in AnimalTypes.Behaviours) { <option value="@value">@value</option> }</select></label>
+            <label>Traits <input class="form-control" @bind="traits" placeholder="Trait, Trait 2" maxlength="1000" disabled="@busy" /></label>
+        </div>
+        <div class="ratings">
+            <label>Hits <input class="form-control" type="number" min="1" @bind="hits" disabled="@busy" /></label>
+            <label>Speed (m) <input class="form-control" type="number" min="0" @bind="speed" disabled="@busy" /></label>
+            <label class="shared-toggle"><input type="checkbox" @bind="shared" disabled="@busy" /> Shared</label>
+        </div>
+        <label class="character-description-field">Description <textarea class="form-control" rows="2" @bind="description" disabled="@busy"></textarea></label>
+        <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
+        <div class="token-editor">
+            @if (CharacterToken.DataUri(tokenImage) is { } preview) { <img class="token-preview" src="@preview" alt="Token preview" /> }
+            <label>Token image <InputFile @key="tokenInputKey" class="form-control" accept="image/png,image/jpeg,image/gif,image/webp" OnChange="SelectToken" disabled="@busy" /><span class="token-hint">PNG, JPEG, GIF or WebP, up to 2 MB</span></label>
+            @if (tokenImage is not null) { <button type="button" class="btn btn-outline-secondary" @onclick="RemoveToken" disabled="@busy">Remove token</button> }
+        </div>
+    </section>
+    <TabBar TValue="AnimalTab" Tabs="Tabs" @bind-Active="activeTab" IdPrefix="animal" AriaLabel="Animal records">
+        @if (!IsNew && activeTab == AnimalTab.Skills) { <CharacterSkills @key="activeTab" Character="current.Character" Embedded="true" OnChanged="Changed" /> }
+        else if (!IsNew) { <AnimalAttacks @key="activeTab" Animal="current" Embedded="true" OnChanged="Changed" /> }
+        else if (activeTab == AnimalTab.Skills)
+        {
+            @* A new animal's skills are generated and saved with it; they become editable once it exists. *@
+            <section class="generated" aria-label="Generated skills">
+                <p>@(current.Character.Skills is { Count: > 0 } skills ? string.Join(", ", skills.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).Select(s => $"{s.Name} {s.Level}")) : "No generated skills.")</p>
+                <p class="secondary">Add the animal to edit its skills.</p>
+            </section>
+        }
+        else
+        {
+            <section class="generated" aria-label="Generated attacks">
+                @if (current.NaturalAttacks.Count > 0) { <p>@string.Join(", ", current.NaturalAttacks.Select(a => $"{a.Name} ({a.Damage})"))</p> }
+                <p class="secondary">Add the animal first, then record its attacks here.</p>
+            </section>
+        }
+    </TabBar>
+</dialog>
+
+@code {
+    // Animals have no career history and carry no armour or weapons; their natural attacks are their weapons.
+    private enum AnimalTab { Skills, Attacks }
+    private static readonly AnimalTab[] Tabs = [AnimalTab.Skills, AnimalTab.Attacks];
+
+    [Parameter, EditorRequired] public Animal Item { get; set; } = default!;
+    /// <summary>The campaign the list is shown for. A Shared animal can belong to another campaign.</summary>
+    [Parameter, EditorRequired] public int CampaignId { get; set; }
+    /// <summary>The details were saved and the dialog should close.</summary>
+    [Parameter] public EventCallback OnSaved { get; set; }
+    /// <summary>Something was saved while the dialog stays open: a new animal, a skill or an attack.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private AnimalTab activeTab = AnimalTab.Skills;
+    private Animal current = default!;
+    private bool IsNew => current.Character.Id == 0;
+    private string name = "", animalType = "Herbivore", behaviour = "Eater", traits = "", description = "";
+    private int hits = 1, speed = 6, tokenInputKey;
+    private InjuryTolerance injuryTolerance;
+    private byte[]? tokenImage;
+    private bool shared, busy, disposed;
+    private string? error;
+    private ElementReference dialog;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<AnimalDialog>? reference;
+
+    protected override void OnInitialized() => Load(Item);
+    private void Load(Animal item)
+    {
+        current = item;
+        name = item.Character.Name; animalType = item.AnimalType; behaviour = item.Behaviour; traits = item.Traits;
+        hits = item.Hits; speed = item.Character.Speed; shared = item.Shared; description = item.Description;
+        injuryTolerance = item.Character.InjuryTolerance; tokenImage = item.Character.TokenImage; tokenInputKey++;
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/EquipmentDialog.js");
+            reference = DotNetObjectReference.Create(this);
+            await module.InvokeVoidAsync("open", dialog, reference);
+        }
+        catch (JSDisconnectedException) { }
+    }
+    [JSInvokable] public async Task Cancel() { if (!busy) await OnClose.InvokeAsync(); }
+    private async Task<Animal?> Stored(int id) => (await Animals.ListAsync(CampaignId)).FirstOrDefault(a => a.Character.Id == id);
+    // Saving an animal's details rewrites its skills and attacks from the record it is given, so keep
+    // that record in step with what the tabs have saved. Unsaved detail fields are left alone.
+    private async Task Changed()
+    {
+        try { if (await Stored(current.Character.Id) is { } stored) current = stored; }
+        catch (Exception) { error = "Unable to refresh this animal."; }
+        await OnChanged.InvokeAsync();
+    }
+    private void RemoveToken() { tokenImage = null; tokenInputKey++; error = null; }
+    private async Task SelectToken(InputFileChangeEventArgs args)
+    {
+        if (busy) return;
+        busy = true;
+        try
+        {
+            if (args.File.Size > CharacterToken.MaxBytes) throw new ArgumentException("Choose an image no larger than 2 MB.");
+            await using var source = args.File.OpenReadStream(CharacterToken.MaxBytes);
+            using var memory = new MemoryStream();
+            await source.CopyToAsync(memory);
+            var bytes = memory.ToArray();
+            if (CharacterToken.ContentType(bytes) is null) throw new ArgumentException("Choose a PNG, JPEG, GIF or WebP image.");
+            if (disposed) return;
+            tokenImage = bytes; error = null;
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to read this image. Please choose it again."; }
+        finally { busy = false; }
+    }
+    private async Task Save()
+    {
+        if (busy) return;
+        busy = true;
+        try
+        {
+            var isNew = IsNew;
+            // Read the stored skills and attacks again just before saving, for the reason given on Changed.
+            var source = isNew ? current : await Stored(current.Character.Id) ?? throw new ArgumentException("This animal no longer exists.");
+            var id = await Animals.SaveAsync(source with { Character = source.Character with { Name = name, Speed = speed, InjuryTolerance = injuryTolerance, TokenImage = tokenImage },
+                Hits = hits, AnimalType = animalType, Behaviour = behaviour, Traits = traits, Description = description, Shared = shared });
+            error = null;
+            if (!isNew) { await OnSaved.InvokeAsync(); return; }
+            // A new animal stays open so its generated skills and its attacks can be adjusted straight away.
+            if (await Stored(id) is not { } saved) { await OnSaved.InvokeAsync(); return; }
+            Load(saved);
+            await OnChanged.InvokeAsync();
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to save this animal."; }
+        finally { busy = false; }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        if (module is not null)
+        {
+            try { await module.InvokeVoidAsync("close", dialog); await module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+        reference?.Dispose();
+    }
+}

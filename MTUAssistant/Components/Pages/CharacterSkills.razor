@@ -1,9 +1,12 @@
 @inject CharacterService CharacterStore
 
-<section class="skills-panel" aria-labelledby="skills-heading">
+<section class="skills-panel @(Embedded ? "embedded" : null)" aria-label="@($"{Character.Name} skills")">
+    @if (!Embedded)
+    {
     <div class="skills-heading"><div class="traveller-identity">
         @if (CharacterToken.DataUri(Character.TokenImage) is { } token) { <img class="header-token" src="@token" alt="@($"{Character.Name} token")" /> }
         <h2 id="skills-heading">@Character.Name · Skills</h2></div><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="OnClose">Close</button></div>
+    }
     @if (error is not null) { <p class="error" role="alert">@error</p> }
     @if (skills.Count == 0 && !loading) { <p class="empty-message">No skills recorded.</p> }
     else if (skills.Count > 0)
@@ -40,6 +43,8 @@
     [Parameter, EditorRequired] public Character Character { get; set; } = default!;
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback OnChanged { get; set; }
+    /// <summary>Shown inside another panel (a Traveller dialog tab): no heading, Close button or frame.</summary>
+    [Parameter] public bool Embedded { get; set; }
     private IReadOnlyList<CharacterSkill> skills = [];
     private const string Custom = "__custom__";
     private string selectedSkill = "", speciality = "", customSkill = "", customSpeciality = "";

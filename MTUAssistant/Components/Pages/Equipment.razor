@@ -5,27 +5,28 @@
 <div class="equipment-page">
     <header class="page-header"><h1>Central Supply Catalog (Armour and Weapons)</h1></header>
     @if (error is not null) { <p class="error" role="alert">@error</p> }
-    @foreach (var kind in new[] { EquipmentKind.Armour, EquipmentKind.Weapon })
-    {
+    @{
+        var kind = activeKind;
         var visibleItems = FilteredItems(kind).ToArray();
-        <section class="equipment-section">
-            <header class="section-header">
-                <h2>@(kind == EquipmentKind.Armour ? "Armour" : "Weapons")</h2>
-                <div class="filter-controls">
-                    <label for="equipment-filter-@kind">
-                        <span class="visually-hidden">Search @(kind == EquipmentKind.Armour ? "armour by name or required skill" : "weapons by name, traits or notes")</span>
-                        <input id="equipment-filter-@kind" class="form-control" type="search" placeholder="@(kind == EquipmentKind.Armour ? "Name or required skill" : "Name, traits or notes")" value="@Filter(kind)" @oninput="args => SetFilter(kind, args)" disabled="@loading" />
-                    </label>
-                    <button type="button" class="btn btn-outline-secondary" @onclick="() => ClearFilter(kind)" disabled="@(loading || string.IsNullOrEmpty(Filter(kind)))">Clear</button>
-                    <button type="button" class="btn btn-primary" @onclick="() => Add(kind)" disabled="@loading">Add @(kind == EquipmentKind.Armour ? "Armour" : "Weapon")</button>
-                </div>
-            </header>
+    }
+    <TabBar TValue="EquipmentKind" Tabs="Kinds" @bind-Active="activeKind" IdPrefix="equipment" AriaLabel="Catalogue sections" TabLabel="KindLabel">
+        <Extras>
+            <div class="filter-controls" @key="kind">
+                <label for="equipment-filter-@kind">
+                    <span class="visually-hidden">Search @(kind == EquipmentKind.Armour ? "armour by name or required skill" : "weapons by name, traits or notes")</span>
+                    <input id="equipment-filter-@kind" class="form-control" type="search" placeholder="@(kind == EquipmentKind.Armour ? "Name or required skill" : "Name, traits or notes")" value="@Filter(kind)" @oninput="args => SetFilter(kind, args)" disabled="@loading" />
+                </label>
+                <button type="button" class="btn btn-outline-secondary" @onclick="() => ClearFilter(kind)" disabled="@(loading || string.IsNullOrEmpty(Filter(kind)))">Clear</button>
+                <button type="button" class="btn btn-primary" @onclick="() => Add(kind)" disabled="@loading">Add @(kind == EquipmentKind.Armour ? "Armour" : "Weapon")</button>
+            </div>
+        </Extras>
+        <ChildContent>
             @if (loading) { <p>Loading equipment…</p> }
             else if (!items.Any(e => e.Kind == kind)) { <p class="empty-message">No @(kind == EquipmentKind.Armour ? "armour" : "weapons") recorded.</p> }
             else if (visibleItems.Length == 0) { <p class="empty-message" role="status">No matching @(kind == EquipmentKind.Armour ? "armour" : "weapons").</p> }
             else
             {
-                <div class="table-wrap"><table class="table equipment-table">
+                <div class="table-wrap" @key="kind"><table class="table equipment-table">
                     <thead><tr><th>Name</th>
                         @if (kind == EquipmentKind.Armour) { <th>Protection</th><th>TL</th><th>Rad</th><th>Kg</th><th>Cost</th><th class="wrap-cell">Required Skill</th> }
                         else { <th>TL</th><th>Range</th><th>Damage</th><th>Kg</th><th>Cost</th><th>Magazine</th><th>Mag Cost</th><th class="wrap-cell">Required Skill</th><th class="wrap-cell traits-cell">Traits</th> }
@@ -40,8 +41,8 @@
                     }</tbody>
                 </table></div>
             }
-        </section>
-    }
+        </ChildContent>
+    </TabBar>
     @if (editing is not null) { <EquipmentDialog @key="editing" Item="editing" OnSaved="Saved" OnClose="Close" /> }
     @if (pendingDelete is { } deleting)
     {
@@ -51,6 +52,10 @@
 
 @code {
     private IReadOnlyList<EquipmentItem> items = [];
+    private static readonly EquipmentKind[] Kinds = [EquipmentKind.Armour, EquipmentKind.Weapon];
+    private static string KindLabel(EquipmentKind kind) => kind == EquipmentKind.Armour ? "Armour" : "Weapons";
+    private EquipmentKind activeKind = EquipmentKind.Armour;
+    // Each tab keeps its own search text, so switching tabs doesn't lose a filter.
     private readonly Dictionary<EquipmentKind, string> filters = [];
     private string Filter(EquipmentKind kind) => filters.GetValueOrDefault(kind, "");
     private void SetFilter(EquipmentKind kind, ChangeEventArgs args) => filters[kind] = args.Value?.ToString() ?? "";
@@ -89,5 +94,6 @@
         catch (Exception) { deleteError = "Unable to delete this equipment."; }
         finally { busy = false; }
     }
-    private async Task Saved(EquipmentItem item) { editing = null; await Load(); }
+    // A new item can be saved under the other category, so show the tab it landed in.
+    private async Task Saved(EquipmentItem item) { editing = null; activeKind = item.Kind; await Load(); }
 }

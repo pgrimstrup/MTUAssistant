@@ -1,18 +1,21 @@
 @inject EquipmentService EquipmentStore
 @inject CharacterService CharacterStore
 
-<section class="equipment-panel" aria-labelledby="traveller-equipment-heading">
+<section class="equipment-panel @(Kind is null ? null : "embedded")" aria-label="@($"{Character.Name} {(Kind is null ? "equipment" : Kind == EquipmentKind.Armour ? "armour" : "weapons")}")">
+    @if (Kind is null)
+    {
     <div class="equipment-heading"><div class="traveller-identity">
         @if (CharacterToken.DataUri(Character.TokenImage) is { } token) { <img class="header-token" src="@token" alt="@($"{Character.Name} token")" /> }
         <h2 id="traveller-equipment-heading">@Character.Name · Equipment</h2></div><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="OnClose">Close</button></div>
+    }
     @if (error is not null) { <p class="error" role="alert">@error</p> }
     @if (loading) { <p>Loading equipment…</p> }
     else
     {
-        @foreach (var kind in new[] { EquipmentKind.Armour, EquipmentKind.Weapon })
+        @foreach (var kind in Kinds)
         {
             <section class="equipment-section">
-                <h3>@(kind == EquipmentKind.Armour ? "Armour" : "Weapons")</h3>
+                @if (Kind is null) { <h3>@(kind == EquipmentKind.Armour ? "Armour" : "Weapons")</h3> }
                 @if (!equipment.Any(e => e.Equipment.Kind == kind))
                 {
                     <p class="empty-message">No @(kind == EquipmentKind.Armour ? "armour" : "weapons") recorded.</p>
@@ -42,9 +45,9 @@
         }
     }
     <div class="equipment-controls">
-        <label>Equipment <select class="form-select" @bind="selectedId" disabled="@(busy || loading)">
-            <option value="0">Select equipment</option>
-            @foreach (var kind in new[] { EquipmentKind.Armour, EquipmentKind.Weapon })
+        <label>@KindName("Equipment", "Armour", "Weapon") <select class="form-select" @bind="selectedId" disabled="@(busy || loading)">
+            <option value="0">Select @KindName("equipment", "armour", "a weapon")</option>
+            @foreach (var kind in Kinds)
             {
                 <optgroup label="@(kind == EquipmentKind.Armour ? "Armour" : "Weapons")">
                     @foreach (var item in catalogue.Where(e => e.Kind == kind && !equipment.Any(owned => owned.Equipment.Id == e.Id)))
@@ -54,8 +57,8 @@
                 </optgroup>
             }
         </select></label>
-        <button type="button" class="btn btn-primary" @onclick="Add" disabled="@(busy || loading || selectedId == 0)">Add Equipment</button>
-        <button type="button" class="btn btn-outline-secondary" @onclick="New" disabled="@(busy || loading)">New Equipment</button>
+        <button type="button" class="btn btn-primary" @onclick="Add" disabled="@(busy || loading || selectedId == 0)">Add @KindName("Equipment", "Armour", "Weapon")</button>
+        <button type="button" class="btn btn-outline-secondary" @onclick="New" disabled="@(busy || loading)">New @KindName("Equipment", "Armour", "Weapon")</button>
     </div>
     @if (detailsEditing is not null) { <CharacterEquipmentDialog @key="detailsEditing" Character="Character" Item="detailsEditing" Adding="addingDetails" OnSaved="DetailsSaved" OnClose="() => detailsEditing = null" /> }
     @if (editing is not null) { <EquipmentDialog @key="editing" Item="editing" OnSaved="Saved" OnClose="() => editing = null" /> }
@@ -65,6 +68,11 @@
     [Parameter, EditorRequired] public Character Character { get; set; } = default!;
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
+    /// <summary>Limits the panel to one category and embeds it (a Traveller dialog tab): no heading,
+    /// Close button or frame. Null shows Armour and Weapons together as a standalone panel.</summary>
+    [Parameter] public EquipmentKind? Kind { get; set; }
+    private EquipmentKind[] Kinds => Kind is { } only ? [only] : [EquipmentKind.Armour, EquipmentKind.Weapon];
+    private string KindName(string both, string armour, string weapon) => Kind is null ? both : Kind == EquipmentKind.Armour ? armour : weapon;
     private IReadOnlyList<CharacterSkill> skills = [];
     private IReadOnlyList<EquipmentItem> catalogue = [];
     private IReadOnlyList<CharacterEquipmentDetails> equipment = [];
@@ -103,14 +111,14 @@
         catch (Exception) { error = "Unable to save worn/equipped status."; }
         finally { busy = false; }
     }
-    private void New() => editing = new();
+    private void New() => editing = new() { Kind = Kind ?? EquipmentKind.Armour };
     private void Edit(EquipmentItem item) => editing = item;
     private async Task Saved(EquipmentItem item)
     {
         var isNew = editing?.Id == 0;
         editing = null;
         await Load();
-        if (isNew) selectedId = item.Id;
+        if (isNew && (Kind is null || item.Kind == Kind)) selectedId = item.Id;
         await OnChanged.InvokeAsync();
     }
     private void Add()

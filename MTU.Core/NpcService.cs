@@ -81,7 +81,8 @@ public sealed class NpcService(MtuDbContext db, CharacterService characterStore)
             .ToArray();
     }
 
-    public async Task SaveAsync(Npc character, bool replaceSkills = false)
+    /// <summary>Returns the saved character's ID, which is new when its Id was 0.</summary>
+    public async Task<int> SaveAsync(Npc character, bool replaceSkills = false)
     {
         var actor = character.Character;
         InjuryToleranceRules.Validate(actor.InjuryTolerance);
@@ -237,6 +238,7 @@ public sealed class NpcService(MtuDbContext db, CharacterService characterStore)
         details.Age = character.Age;
         details.Type = character.Type;
         await db.SaveChangesAsync();
+        return entity.Id;
     }
 
     public async Task DeleteAsync(int campaignId, int characterId)

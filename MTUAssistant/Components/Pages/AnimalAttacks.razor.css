@@ -1,4 +1,5 @@
 .attacks-panel { margin-top:1rem; padding:1.2rem; border:1px solid var(--app-border); border-radius:var(--app-radius); background:var(--app-surface); }
+.attacks-panel.embedded { margin:0; padding:0; border:0; background:none; }
 .attacks-heading { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:1rem; }
 h2 { font-size:1.15rem; margin:0; }
 .attacks-list { overflow-x:auto; }

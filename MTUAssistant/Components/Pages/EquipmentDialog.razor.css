@@ -4,6 +4,7 @@ h2 { font-size:1.2rem; margin:0 0 1rem; }
 .fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.8rem; }
 .fields label { display:grid; gap:.3rem; color:var(--app-muted); font-size:.85rem; }
 .wide { grid-column:1 / -1; }
+.skill-requirement { display:grid; grid-template-columns:minmax(0,1fr) 5.5rem; gap:.5rem; }
 .actions { display:flex; justify-content:flex-end; gap:.6rem; margin-top:1.2rem; }
 .error { color:#ffaaaa; }
 .hint { color:var(--app-muted); font-size:.85rem; }

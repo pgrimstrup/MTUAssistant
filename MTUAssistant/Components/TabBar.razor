@@ -1,0 +1,60 @@
+@typeparam TValue where TValue : notnull
+
+<div class="tab-bar">
+    <div class="tab-list" role="tablist" aria-label="@AriaLabel" @onkeydown="OnKeyDown">
+        @for (var i = 0; i < Tabs.Count; i++)
+        {
+            var index = i;
+            var selected = index == ActiveIndex;
+            <button @ref="buttons[index]" type="button" role="tab" class="tab" id="@TabId(index)" aria-selected="@(selected ? "true" : "false")" aria-controls="@PanelId" tabindex="@(selected ? 0 : -1)" @onclick="() => Select(index)">@(TabLabel?.Invoke(Tabs[index]) ?? Tabs[index].ToString())</button>
+        }
+    </div>
+    @if (Extras is not null) { <div class="tab-extras">@Extras</div> }
+</div>
+<div role="tabpanel" id="@PanelId" aria-labelledby="@TabId(ActiveIndex)">@ChildContent</div>
+
+@code {
+    // Only the active tab's content is rendered: the page supplies it as ChildContent and switches on Active.
+    [Parameter, EditorRequired] public IReadOnlyList<TValue> Tabs { get; set; } = [];
+    [Parameter, EditorRequired] public TValue Active { get; set; } = default!;
+    [Parameter] public EventCallback<TValue> ActiveChanged { get; set; }
+    [Parameter, EditorRequired] public string IdPrefix { get; set; } = "";
+    [Parameter, EditorRequired] public string AriaLabel { get; set; } = "";
+    [Parameter] public Func<TValue, string>? TabLabel { get; set; }
+    [Parameter] public RenderFragment? Extras { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    private ElementReference[] buttons = [];
+    private int? focusIndex;
+    private string PanelId => $"{IdPrefix}-panel";
+    private string TabId(int index) => $"{IdPrefix}-tab-{index}";
+    private int ActiveIndex
+    {
+        get
+        {
+            for (var i = 0; i < Tabs.Count; i++) if (EqualityComparer<TValue>.Default.Equals(Tabs[i], Active)) return i;
+            return 0;
+        }
+    }
+    protected override void OnParametersSet()
+    {
+        if (buttons.Length != Tabs.Count) buttons = new ElementReference[Tabs.Count];
+    }
+    private Task Select(int index) => index == ActiveIndex ? Task.CompletedTask : ActiveChanged.InvokeAsync(Tabs[index]);
+    // Left and Right move between tabs, wrapping at the ends, and focus follows the selection.
+    private async Task OnKeyDown(KeyboardEventArgs args)
+    {
+        var step = args.Key switch { "ArrowRight" => 1, "ArrowLeft" => -1, _ => 0 };
+        if (step == 0 || Tabs.Count < 2) return;
+        var next = (ActiveIndex + step + Tabs.Count) % Tabs.Count;
+        focusIndex = next;
+        await Select(next);
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (focusIndex is not { } index) return;
+        focusIndex = null;
+        if (index >= buttons.Length) return;
+        try { await buttons[index].FocusAsync(); }
+        catch (JSDisconnectedException) { }
+    }
+}

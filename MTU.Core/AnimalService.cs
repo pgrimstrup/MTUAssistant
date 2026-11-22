@@ -117,7 +117,9 @@ public sealed class AnimalService(MtuDbContext db)
             .ToArray();
     }
 
-    public async Task SaveAsync(Animal animal)
+    /// <summary>Returns the saved animal's character ID, which is new when its Id was 0.
+    /// Skills and natural attacks are replaced by those on the record given.</summary>
+    public async Task<int> SaveAsync(Animal animal)
     {
         InjuryToleranceRules.Validate(animal.Character.InjuryTolerance);
         var name = animal.Character.Name.Trim();
@@ -231,6 +233,7 @@ public sealed class AnimalService(MtuDbContext db)
             );
         await db.SaveChangesAsync();
         await tx.CommitAsync();
+        return character.Id;
     }
 
     public async Task SaveAttacksAsync(

@@ -21,10 +21,7 @@ h1 { margin: 0; font-size: 1.8rem; }
 .zone-badge[data-zone="Amber"] { color: #241900; border-color: #ffc107; background: #ffc107; }
 .zone-badge[data-zone="Red"] { color: #fff; border-color: #dc3545; background: #dc3545; }
 .empty-message { color: var(--app-muted); margin-bottom: 1.5rem; }
-.sections { display: grid; gap: 1rem; }
 .cargo-panel { min-height: 8rem; border: 1px solid var(--app-border); border-radius: var(--app-radius); background: var(--app-surface); overflow: hidden; }
-.cargo-panel header { padding: 1.1rem 1.2rem; border-bottom: 1px solid var(--app-border); background: var(--app-surface-2); }
-h2 { margin: 0; font-size: 1.15rem; }
 
 .panel-body { padding: 1.2rem; color: var(--app-muted); }
 .passenger-controls { display: flex; flex-wrap: wrap; align-items: end; gap: .8rem; margin-bottom: 1rem; }
@@ -40,12 +37,9 @@ h2 { margin: 0; font-size: 1.15rem; }
 .fees-heading { margin: 1.5rem 0 .3rem; color: var(--app-text); font-size: 1rem; }
 .fees-caption { margin: 0 0 .6rem; font-size: .8rem; }
 
-.passenger-header { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
 .outdated-badge { padding: .2rem .5rem; border: 1px solid rgba(243,195,108,.4); border-radius: 999px; color: #f3c36c; background: rgba(243,195,108,.1); font-size: .7rem; font-weight: 650; }
 
 .cargo-controls { display: flex; flex-wrap: wrap; align-items: end; gap: .8rem; margin-left: auto; }
-
-.freight-status { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
 
 .mail-available { color: #a3e8c2; border-color: rgba(100, 210, 145, .55); background: rgba(35, 150, 85, .2); }
 .mail-danger { color: #ffaaaa; border-color: rgba(255, 100, 100, .55); background: rgba(190, 45, 45, .2); }

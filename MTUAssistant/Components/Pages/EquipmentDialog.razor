@@ -28,7 +28,10 @@
             <label>Cost (Cr) <input class="form-control" type="number" min="0" step="any" @bind="model.Cost" disabled="@busy" /></label>
             @if (model.Kind == EquipmentKind.Armour)
             {
-                <label>Required Skill <input class="form-control" @bind="model.RequiredSkill" maxlength="240" placeholder="e.g. Vacc Suit 1" disabled="@busy" /></label>
+                <div class="skill-requirement">
+                    <label>Required Skill <select class="form-select" @bind="armourSkill" disabled="@busy"><option value="">None</option>@if (armourSkill.Length > 0 && !EquipmentSkillRules.ArmourSkillNames.Contains(armourSkill)) { <option value="@armourSkill">@armourSkill</option> }@foreach (var skill in EquipmentSkillRules.ArmourSkillNames) { <option value="@skill">@skill</option> }</select></label>
+                    <label>Level <input class="form-control" type="number" min="0" step="1" @bind="armourLevel" disabled="@(busy || armourSkill.Length == 0)" /></label>
+                </div>
             }
             else
             {
@@ -63,7 +66,15 @@
     private DotNetObjectReference<EquipmentDialog>? reference;
     private bool busy;
     private string? error;
-    protected override void OnInitialized() => model = Item.Copy();
+    // Armour stores skill and level as one text value ("Vacc Suit 1"); the dialog edits them apart.
+    // A saved skill that isn't in the catalogue stays selectable so editing never drops it.
+    private string armourSkill = "";
+    private int armourLevel;
+    protected override void OnInitialized()
+    {
+        model = Item.Copy();
+        if (model.Kind == EquipmentKind.Armour) (armourSkill, armourLevel) = EquipmentSkillRules.ParseArmourRequirement(model.RequiredSkill);
+    }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
@@ -82,6 +93,7 @@
         busy = true;
         try
         {
+            if (model.Kind == EquipmentKind.Armour) model.RequiredSkill = EquipmentSkillRules.FormatArmourRequirement(armourSkill, armourLevel);
             var saved = await EquipmentStore.SaveAsync(model);
             await OnSaved.InvokeAsync(saved);
         }

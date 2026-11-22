@@ -1,0 +1,155 @@
+@implements IAsyncDisposable
+@inject CharacterService CharacterStore
+@inject IJSRuntime JS
+
+<dialog @ref="dialog" class="traveller-dialog" aria-labelledby="traveller-dialog-heading">
+    <header class="dialog-header">
+        <h2 id="traveller-dialog-heading">@(current.Id == 0 ? "Add Traveller" : "Edit Traveller")</h2>
+        <div class="actions">
+            <button type="button" class="btn btn-outline-secondary" @onclick="Cancel" disabled="@busy">@(current.Id == 0 ? "Cancel" : "Close")</button>
+            <button type="button" class="btn btn-primary" @onclick="Save" disabled="@busy">@(current.Id == 0 ? "Add Traveller" : "Save")</button>
+        </div>
+    </header>
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    <section class="details" aria-label="Traveller details">
+        <div class="fields">
+            <label>Traveller Name <input class="form-control" maxlength="120" @bind="travellerName" disabled="@busy" /></label>
+            <label>Player Name <input class="form-control" maxlength="120" @bind="playerName" disabled="@busy" /></label>
+            <label>Race <input class="form-control" maxlength="120" @bind="race" disabled="@busy" /></label>
+            <label>Terms Served <input class="form-control" maxlength="240" placeholder="Navy 3, Diplomat 1" @bind="terms" disabled="@busy" /></label>
+        </div>
+        <div class="numbers">
+            <div class="characteristics" role="group" aria-label="Characteristics">
+                @for (var i = 0; i < scores.Length; i++)
+                {
+                    var index = i;
+                    <label>@CharacteristicProfile.Labels[index] <input class="form-control" type="number" min="0" max="@CharacteristicProfile.MaxScore" step="1" @bind="scores[index]" disabled="@busy" /></label>
+                }
+            </div>
+            <div class="ratings">
+                <label>Naval Rank <input class="form-control" type="number" min="0" @bind="naval" disabled="@busy" /></label>
+                <label>Scout Rank <input class="form-control" type="number" min="0" @bind="scout" disabled="@busy" /></label>
+                <label>Speed (m) <input class="form-control" type="number" min="0" step="1" @bind="speed" disabled="@busy" /></label>
+                <label>Natural DR <input class="form-control" type="number" min="0" @bind="naturalDr" disabled="@busy" /></label>
+            </div>
+        </div>
+        <label class="character-description-field">Description <textarea class="form-control" rows="2" @bind="description" disabled="@busy"></textarea></label>
+        <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
+        <div class="token-editor">
+            @if (CharacterToken.DataUri(tokenImage) is { } preview) { <img class="token-preview" src="@preview" alt="Token preview" /> }
+            <label>Player Token <InputFile @key="tokenInputKey" class="form-control" accept="image/png,image/jpeg,image/gif,image/webp" OnChange="SelectToken" disabled="@busy" /><span class="token-hint">PNG, JPEG, GIF or WebP, up to 2 MB</span></label>
+            @if (tokenImage is not null) { <button type="button" class="btn btn-outline-secondary" @onclick="RemoveToken" disabled="@busy">Remove token</button> }
+            <label class="inactive-toggle"><input type="checkbox" @bind="inactive" disabled="@busy" /> Inactive</label>
+        </div>
+    </section>
+    <TabBar TValue="TravellerTab" Tabs="Tabs" @bind-Active="activeTab" IdPrefix="traveller" AriaLabel="Traveller records">
+        @if (activeTab == TravellerTab.Career) { <p class="empty-message">Career history will be added here.</p> }
+        else if (current.Id == 0) { <p class="empty-message">Add the Traveller first, then record @(activeTab == TravellerTab.Skills ? "skills" : activeTab == TravellerTab.Armour ? "armour" : "weapons") here.</p> }
+        else if (activeTab == TravellerTab.Skills) { <CharacterSkills @key="activeTab" Character="current" Embedded="true" OnChanged="OnChanged" /> }
+        else { <CharacterEquipment @key="activeTab" Character="current" Kind="@(activeTab == TravellerTab.Armour ? EquipmentKind.Armour : EquipmentKind.Weapon)" OnChanged="OnChanged" /> }
+    </TabBar>
+</dialog>
+
+@code {
+    private enum TravellerTab { Career, Skills, Armour, Weapons }
+    private static readonly TravellerTab[] Tabs = [TravellerTab.Career, TravellerTab.Skills, TravellerTab.Armour, TravellerTab.Weapons];
+
+    [Parameter, EditorRequired] public Character Item { get; set; } = default!;
+    /// <summary>The details were saved and the dialog should close.</summary>
+    [Parameter] public EventCallback OnSaved { get; set; }
+    /// <summary>Something was saved while the dialog stays open: a new Traveller, a skill or equipment.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    // Career is empty for now, so the dialog opens on Skills.
+    private TravellerTab activeTab = TravellerTab.Skills;
+    private Character current = default!;
+    private string playerName = "", travellerName = "", race = "", terms = "0", description = "";
+    // The UPP is stored as text. The scores are edited apart and joined on save; digits after SOC (such as PSI) are kept.
+    private int?[] scores = [], savedScores = [];
+    private string extraDigits = "";
+    private int naval, scout, naturalDr, speed = 6, tokenInputKey;
+    private InjuryTolerance injuryTolerance;
+    private byte[]? tokenImage;
+    private bool inactive, busy, disposed;
+    private string? error;
+    private ElementReference dialog;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<TravellerDialog>? reference;
+
+    protected override void OnInitialized()
+    {
+        current = Item;
+        playerName = Item.PlayerName; travellerName = Item.Name; race = Item.Race; terms = Item.TermsServed;
+        naval = Item.HighestNavalRank; scout = Item.HighestScoutRank; naturalDr = Item.NaturalDr; speed = Item.Speed;
+        injuryTolerance = Item.InjuryTolerance; description = Item.Description; tokenImage = Item.TokenImage; inactive = Item.Inactive;
+        (scores, extraDigits) = CharacteristicProfile.Split(Item.Upp);
+        savedScores = [.. scores];
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/EquipmentDialog.js");
+            reference = DotNetObjectReference.Create(this);
+            await module.InvokeVoidAsync("open", dialog, reference);
+        }
+        catch (JSDisconnectedException) { }
+    }
+    [JSInvokable] public async Task Cancel() { if (!busy) await OnClose.InvokeAsync(); }
+    private void RemoveToken() { tokenImage = null; tokenInputKey++; error = null; }
+    private async Task SelectToken(InputFileChangeEventArgs args)
+    {
+        if (busy) return;
+        busy = true;
+        try
+        {
+            if (args.File.Size > CharacterToken.MaxBytes) throw new ArgumentException("Choose an image no larger than 2 MB.");
+            await using var source = args.File.OpenReadStream(CharacterToken.MaxBytes);
+            using var memory = new MemoryStream();
+            await source.CopyToAsync(memory);
+            var bytes = memory.ToArray();
+            if (CharacterToken.ContentType(bytes) is null) throw new ArgumentException("Choose a PNG, JPEG, GIF or WebP image.");
+            if (disposed) return;
+            tokenImage = bytes; error = null;
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to read this image. Please choose it again."; }
+        finally { busy = false; }
+    }
+    // An untouched profile is saved back as it was, so an unusual stored UPP is never rewritten by accident.
+    private string Upp() => scores.SequenceEqual(savedScores) ? current.Upp : CharacteristicProfile.Join(scores, extraDigits);
+    private async Task Save()
+    {
+        if (busy) return;
+        busy = true;
+        try
+        {
+            var isNew = current.Id == 0;
+            var saved = current with { PlayerName = playerName, Name = travellerName, Race = race, Upp = Upp(),
+                TermsServed = terms, HighestNavalRank = naval, HighestScoutRank = scout, NaturalDr = naturalDr, Speed = speed,
+                InjuryTolerance = injuryTolerance, TokenImage = tokenImage, Inactive = inactive, Description = description };
+            var id = await CharacterStore.SaveAsync(saved);
+            error = null;
+            if (!isNew) { await OnSaved.InvokeAsync(); return; }
+            // A new Traveller stays open so skills, armour and weapons can be added straight away.
+            current = saved with { Id = id };
+            savedScores = [.. scores];
+            await OnChanged.InvokeAsync();
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to save this Traveller."; }
+        finally { busy = false; }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        if (module is not null)
+        {
+            try { await module.InvokeVoidAsync("close", dialog); await module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+        reference?.Dispose();
+    }
+}

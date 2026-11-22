@@ -109,6 +109,97 @@ public static class SkillChecks
         );
         EquipmentItem withNoRequirement() =>
             new() { Kind = EquipmentKind.Armour, RequiredSkill = "None" };
+        Check(
+            EquipmentSkillRules.ParseArmourRequirement(" Vacc Suit 1 ") == ("Vacc Suit", 1)
+                && EquipmentSkillRules.ParseArmourRequirement("Gun Combat (Slug) 2")
+                    == ("Gun Combat (Slug)", 2)
+                && EquipmentSkillRules.ParseArmourRequirement("Gun Combat") == ("Gun Combat", 0)
+                && EquipmentSkillRules.ParseArmourRequirement("Vacc Suit 0") == ("Vacc Suit", 0),
+            "Armour requirement splits into skill and level, defaulting to level zero"
+        );
+        Check(
+            EquipmentSkillRules.ParseArmourRequirement(null) == ("", 0)
+                && EquipmentSkillRules.ParseArmourRequirement("  ") == ("", 0)
+                && EquipmentSkillRules.ParseArmourRequirement("none") == ("", 0)
+                && EquipmentSkillRules.ParseArmourRequirement("-") == ("", 0),
+            "Blank, None and dash mean no armour requirement"
+        );
+        Check(
+            EquipmentSkillRules.FormatArmourRequirement("Gun Combat", 0) == "Gun Combat"
+                && EquipmentSkillRules.FormatArmourRequirement(" Vacc Suit ", 1) == "Vacc Suit 1"
+                && EquipmentSkillRules.FormatArmourRequirement("Gun Combat (Slug)", 2)
+                    == "Gun Combat (Slug) 2"
+                && EquipmentSkillRules.FormatArmourRequirement("", 3) is null
+                && EquipmentSkillRules.FormatArmourRequirement(null, 0) is null,
+            "Armour requirement omits level zero and is null without a skill"
+        );
+        try
+        {
+            EquipmentSkillRules.FormatArmourRequirement("Vacc Suit", -1);
+            throw new Exception("Negative armour skill level accepted");
+        }
+        catch (ArgumentException) { }
+        var names = EquipmentSkillRules.ArmourSkillNames;
+        Check(
+            names[0] == "Vacc Suit"
+                && !names.Any(n => n.StartsWith("Vacc Suit ("))
+                && names
+                    .Skip(1)
+                    .Take(4)
+                    .SequenceEqual([
+                        "Athletics",
+                        "Athletics (Dexterity)",
+                        "Athletics (Endurance)",
+                        "Athletics (Strength)",
+                    ])
+                && names.Distinct().Count() == names.Count
+                && names.All(n => CharacterSkillCatalogue.Parse(n).Skill is not null)
+                && !names.Any(n => n.StartsWith("Gun Combat") || n.StartsWith("Language")),
+            "Armour skill names are a short catalogue subset, each skill followed by its specialities"
+        );
+        Check(
+            EquipmentSkillRules.MeetsArmourRequirement(
+                [Skill("Gun Combat (Slug)", 1)],
+                new() { Kind = EquipmentKind.Armour, RequiredSkill = "Gun Combat" }
+            )
+                && !EquipmentSkillRules.MeetsArmourRequirement(
+                    [],
+                    new() { Kind = EquipmentKind.Armour, RequiredSkill = "Gun Combat" }
+                ),
+            "A requirement without a level needs the skill at level zero"
+        );
+        await ArmourRequirementStorageAsync();
+        static async Task ArmourRequirementStorageAsync()
+        {
+            using var armourConnection = new SqliteConnection("Data Source=:memory:");
+            await armourConnection.OpenAsync();
+            var armourOptions = new DbContextOptionsBuilder<MtuDbContext>()
+                .UseSqlite(armourConnection)
+                .Options;
+            await using var armourDb = new MtuDbContext(armourOptions);
+            await armourDb.Database.EnsureCreatedAsync();
+            var equipment = new EquipmentService(armourDb);
+            async Task<string?> Saved(string name, string? required) =>
+                (
+                    await equipment.SaveAsync(
+                        new EquipmentItem
+                        {
+                            Kind = EquipmentKind.Armour,
+                            Name = name,
+                            RequiredSkill = required,
+                        }
+                    )
+                ).RequiredSkill;
+            Check(
+                await Saved("Zero", "Vacc Suit 0") == "Vacc Suit"
+                    && await Saved("Bare", "Gun Combat") == "Gun Combat"
+                    && await Saved("Ranked", " Vacc Suit 1 ") == "Vacc Suit 1"
+                    && await Saved("Unlisted", "Battle Dress 2") == "Battle Dress 2"
+                    && await Saved("None", "None") is null
+                    && await Saved("Blank", "") is null,
+                "Saved armour requirements drop level zero and keep other levels"
+            );
+        }
         var ranged = new CharacterEquipmentDetails
         {
             Equipped = true,

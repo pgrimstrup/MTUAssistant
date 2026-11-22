@@ -1,7 +1,7 @@
 @inject AnimalService Animals
 
-<section class="attacks-panel" aria-labelledby="attacks-heading">
-    <div class="attacks-heading"><h2 id="attacks-heading">@Animal.Character.Name · Natural Attacks</h2><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="OnClose" disabled="@busy">Close</button></div>
+<section class="attacks-panel @(Embedded ? "embedded" : null)" aria-label="@($"{Animal.Character.Name} natural attacks")">
+    @if (!Embedded) { <div class="attacks-heading"><h2 id="attacks-heading">@Animal.Character.Name · Natural Attacks</h2><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="OnClose" disabled="@busy">Close</button></div> }
     @if (error is not null) { <p class="error" role="alert">@error</p> }
     @if (attacks.Count == 0) { <p class="empty-message">No natural attacks recorded.</p> }
     else
@@ -27,6 +27,8 @@
     [Parameter, EditorRequired] public Animal Animal { get; set; } = default!;
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
+    /// <summary>Shown inside another panel (an Animal dialog tab): no heading, Close button or frame.</summary>
+    [Parameter] public bool Embedded { get; set; }
     private List<NaturalAttack> attacks = [];
     private string name = "", damage = "";
     private int editingIndex = -1;

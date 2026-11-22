@@ -2,37 +2,41 @@
 @inject CoverProtectionService Store
 
 <PageTitle>Cover Protection</PageTitle>
-<section class="cover-page">
-    <header><h1>Cover Protection</h1><button class="btn btn-primary" disabled="@busy" @onclick="Add">Add Cover</button></header>
-    <p>Hits are reference values; cover damage is not tracked.</p>
-    @if (error is not null) { <p role="alert" class="text-danger">@error</p> }
-    @if (loading) { <p>Loading cover protection…</p> }
-    else if (items.Count == 0) { <p>No cover protection recorded.</p> }
-    else
-    {
-        <div class="table-wrap"><table class="table"><thead><tr><th>Cover</th><th>Protection</th><th>Hits</th><th>Actions</th></tr></thead><tbody>
-        @foreach (var item in items)
-        {
-            <tr @key="item.Id"><th scope="row">@item.Name</th><td>+@item.Protection</td><td>@item.Hits</td><td><button class="btn btn-sm btn-outline-secondary" disabled="@busy" @onclick="() => Edit(item)">Edit</button> <button class="btn btn-sm btn-outline-danger" disabled="@busy" @onclick="() => ConfirmDelete(item)">Delete</button></td></tr>
-        }
-        </tbody></table></div>
-    }
+<div class="cover-page">
+    <header class="page-header"><div><h1>Cover Protection</h1><p>Hits are reference values; cover damage is not tracked.</p></div>
+        <button type="button" class="btn btn-primary" disabled="@busy" @onclick="Add">Add Cover</button>
+    </header>
+    @if (error is not null) { <p class="error" role="alert">@error</p> }
     @if (editing is not null)
     {
-        <section class="cover-editor" aria-labelledby="cover-editor-title">
+        <section class="editor" aria-labelledby="cover-editor-title">
             <h2 id="cover-editor-title">@(editing.Id == 0 ? "Add Cover" : "Edit Cover")</h2>
-            <label>Cover<input class="form-control" maxlength="120" @bind="editing.Name" disabled="@busy" /></label>
-            <label>Protection<input class="form-control" type="number" min="0" @bind="editing.Protection" disabled="@busy" /></label>
-            <label>Hits<input class="form-control" type="number" min="1" @bind="editing.Hits" disabled="@busy" /></label>
-            <button class="btn btn-primary" disabled="@busy" @onclick="Save">Save</button>
-            <button class="btn btn-outline-secondary" disabled="@busy" @onclick="Close">Cancel</button>
+            <div class="fields">
+                <label>Cover <input class="form-control" maxlength="120" @bind="editing.Name" disabled="@busy" /></label>
+                <label>Protection <input class="form-control" type="number" min="0" @bind="editing.Protection" disabled="@busy" /></label>
+                <label>Hits <input class="form-control" type="number" min="1" @bind="editing.Hits" disabled="@busy" /></label>
+            </div>
+            <div class="actions"><button type="button" class="btn btn-outline-secondary" disabled="@busy" @onclick="Close">Cancel</button><button type="button" class="btn btn-primary" disabled="@busy" @onclick="Save">Save</button></div>
         </section>
     }
     @if (pendingDelete is { } deleting)
     {
         <DeleteConfirmDialog @key="deleting.Id" Title="Delete Cover" ConfirmText="Delete Cover" Busy="busy" Error="@error" OnConfirm="Delete" OnCancel="CancelDelete"><p>Delete <strong>@deleting.Name</strong>? Saved encounters will retain their selected cover values.</p></DeleteConfirmDialog>
     }
-</section>
+    @if (loading) { <p class="empty-message">Loading cover protection…</p> }
+    else if (items.Count == 0) { <p class="empty-message">No cover protection recorded.</p> }
+    else
+    {
+        <div class="table-wrap"><table class="table cover-table"><thead><tr><th>Cover</th><th>Protection</th><th>Hits</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+            <tbody>@foreach (var item in items)
+            {
+                <tr @key="item.Id"><th scope="row">@item.Name</th><td>+@item.Protection</td><td>@item.Hits</td>
+                    <td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" disabled="@busy" @onclick="() => Edit(item)">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" disabled="@busy" @onclick="() => ConfirmDelete(item)">Delete</button></td>
+                </tr>
+            }</tbody>
+        </table></div>
+    }
+</div>
 
 @code {
     private IReadOnlyList<CoverProtection> items = [];
