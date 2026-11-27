@@ -16,7 +16,8 @@ public sealed record Character(
     bool Inactive = false,
     IReadOnlyList<EquipmentItem>? Equipment = null,
     bool IsNpc = false,
-    InjuryTolerance InjuryTolerance = InjuryTolerance.None,
+    // Zero or more Injury Tolerance records; the ones matching an attack stack.
+    IReadOnlyList<InjuryTolerance>? InjuryTolerances = null,
     int Speed = 6,
     string Description = "",
     int Birthday = 1,
@@ -58,7 +59,7 @@ public sealed class CharacterService(MtuDbContext db)
                 t.Inactive,
                 null,
                 t.IsNpc,
-                t.InjuryTolerance,
+                null,
                 t.Speed,
                 t.Description,
                 t.Birthday,
@@ -96,6 +97,11 @@ public sealed class CharacterService(MtuDbContext db)
             .Select(e => new { e.CharacterId, e.Equipment })
             .ToArrayAsync();
         var byEquipment = equipment.ToLookup(e => e.CharacterId, e => e.Equipment);
+        var tolerances = await InjuryToleranceStore.LoadAsync(
+            db.CharacterInjuryTolerances.Where(t =>
+                t.Character.CampaignId == campaignId && t.Character.IsNpc == npcs
+            )
+        );
         return characters
             .Select(t =>
                 t with
@@ -103,6 +109,7 @@ public sealed class CharacterService(MtuDbContext db)
                     Skills = byCharacter[t.Id].ToArray(),
                     Equipment = byEquipment[t.Id].ToArray(),
                     Career = CareerService.Numbered(career[t.Id]),
+                    InjuryTolerances = tolerances[t.Id].ToArray(),
                 }
             )
             .ToArray();
@@ -213,7 +220,7 @@ public sealed class CharacterService(MtuDbContext db)
     /// <summary>Returns the saved Traveller's ID, which is new when character.Id was 0.</summary>
     public async Task<int> SaveAsync(Character character)
     {
-        InjuryToleranceRules.Validate(character.InjuryTolerance);
+        InjuryToleranceRules.Validate(character.InjuryTolerances);
         if (character.Speed < 0)
             throw new ArgumentException("Speed must be zero or greater.");
         LineOfSight.Validate(character.VisualDistance, "Light");
@@ -251,7 +258,7 @@ public sealed class CharacterService(MtuDbContext db)
         entity.Upp = upp;
         entity.Birthday = character.Birthday;
         entity.NaturalDr = character.NaturalDr;
-        entity.InjuryTolerance = character.InjuryTolerance;
+        await InjuryToleranceStore.ReplaceAsync(db, entity, character.InjuryTolerances);
         entity.Speed = character.Speed;
         entity.VisualDistance = character.VisualDistance;
         entity.TokenImage = character.TokenImage;

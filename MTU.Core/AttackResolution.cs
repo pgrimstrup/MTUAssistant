@@ -37,12 +37,20 @@ public sealed record AttackOutcome(
     int ArmourPiercing,
     int? AppliedInjury = null,
     CombatMishap? Mishap = null,
+    // Older saved encounters stored the one applicable tolerance's effects here; it is read
+    // only when ToleranceEffect is missing.
     InjuryTolerance InjuryTolerance = InjuryTolerance.None,
     int WeaponDamageDice = 0,
     int? StrengthDamageDm = null,
-    int BurstDamageBonus = 0
+    int BurstDamageBonus = 0,
+    InjuryToleranceEffect? ToleranceEffect = null
 )
 {
+    /// <summary>The stacked Injury Tolerance effect applied to this attack's injury.</summary>
+    [JsonIgnore]
+    public InjuryToleranceEffect AppliedToleranceEffect =>
+        ToleranceEffect ?? InjuryToleranceEffect.Of(InjuryTolerance);
+
     [JsonIgnore]
     public int Effect => AttackRoll + Modifier - 8;
 
@@ -66,7 +74,7 @@ public sealed record AttackOutcome(
 
     [JsonIgnore]
     public int CalculatedInjury =>
-        InjuryToleranceRules.Apply(InjuryAfterProtection, InjuryTolerance, WeaponDamageDice);
+        InjuryToleranceRules.Apply(InjuryAfterProtection, AppliedToleranceEffect, WeaponDamageDice);
 
     [JsonIgnore]
     public string AttackSummary =>
@@ -110,7 +118,7 @@ public sealed class AttackResolution
     public int ArmourPiercing { get; }
     public int TargetOriginalHp { get; }
     public int TargetRemainingHp { get; }
-    public InjuryTolerance ApplicableInjuryTolerance { get; }
+    public InjuryToleranceEffect ApplicableInjuryTolerance { get; }
     public int WeaponDamageDice { get; }
     public int? StrengthDamageDm { get; }
     public int TargetIndex { get; }
@@ -150,10 +158,10 @@ public sealed class AttackResolution
                 OverallProtection,
                 ArmourPiercing,
                 Mishap: Mishap,
-                InjuryTolerance: ApplicableInjuryTolerance,
                 WeaponDamageDice: WeaponDamageDice,
                 StrengthDamageDm: StrengthDamageDm,
-                BurstDamageBonus: BurstDamageBonus
+                BurstDamageBonus: BurstDamageBonus,
+                ToleranceEffect: ApplicableInjuryTolerance
             )
             : null;
     public bool Ready =>
@@ -167,7 +175,7 @@ public sealed class AttackResolution
         int protection,
         int targetOriginalHp,
         int targetRemainingHp,
-        InjuryTolerance injuryTolerance,
+        IReadOnlyList<InjuryTolerance>? injuryTolerances,
         bool melee,
         int strengthDamageDm,
         string protectionBreakdown,
@@ -185,7 +193,11 @@ public sealed class AttackResolution
         TargetName = target.Name;
         Weapon = weapon.Copy();
         StrengthDamageDm = melee ? strengthDamageDm : null;
-        ApplicableInjuryTolerance = InjuryToleranceRules.Applicable(injuryTolerance, weapon, melee);
+        ApplicableInjuryTolerance = InjuryToleranceRules.Applicable(
+            injuryTolerances,
+            weapon,
+            melee
+        );
         WeaponDamageDice = InjuryToleranceRules.DamageDice(weapon.Damage);
         Modifiers = modifiers;
         mishapSkillDm = string.IsNullOrWhiteSpace(weapon.RequiredSkill)
@@ -318,7 +330,7 @@ public sealed partial class Encounter
         CombatLoadout? loadout,
         CombatLoadout? targetLoadout,
         int naturalDr,
-        InjuryTolerance injuryTolerance = InjuryTolerance.None,
+        IReadOnlyList<InjuryTolerance>? injuryTolerances = null,
         int targetIndex = 0
     )
     {
@@ -372,7 +384,7 @@ public sealed partial class Encounter
             protection,
             MaximumHp(target),
             Hp(target),
-            injuryTolerance,
+            injuryTolerances,
             state.MajorAction == "Melee Attack",
             actor.IsAnimal ? 0 : Dm(Health(actor).Strength),
             string.Join(", ", protectionParts.Select(part => part.Description)),

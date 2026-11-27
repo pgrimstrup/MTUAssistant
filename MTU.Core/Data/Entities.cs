@@ -174,9 +174,19 @@ public class CharacterEntity
     /// <summary>How far the character can see by its own means, in metres, when clearing fog by
     /// line of sight. 0 leaves it to the scene's Ambient Light.</summary>
     public int VisualDistance { get; set; }
-    public InjuryTolerance InjuryTolerance { get; set; }
     public byte[]? TokenImage { get; set; }
     public bool Inactive { get; set; }
+}
+
+/// <summary>One Injury Tolerance record of a character or creature, in Sequence order. A
+/// character can have any number, and the matching ones stack.</summary>
+public class CharacterInjuryToleranceEntity
+{
+    public int Id { get; set; }
+    public int CharacterId { get; set; }
+    public CharacterEntity Character { get; set; } = null!;
+    public int Sequence { get; set; }
+    public InjuryTolerance Tolerance { get; set; }
 }
 
 /// <summary>One four-year term of a character's career, in Sequence order.</summary>

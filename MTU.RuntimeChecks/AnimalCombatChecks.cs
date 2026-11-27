@@ -47,7 +47,7 @@ public static class AnimalCombatChecks
                         new CharacterSkill(0, 0, "Melee (Natural)", 3),
                         new CharacterSkill(0, 0, "Tactics (Military)", 2),
                     ],
-                    InjuryTolerance: tolerance
+                    InjuryTolerances: [tolerance]
                 ),
                 30,
                 "Carnivores",
@@ -83,7 +83,8 @@ public static class AnimalCombatChecks
         Check(
             first.IsAnimal
                 && first.AnimalHits == 30
-                && first.InjuryTolerance == tolerance
+                && first.InjuryTolerances is [var saved]
+                && saved == tolerance
                 && first.NaturalAttacks!.Count == 2,
             "Animal scene metadata includes Hits, attacks and tolerance"
         );
@@ -287,7 +288,7 @@ public static class AnimalCombatChecks
                 && incoming.Rows.Single(r => r.Name == "Target Small").Dm == -1,
             "Large and Small apply to incoming attacks"
         );
-        var hit = encounter.BeginAttack(hero.Id, roster, sword, loadout, 0, first.InjuryTolerance);
+        var hit = encounter.BeginAttack(hero.Id, roster, sword, loadout, 0, first.InjuryTolerances);
         hit.SetAttackRoll(8);
         hit.SetDamageRoll(12);
         var raw = hit.Outcome!.InjuryAfterProtection;

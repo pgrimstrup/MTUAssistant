@@ -83,6 +83,9 @@ public sealed class AnimalService(MtuDbContext db)
             .Where(a => ids.Contains(a.CharacterId))
             .OrderBy(a => a.Id)
             .ToArrayAsync();
+        var tolerances = await InjuryToleranceStore.LoadAsync(
+            db.CharacterInjuryTolerances.Where(t => ids.Contains(t.CharacterId))
+        );
         return rows.Select(a => new Animal(
                 new Character(
                     a.Character.Id,
@@ -97,7 +100,7 @@ public sealed class AnimalService(MtuDbContext db)
                     false,
                     [],
                     false,
-                    a.Character.InjuryTolerance,
+                    tolerances[a.CharacterId].ToArray(),
                     a.Character.Speed
                 ),
                 a.Hits,
@@ -118,7 +121,7 @@ public sealed class AnimalService(MtuDbContext db)
     /// Skills and natural attacks are replaced by those on the record given.</summary>
     public async Task<int> SaveAsync(Animal animal)
     {
-        InjuryToleranceRules.Validate(animal.Character.InjuryTolerance);
+        InjuryToleranceRules.Validate(animal.Character.InjuryTolerances);
         var name = animal.Character.Name.Trim();
         if (name.Length is 0 or > 120)
             throw new ArgumentException("Enter an animal name of up to 120 characters.");
@@ -163,7 +166,6 @@ public sealed class AnimalService(MtuDbContext db)
                 Upp = "",
                 NaturalDr = 0,
                 Speed = animal.Character.Speed,
-                InjuryTolerance = animal.Character.InjuryTolerance,
                 TokenImage = animal.Character.TokenImage,
             };
             details = new AnimalEntity { Character = character };
@@ -190,7 +192,6 @@ public sealed class AnimalService(MtuDbContext db)
             character.Name = name;
             character.NaturalDr = 0;
             character.Speed = animal.Character.Speed;
-            character.InjuryTolerance = animal.Character.InjuryTolerance;
             character.TokenImage = animal.Character.TokenImage;
             var oldSkills = await db
                 .CharacterSkills.Where(s => s.CharacterId == character.Id)
@@ -206,6 +207,7 @@ public sealed class AnimalService(MtuDbContext db)
                     }
                 );
         }
+        await InjuryToleranceStore.ReplaceAsync(db, character, animal.Character.InjuryTolerances);
         details.Shared = animal.Shared;
         details.Hits = animal.Hits;
         details.AnimalType = AnimalTypes.Normalize(animal.AnimalType);

@@ -307,6 +307,14 @@ h1:focus {
 .sheet .injury-tolerance.injury-tolerance label { padding: .2rem .6rem; border: 1px solid var(--sheet-line); border-radius: 2px; background: var(--sheet-panel-2); font-family: var(--sheet-mono); font-size: .72rem; letter-spacing: .04em; cursor: pointer; }
 .sheet .injury-tolerance.injury-tolerance label:has(input:checked) { border-color: var(--sheet-red); background: rgba(179,51,58,.22); }
 .sheet .injury-tolerance.injury-tolerance input { accent-color: var(--sheet-red); }
+/* Each Injury Tolerance record is its own row of chips, numbered, with a remove button. */
+.sheet .injury-tolerance-record { width: 100%; padding: .35rem .5rem; border-left: 2px solid var(--sheet-red); background: var(--sheet-panel); }
+.sheet .injury-tolerance-record.incomplete { border-left-color: var(--sheet-reduced); }
+.sheet .injury-tolerance-number { color: var(--sheet-red-text); font-family: var(--sheet-display); font-size: 1.1rem; }
+.sheet .injury-tolerance-vs, .sheet .injury-tolerance-empty { color: var(--sheet-label); font-family: var(--sheet-mono); font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; opacity: 1; }
+.sheet .injury-tolerance-remove { margin-left: auto; color: var(--sheet-label); }
+.sheet .injury-tolerance-remove:hover:not(:disabled) { color: var(--sheet-red-text); }
+.sheet .injury-tolerance-record .sheet-hint { width: 100%; color: var(--sheet-reduced); }
 
 /* Characteristics: one card per score. */
 .sheet-upp { display: flex; align-items: baseline; gap: 1.2rem; color: var(--sheet-label); font-weight: 500; }

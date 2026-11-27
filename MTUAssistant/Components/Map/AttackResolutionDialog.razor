@@ -24,7 +24,7 @@
         </dt><dd>@Resolution.OverallProtection</dd>
         <dt>Weapon AP</dt><dd>@Resolution.ArmourPiercing</dd>
         <dt>Remaining Protection</dt><dd>@Math.Max(0, Resolution.OverallProtection - Resolution.ArmourPiercing)</dd>
-        @if (Resolution.ApplicableInjuryTolerance != InjuryTolerance.None)
+        @if (Resolution.ApplicableInjuryTolerance.Any)
         { <dt>Injury Tolerance</dt><dd>@InjuryToleranceRules.Describe(Resolution.ApplicableInjuryTolerance, Resolution.WeaponDamageDice)</dd> }
         <dt style="@InjuryStyle">Calculated Injury</dt><dd style="@InjuryStyle">@(Resolution.Outcome is { } injuryResult && (!injuryResult.Hit || Resolution.DamageRoll.HasValue) ? injuryResult.CalculatedInjury.ToString() : "Pending")</dd>
     </dl>

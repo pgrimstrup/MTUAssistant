@@ -48,7 +48,7 @@
                         <label><span class="sheet-label">Quirks 2</span><input class="sheet-input" @bind="quirks2" maxlength="500" placeholder="—" disabled="@busy" /></label>
                     </div>
                     <label class="description"><span class="sheet-label">Description</span><textarea class="sheet-input" rows="3" placeholder="Appearance, manner, background" @bind="description" disabled="@busy"></textarea></label>
-                    <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
+                    <InjuryToleranceEditor @bind-Value="injuryTolerances" Disabled="busy" />
                 </div>
                 <div class="sheet-personal-token">
                     <span class="sheet-label">Token</span>
@@ -133,7 +133,7 @@
     private bool recordsLoaded;
     private CurrentCharacteristics currentStats = CurrentCharacteristics.None;
     private string? Badge(NpcTab tab) => IsNew || counts is not { } c ? null : (tab switch { NpcTab.Career => c.Career, NpcTab.Skills => c.Skills, NpcTab.Armour => c.Armour, _ => c.Weapons }).ToString();
-    private InjuryTolerance injuryTolerance;
+    private IReadOnlyList<InjuryTolerance> injuryTolerances = [];
     private byte[]? tokenImage;
     private bool busy, disposed;
     private string? error;
@@ -177,7 +177,7 @@
         name = item.Character.Name; occupation = item.Occupation; race = item.Character.Race; gender = item.Gender;
         automaticName = item.Character.Id == 0 ? name : null;
         quirks1 = item.Quirks1; quirks2 = item.Quirks2; skillLevel = item.SkillLevel; age = item.Age; npcType = item.Type;
-        injuryTolerance = item.Character.InjuryTolerance; description = item.Character.Description; speed = item.Character.Speed; birthday = item.Character.Birthday; naturalDr = item.Character.NaturalDr;
+        injuryTolerances = item.Character.InjuryTolerances ?? []; description = item.Character.Description; speed = item.Character.Speed; birthday = item.Character.Birthday; naturalDr = item.Character.NaturalDr;
         tokenImage = item.Character.TokenImage; tokenInputKey++;
         SetUpp(item.Character.Upp);
     }
@@ -280,7 +280,7 @@
         {
             var isNew = IsNew;
             var campaignId = current.Character.CampaignId;
-            var id = await Characters.SaveAsync(current with { Character = current.Character with { Name = name, Race = race, Upp = Upp(), Speed = speed, Birthday = birthday, NaturalDr = naturalDr, InjuryTolerance = injuryTolerance, TokenImage = tokenImage, Description = description }, Occupation = occupation, Gender = gender, Quirks1 = quirks1, Quirks2 = quirks2, SkillLevel = skillLevel, Age = age, Type = npcType }, replaceSkills: skillsRerolled);
+            var id = await Characters.SaveAsync(current with { Character = current.Character with { Name = name, Race = race, Upp = Upp(), Speed = speed, Birthday = birthday, NaturalDr = naturalDr, InjuryTolerances = injuryTolerances, TokenImage = tokenImage, Description = description }, Occupation = occupation, Gender = gender, Quirks1 = quirks1, Quirks2 = quirks2, SkillLevel = skillLevel, Age = age, Type = npcType }, replaceSkills: skillsRerolled);
             error = null;
             if (!isNew) { await OnSaved.InvokeAsync(); return; }
             // A new NPC stays open so its generated skills and equipment can be adjusted straight away.

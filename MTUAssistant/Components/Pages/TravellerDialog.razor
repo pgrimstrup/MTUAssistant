@@ -33,7 +33,7 @@
                         <div><span class="sheet-label">Status</span><label class="sheet-toggle" title="An inactive Traveller stays on file but is not added to scenes"><input type="checkbox" @bind="inactive" disabled="@busy" /> Inactive</label></div>
                     </div>
                     <label class="description"><span class="sheet-label">Description</span><textarea class="sheet-input" rows="3" placeholder="Appearance, manner, background" @bind="description" disabled="@busy"></textarea></label>
-                    <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
+                    <InjuryToleranceEditor @bind-Value="injuryTolerances" Disabled="busy" />
                 </div>
                 <div class="sheet-personal-token">
                     <span class="sheet-label">Player token</span>
@@ -88,7 +88,7 @@
     private int?[] scores = [], savedScores = [];
     private string extraDigits = "";
     private int naturalDr, birthday = 1, speed = 6, visualDistance, tokenInputKey;
-    private InjuryTolerance injuryTolerance;
+    private IReadOnlyList<InjuryTolerance> injuryTolerances = [];
     private byte[]? tokenImage;
     private bool inactive, busy, disposed;
     private string? error;
@@ -101,7 +101,7 @@
         current = Item;
         playerName = Item.PlayerName; travellerName = Item.Name; race = Item.Race;
         naturalDr = Item.NaturalDr; birthday = Item.Birthday; speed = Item.Speed; visualDistance = Item.VisualDistance;
-        injuryTolerance = Item.InjuryTolerance; description = Item.Description; tokenImage = Item.TokenImage; inactive = Item.Inactive;
+        injuryTolerances = Item.InjuryTolerances ?? []; description = Item.Description; tokenImage = Item.TokenImage; inactive = Item.Inactive;
         (scores, extraDigits) = CharacteristicProfile.Split(Item.Upp);
         savedScores = [.. scores];
     }
@@ -173,7 +173,7 @@
             var isNew = current.Id == 0;
             var saved = current with { PlayerName = playerName, Name = travellerName, Race = race, Upp = Upp(),
                 NaturalDr = naturalDr, Birthday = birthday, Speed = speed, VisualDistance = visualDistance,
-                InjuryTolerance = injuryTolerance, TokenImage = tokenImage, Inactive = inactive, Description = description };
+                InjuryTolerances = injuryTolerances, TokenImage = tokenImage, Inactive = inactive, Description = description };
             var id = await CharacterStore.SaveAsync(saved);
             error = null;
             if (!isNew) { await OnSaved.InvokeAsync(); return; }

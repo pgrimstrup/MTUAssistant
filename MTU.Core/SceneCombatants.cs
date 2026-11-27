@@ -25,7 +25,7 @@ public sealed record SceneCombatant(
     int AnimalHits = 0,
     string AnimalTraits = "",
     IReadOnlyList<NaturalAttack>? NaturalAttacks = null,
-    InjuryTolerance InjuryTolerance = InjuryTolerance.None,
+    IReadOnlyList<InjuryTolerance>? InjuryTolerances = null,
     string Race = "",
     // The character's own Visual Distance in metres, for clearing fog by line of sight.
     int VisualDistance = 0
@@ -383,15 +383,10 @@ public sealed partial class SceneService
         var characters = await db
             .Characters.AsNoTracking()
             .Where(c => ids.Contains(c.Id))
-            .ToDictionaryAsync(
-                c => c.Id,
-                c => new
-                {
-                    c.InjuryTolerance,
-                    c.Race,
-                    c.VisualDistance,
-                }
-            );
+            .ToDictionaryAsync(c => c.Id, c => new { c.Race, c.VisualDistance });
+        var tolerances = await InjuryToleranceStore.LoadAsync(
+            db.CharacterInjuryTolerances.Where(t => ids.Contains(t.CharacterId))
+        );
         foreach (var animal in animals.Values)
             if (
                 !skills.Any(s =>
@@ -418,9 +413,7 @@ public sealed partial class SceneService
                     AnimalName = animals.GetValueOrDefault(e.CharacterId)?.Character.Name ?? "",
                     AnimalHits = animals.GetValueOrDefault(e.CharacterId)?.Hits ?? 0,
                     AnimalTraits = animals.GetValueOrDefault(e.CharacterId)?.Traits ?? "",
-                    InjuryTolerance =
-                        characters.GetValueOrDefault(e.CharacterId)?.InjuryTolerance
-                        ?? InjuryTolerance.None,
+                    InjuryTolerances = tolerances[e.CharacterId].ToArray(),
                     Race = characters.GetValueOrDefault(e.CharacterId)?.Race ?? "",
                     VisualDistance =
                         characters.GetValueOrDefault(e.CharacterId)?.VisualDistance ?? 0,

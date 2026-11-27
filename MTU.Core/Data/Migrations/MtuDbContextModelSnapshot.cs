@@ -293,11 +293,6 @@ namespace MTU.Core.Data.Migrations
 
                     b.Property<bool>("Inactive").HasColumnType("INTEGER");
 
-                    b.Property<int>("InjuryTolerance")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasDefaultValue(0);
-
                     b.Property<bool>("IsNpc").HasColumnType("INTEGER");
 
                     b.Property<bool>("IsAnimal").HasColumnType("INTEGER");
@@ -394,6 +389,26 @@ namespace MTU.Core.Data.Migrations
                     b.HasIndex("CharacterId", "Sequence");
 
                     b.ToTable("CareerTerms");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.CharacterInjuryToleranceEntity",
+                b =>
+                {
+                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("INTEGER");
+
+                    b.Property<int>("CharacterId").HasColumnType("INTEGER");
+
+                    b.Property<int>("Sequence").HasColumnType("INTEGER");
+
+                    b.Property<int>("Tolerance").HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CharacterId", "Sequence");
+
+                    b.ToTable("CharacterInjuryTolerances");
                 }
             );
 
@@ -936,6 +951,20 @@ namespace MTU.Core.Data.Migrations
 
             modelBuilder.Entity(
                 "MTU.Core.Data.CareerTermEntity",
+                b =>
+                {
+                    b.HasOne("MTU.Core.Data.CharacterEntity", "Character")
+                        .WithMany()
+                        .HasForeignKey("CharacterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Character");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.CharacterInjuryToleranceEntity",
                 b =>
                 {
                     b.HasOne("MTU.Core.Data.CharacterEntity", "Character")

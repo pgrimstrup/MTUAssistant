@@ -203,7 +203,7 @@ else { <p>No scene is open. <a href="scenes">Choose a scene</a>.</p> }
                 var character = await FindCharacter(scene.CampaignId, target)
                     ?? throw new ArgumentException("The target is no longer in the campaign.");
                 loadouts[target.CharacterId] = await LoadoutFor(scene.CampaignId, target);
-                volley.Add(encounter.BeginAttack(actor.Id, entries, loadouts[actor.CharacterId], loadouts[target.CharacterId], character.NaturalDr, character.InjuryTolerance, index));
+                volley.Add(encounter.BeginAttack(actor.Id, entries, loadouts[actor.CharacterId], loadouts[target.CharacterId], character.NaturalDr, character.InjuryTolerances, index));
             }
             attackVolley = volley;
             attackVolleyIndex = 0;

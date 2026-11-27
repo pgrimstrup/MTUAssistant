@@ -1,22 +1,58 @@
 <fieldset class="injury-tolerance" disabled="@Disabled">
     <legend>Injury Tolerance</legend>
-    @foreach (var option in Options)
+    @if (Value.Count == 0)
     {
-        <label><input type="checkbox" checked="@Value.HasFlag(option.Flag)" @onchange="e => Toggle(option.Flag, e.Value is true)" /> @option.Label</label>
+        <span class="injury-tolerance-empty">None</span>
+    }
+    @for (var i = 0; i < Value.Count; i++)
+    {
+        var index = i;
+        var record = Value[index];
+        <div class="injury-tolerance-record @(InjuryToleranceRules.IsComplete(record) ? null : "incomplete")" aria-label="@($"Injury Tolerance {index + 1}")">
+            <span class="injury-tolerance-number" aria-hidden="true">@(index + 1)</span>
+            @foreach (var option in Effects)
+            {
+                <label><input type="checkbox" checked="@record.HasFlag(option.Flag)" @onchange="e => Toggle(index, option.Flag, e.Value is true)" /> @option.Label</label>
+            }
+            <span class="injury-tolerance-vs">vs</span>
+            @foreach (var option in Types)
+            {
+                <label><input type="checkbox" checked="@record.HasFlag(option.Flag)" @onchange="e => Toggle(index, option.Flag, e.Value is true)" /> @option.Label</label>
+            }
+            <button type="button" class="injury-tolerance-remove" title="Remove this Injury Tolerance" aria-label="@($"Remove Injury Tolerance {index + 1}")" @onclick="() => Remove(index)">×</button>
+            @if (!InjuryToleranceRules.IsComplete(record))
+            {
+                <span class="sheet-hint">Tick an effect and a damage type, or it has no effect</span>
+            }
+        </div>
+    }
+    @if (Value.Count < InjuryToleranceRules.MaxRecords)
+    {
+        <button type="button" class="sheet-link-button injury-tolerance-add" @onclick="Add">Add Injury Tolerance</button>
     }
 </fieldset>
 
 @code {
-    [Parameter] public InjuryTolerance Value { get; set; }
-    [Parameter] public EventCallback<InjuryTolerance> ValueChanged { get; set; }
+    [Parameter] public IReadOnlyList<InjuryTolerance> Value { get; set; } = [];
+    [Parameter] public EventCallback<IReadOnlyList<InjuryTolerance>> ValueChanged { get; set; }
     [Parameter] public bool Disabled { get; set; }
-    private static readonly (InjuryTolerance Flag, string Label)[] Options = [
+    private static readonly (InjuryTolerance Flag, string Label)[] Effects = [
         (InjuryTolerance.HalveInjury, "Halve Injury"),
-        (InjuryTolerance.MinusOnePerDie, "Minus 1 per D"),
+        (InjuryTolerance.MinusOnePerDie, "Minus 1 per D")
+    ];
+    private static readonly (InjuryTolerance Flag, string Label)[] Types = [
         (InjuryTolerance.Kinetic, "Kinetic"),
         (InjuryTolerance.Energy, "Energy"),
         (InjuryTolerance.Laser, "Laser"),
+        (InjuryTolerance.Disruptor, "Disruptor"),
         (InjuryTolerance.Psionic, "Psionic (reserved)")
     ];
-    private Task Toggle(InjuryTolerance flag, bool selected) => ValueChanged.InvokeAsync(selected ? Value | flag : Value & ~flag);
+    private Task Toggle(int index, InjuryTolerance flag, bool selected)
+    {
+        var records = Value.ToArray();
+        records[index] = selected ? records[index] | flag : records[index] & ~flag;
+        return ValueChanged.InvokeAsync(records);
+    }
+    private Task Add() => ValueChanged.InvokeAsync([.. Value, InjuryTolerance.None]);
+    private Task Remove(int index) => ValueChanged.InvokeAsync(Value.Where((_, i) => i != index).ToArray());
 }

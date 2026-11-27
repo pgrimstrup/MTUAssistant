@@ -85,7 +85,7 @@ public sealed class NpcService(MtuDbContext db, CharacterService characterStore)
     public async Task<int> SaveAsync(Npc character, bool replaceSkills = false)
     {
         var actor = character.Character;
-        InjuryToleranceRules.Validate(actor.InjuryTolerance);
+        InjuryToleranceRules.Validate(actor.InjuryTolerances);
         if (actor.Speed < 0)
             throw new ArgumentException("Speed must be zero or greater.");
         if (actor.NaturalDr < 0)
@@ -232,7 +232,7 @@ public sealed class NpcService(MtuDbContext db, CharacterService characterStore)
         entity.Race = race;
         entity.Upp = upp;
         entity.TokenImage = actor.TokenImage;
-        entity.InjuryTolerance = actor.InjuryTolerance;
+        await InjuryToleranceStore.ReplaceAsync(db, entity, actor.InjuryTolerances);
         entity.Speed = actor.Speed;
         entity.Birthday = actor.Birthday;
         entity.NaturalDr = actor.NaturalDr;

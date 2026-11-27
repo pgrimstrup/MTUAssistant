@@ -29,7 +29,7 @@
                         <div><span class="sheet-label">Campaigns</span><label class="sheet-toggle" title="A shared animal can be used in every campaign"><input type="checkbox" @bind="shared" disabled="@busy" /> Shared</label></div>
                     </div>
                     <label class="description"><span class="sheet-label">Description</span><textarea class="sheet-input" rows="3" placeholder="Appearance, habits, habitat" @bind="description" disabled="@busy"></textarea></label>
-                    <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
+                    <InjuryToleranceEditor @bind-Value="injuryTolerances" Disabled="busy" />
                 </div>
                 <div class="sheet-personal-token">
                     <span class="sheet-label">Token</span>
@@ -88,7 +88,7 @@
     private bool IsNew => current.Character.Id == 0;
     private string name = "", animalType = "Herbivore", behaviour = "Eater", traits = "", description = "";
     private int hits = 1, speed = 6, tokenInputKey;
-    private InjuryTolerance injuryTolerance;
+    private IReadOnlyList<InjuryTolerance> injuryTolerances = [];
     private byte[]? tokenImage;
     private bool shared, busy, disposed;
     private string? error;
@@ -102,7 +102,7 @@
         current = item;
         name = item.Character.Name; animalType = item.AnimalType; behaviour = item.Behaviour; traits = item.Traits;
         hits = item.Hits; speed = item.Character.Speed; shared = item.Shared; description = item.Description;
-        injuryTolerance = item.Character.InjuryTolerance; tokenImage = item.Character.TokenImage; tokenInputKey++;
+        injuryTolerances = item.Character.InjuryTolerances ?? []; tokenImage = item.Character.TokenImage; tokenInputKey++;
     }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -154,7 +154,7 @@
             var isNew = IsNew;
             // Read the stored skills and attacks again just before saving, for the reason given on Changed.
             var source = isNew ? current : await Stored(current.Character.Id) ?? throw new ArgumentException("This animal no longer exists.");
-            var id = await Animals.SaveAsync(source with { Character = source.Character with { Name = name, Speed = speed, InjuryTolerance = injuryTolerance, TokenImage = tokenImage },
+            var id = await Animals.SaveAsync(source with { Character = source.Character with { Name = name, Speed = speed, InjuryTolerances = injuryTolerances, TokenImage = tokenImage },
                 Hits = hits, AnimalType = animalType, Behaviour = behaviour, Traits = traits, Description = description, Shared = shared });
             error = null;
             if (!isNew) { await OnSaved.InvokeAsync(); return; }
