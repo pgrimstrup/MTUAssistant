@@ -1,0 +1,18 @@
+.starships-page { max-width:90rem; margin:0 auto; }
+.page-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.5rem; }
+h1 { margin:0; font-size:1.8rem; }
+.page-header p, .empty-message, .hint { color:var(--app-muted); margin:.4rem 0; }
+.hint { font-size:.85rem; }
+.table-wrap { overflow-x:auto; border:1px solid var(--app-border); border-radius:var(--app-radius); }
+.starship-table { margin:0; font-size:.86rem; }
+.starship-table th, .starship-table td { white-space:nowrap; vertical-align:middle; }
+.starship-table td.crew { white-space:normal; min-width:12rem; }
+.starship-table .secondary { display:block; font-size:.85em; font-weight:400; color:var(--app-muted); }
+.starship-table .equipped-cell { text-align:center; }
+.starship-table .equipped-cell input { width:1.1rem; height:1.1rem; margin:0; cursor:pointer; }
+.starship-table .equipped-cell input:checked { border-color:var(--sheet-red); background-color:var(--sheet-red); }
+.starship-table .equipped-ship > th, .starship-table .equipped-ship > td { background-color:rgba(179,51,58,.14); }
+.starship-table .equipped-ship > th[scope=row] { color:var(--sheet-red-text); }
+.starship-table .damaged, .starship-table .over { color:var(--sheet-reduced); }
+.row-actions { text-align:right; }
+.error { color:#ffaaaa; }

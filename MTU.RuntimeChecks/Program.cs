@@ -31,6 +31,7 @@ await AnimalCombatChecks.RunAsync();
 await AnimalGenerationChecks.RunAsync();
 await SharedAnimalChecks.RunAsync();
 await CombatDescriptionChecks.RunAsync();
+await StarshipChecks.RunAsync();
 
 static void Check(bool condition, string message)
 {

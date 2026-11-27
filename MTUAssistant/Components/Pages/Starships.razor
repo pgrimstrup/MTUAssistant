@@ -1,0 +1,116 @@
+@page "/starships"
+@implements IDisposable
+@inject CampaignService Campaigns
+@inject StarshipService StarshipStore
+
+<PageTitle>Starships</PageTitle>
+<div class="starships-page">
+    <header class="page-header"><div><h1>Starships</h1>@if (campaign is not null) { <p>@campaign.Name</p> }</div>
+        @if (campaign is not null) { <button type="button" class="btn btn-primary" @onclick="Add" disabled="@busy">Add Starship</button> }
+    </header>
+    @if (campaign is null) { <p class="empty-message">Select a campaign to view its Starships.</p> }
+    else
+    {
+        @if (error is not null) { <p class="error" role="alert">@error</p> }
+        @if (editing is { } ship) { <StarshipDialog @key="ship" Item="ship" OnSaved="Saved" OnClose="() => editing = null" /> }
+        @if (pendingDelete is { } deleting)
+        {
+            <DeleteConfirmDialog @key="deleting.Id" Title="Delete Starship" ConfirmText="Delete Starship" Busy="busy" Error="@error" OnConfirm="Delete" OnCancel="CancelDelete"><p>Delete <strong>@deleting.Name</strong> and all its systems? This cannot be undone.</p></DeleteConfirmDialog>
+        }
+        @if (!loading && items.Count == 0) { <p class="empty-message">No Starships in this campaign yet.</p> }
+        else if (items.Count > 0)
+        {
+            <p class="hint">Tick Equipped for the ship the Travellers are using now. Only one ship can be equipped at a time.</p>
+            <div class="table-wrap"><table class="table starship-table">
+                <thead><tr><th>Equipped</th><th>Starship</th><th>TL</th><th>Tons</th><th>Hull</th><th>Damage</th><th>M-Drive</th><th>J-Drive</th><th>Power</th><th>Cargo</th><th>Crew</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+                <tbody>@foreach (var item in items)
+                {
+                    var performance = item.Performance;
+                    <tr @key="item.Id" class="@(item.Equipped ? "equipped-ship" : null)">
+                        <td class="equipped-cell"><input type="checkbox" class="form-check-input" checked="@item.Equipped" @onchange="args => SetEquipped(item, args)" disabled="@busy" aria-label="@($"{item.Name} equipped")" title="The ship the Travellers are using now" /></td>
+                        <th scope="row">@item.Name @if (!string.IsNullOrWhiteSpace(item.Classification)) { <span class="secondary">@item.Classification</span> }</th>
+                        <td>@item.TechLevel</td>
+                        <td>@item.Displacement.ToString("N0")</td>
+                        <td>@performance.HullPoints</td>
+                        <td class="@(item.DamageTaken > 0 ? "damaged" : null)">@item.DamageTaken @if (item.DamageTaken > 0) { <span class="secondary">@item.HullRemaining left</span> }</td>
+                        <td>@(performance.Thrust > 0 ? $"Thrust {performance.Thrust}" : "—")</td>
+                        <td>@(performance.Jump > 0 ? $"Jump {performance.Jump}" : "—")</td>
+                        <td class="@(performance.PowerRequired > performance.PowerOutput ? "over" : null)">@Number(performance.PowerOutput)<span class="secondary">needs @Number(performance.PowerRequired)</span></td>
+                        <td>@Number(performance.CargoTons) t</td>
+                        <td class="crew">@item.Crew @if (StarshipRules.CrewCount(item.Crew) is > 0 and var crew) { <span class="secondary">@crew crew</span> }</td>
+                        <td class="row-actions"><button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(item)" disabled="@busy">Edit</button> <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(item)" disabled="@busy">Delete</button></td>
+                    </tr>
+                }</tbody>
+            </table></div>
+        }
+    }
+</div>
+
+@code {
+    private Campaign? campaign;
+    private IReadOnlyList<Starship> items = [];
+    private Starship? editing, pendingDelete;
+    private string? error;
+    private bool busy, loading, disposed;
+    private int version;
+
+    private static string Number(decimal value) => value.ToString("#,0.##");
+
+    protected override async Task OnInitializedAsync()
+    {
+        Campaigns.Changed += CampaignChanged;
+        try { await SetCampaign((await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive)); }
+        catch (Exception) { error = "Unable to load the active campaign."; }
+    }
+    private void CampaignChanged(Campaign? value) => _ = InvokeAsync(async () => { await SetCampaign(value); if (!disposed) StateHasChanged(); });
+    private async Task SetCampaign(Campaign? value)
+    {
+        if (campaign?.Id == value?.Id) { campaign = value; return; }
+        campaign = value; editing = null; pendingDelete = null; items = []; error = null;
+        var request = ++version;
+        if (value is null) return;
+        loading = true;
+        try
+        {
+            var loaded = await StarshipStore.ListAsync(value.Id);
+            if (!disposed && request == version) items = loaded;
+        }
+        catch (Exception) { if (!disposed && request == version) error = "Unable to load Starships."; }
+        finally { if (request == version) loading = false; }
+    }
+    private async Task Reload()
+    {
+        if (campaign is not { } current) return;
+        try
+        {
+            var loaded = await StarshipStore.ListAsync(current.Id);
+            if (campaign?.Id == current.Id) items = loaded;
+        }
+        catch (Exception) { error = "Unable to refresh the Starship list."; }
+    }
+    private void Add() { if (campaign is { } current) Edit(new Starship(0, current.Id, "", 12, 200, 0, false, "", false, [])); }
+    private void Edit(Starship item) { editing = item; pendingDelete = null; error = null; }
+    private async Task Saved() { editing = null; await Reload(); }
+    private void ConfirmDelete(Starship item) { pendingDelete = item; editing = null; error = null; }
+    private void CancelDelete() { pendingDelete = null; error = null; }
+    // Ticking a ship unticks the one equipped before it; unticking leaves no ship equipped.
+    private async Task SetEquipped(Starship item, ChangeEventArgs args)
+    {
+        if (busy || campaign?.Id != item.CampaignId) return;
+        busy = true;
+        try { await StarshipStore.SetEquippedAsync(item.CampaignId, item.Id, args.Value is true); error = null; }
+        catch (Exception) { error = "Unable to change the equipped Starship."; }
+        finally { busy = false; }
+        await Reload();
+    }
+    private async Task Delete()
+    {
+        if (pendingDelete is not { } current || campaign?.Id != current.CampaignId || busy) return;
+        busy = true;
+        try { await StarshipStore.DeleteAsync(current.CampaignId, current.Id); pendingDelete = null; error = null; }
+        catch (Exception) { error = "Unable to delete this Starship."; }
+        finally { busy = false; }
+        if (pendingDelete is null) await Reload();
+    }
+    public void Dispose() { disposed = true; version++; Campaigns.Changed -= CampaignChanged; }
+}

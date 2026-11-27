@@ -38,6 +38,8 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
     public DbSet<SystemEntity> Systems => Set<SystemEntity>();
 
     public DbSet<CoverProtection> CoverProtections => Set<CoverProtection>();
+    public DbSet<StarshipEntity> Starships => Set<StarshipEntity>();
+    public DbSet<StarshipSystemEntity> StarshipSystems => Set<StarshipSystemEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -244,6 +246,32 @@ public class MtuDbContext(DbContextOptions<MtuDbContext> options) : DbContext(op
             .Entity<AllegianceEntity>()
             .HasIndex(a => new { a.SectorId, a.Code })
             .IsUnique();
+        modelBuilder.Entity<StarshipEntity>(e =>
+        {
+            e.HasOne(s => s.Campaign)
+                .WithMany()
+                .HasForeignKey(s => s.CampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(s => new { s.CampaignId, s.Name });
+            // At most one equipped ship per campaign.
+            e.HasIndex(s => s.CampaignId)
+                .IsUnique()
+                .HasFilter("\"Equipped\" = 1")
+                .HasDatabaseName("IX_Starships_CampaignId_Equipped");
+        });
+        modelBuilder.Entity<StarshipSystemEntity>(e =>
+        {
+            e.HasOne(s => s.Starship)
+                .WithMany()
+                .HasForeignKey(s => s.StarshipId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(s => new
+            {
+                s.StarshipId,
+                s.Type,
+                s.Sequence,
+            });
+        });
         modelBuilder.Entity<SystemEntity>(e =>
         {
             e.HasIndex(s => new { s.SectorId, s.Hex }).IsUnique();

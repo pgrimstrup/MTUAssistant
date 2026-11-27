@@ -706,6 +706,77 @@ namespace MTU.Core.Data.Migrations
             );
 
             modelBuilder.Entity(
+                "MTU.Core.Data.StarshipEntity",
+                b =>
+                {
+                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("INTEGER");
+
+                    b.Property<int>("CampaignId").HasColumnType("INTEGER");
+
+                    b.Property<string>("Classification").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<string>("Crew").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<int>("DamageTaken").HasColumnType("INTEGER");
+
+                    b.Property<int>("Displacement").HasColumnType("INTEGER");
+
+                    b.Property<bool>("Equipped").HasColumnType("INTEGER");
+
+                    b.Property<decimal>("MaintenanceCost").HasColumnType("TEXT");
+
+                    b.Property<string>("Name").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<bool>("Prototype").HasColumnType("INTEGER");
+
+                    b.Property<decimal>("PurchaseCost").HasColumnType("TEXT");
+
+                    b.Property<int>("TechLevel").HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CampaignId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Starships_CampaignId_Equipped")
+                        .HasFilter("\"Equipped\" = 1");
+
+                    b.HasIndex("CampaignId", "Name");
+
+                    b.ToTable("Starships");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.StarshipSystemEntity",
+                b =>
+                {
+                    b.Property<int>("Id").ValueGeneratedOnAdd().HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Cost").HasColumnType("TEXT");
+
+                    b.Property<string>("Description").IsRequired().HasColumnType("TEXT");
+
+                    b.Property<decimal>("Displacement").HasColumnType("TEXT");
+
+                    b.Property<decimal>("PowerRequirement").HasColumnType("TEXT");
+
+                    b.Property<int>("Rating").HasColumnType("INTEGER");
+
+                    b.Property<int>("Sequence").HasColumnType("INTEGER");
+
+                    b.Property<int>("StarshipId").HasColumnType("INTEGER");
+
+                    b.Property<int>("Type").HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StarshipId", "Type", "Sequence");
+
+                    b.ToTable("StarshipSystems");
+                }
+            );
+
+            modelBuilder.Entity(
                 "MTU.Core.Data.SubsectorEntity",
                 b =>
                 {
@@ -1122,6 +1193,34 @@ namespace MTU.Core.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Sector");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.StarshipEntity",
+                b =>
+                {
+                    b.HasOne("MTU.Core.Data.CampaignEntity", "Campaign")
+                        .WithMany()
+                        .HasForeignKey("CampaignId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Campaign");
+                }
+            );
+
+            modelBuilder.Entity(
+                "MTU.Core.Data.StarshipSystemEntity",
+                b =>
+                {
+                    b.HasOne("MTU.Core.Data.StarshipEntity", "Starship")
+                        .WithMany()
+                        .HasForeignKey("StarshipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Starship");
                 }
             );
 

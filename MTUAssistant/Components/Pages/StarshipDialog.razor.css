@@ -1,0 +1,37 @@
+/* The shared character sheet style is in app.css (.sheet); this is the Starship layout. */
+.ship-data { display:grid; gap:.9rem; padding:1rem 1.2rem 1.1rem; }
+.crew { display:block; }
+/* Name and Type share a line, as Name and Player do on the Traveller sheet. */
+.ship-identity { grid-template-columns:minmax(0,2.2fr) minmax(0,1.3fr); align-items:start; }
+.ship-fields { grid-template-columns:repeat(5,minmax(0,1fr)); align-items:start; }
+.crew .sheet-hint { display:block; margin-top:.3rem; }
+
+.ship-stats { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:.6rem; padding:1rem 1.2rem 1.1rem; }
+.ship-stat { display:grid; gap:.15rem; padding:.7rem .8rem .65rem; border:1px solid var(--sheet-line); border-top:2px solid #4a5058; border-radius:2px; background:var(--sheet-panel); }
+.ship-stat .sheet-label { margin:0; }
+.ship-stat strong { font-family:var(--sheet-display); font-size:2.2rem; font-weight:600; line-height:1.05; }
+.ship-stat small { color:var(--sheet-label); font-family:var(--sheet-mono); font-size:.62rem; letter-spacing:.06em; text-transform:uppercase; }
+.ship-stat.warning { border-top-color:var(--sheet-reduced); }
+.ship-stat.warning strong, .ship-stat.warning small { color:var(--sheet-reduced); }
+
+.systems { padding-bottom:1rem; }
+.systems .empty-message { margin:1rem 1.2rem 0; }
+.systems-wrap { overflow-x:auto; }
+.systems-table { margin:0; font-size:.9rem; }
+.systems-table td { vertical-align:top; }
+/* Type fits its longest label ("Common Areas"): the column shrinks to the select, and the select to its options. */
+.systems-table th:first-child, .systems-table td:first-child { width:1%; white-space:nowrap; }
+.systems-table td:first-child .sheet-input.form-select { width:auto; min-width:max-content; }
+/* The number columns fit their inputs and the Description takes the rest. */
+.systems-table thead th { white-space:nowrap; }
+.systems-table :is(th, td):nth-child(n+3) { width:1%; }
+.systems-table .number { width:6.5rem; }
+.systems-table .sheet-input { font-size:.95rem; }
+.systems-table .sheet-hint { display:block; margin-top:.2rem; white-space:nowrap; }
+.systems-table tfoot th, .systems-table tfoot td { padding:.5rem .7rem; border-bottom:0; color:var(--sheet-label); font-family:var(--sheet-mono); font-size:.75rem; letter-spacing:.06em; text-transform:uppercase; }
+.row-actions { text-align:right; white-space:nowrap; }
+.add-system { display:flex; flex-wrap:wrap; align-items:end; gap:.6rem; margin:1rem 1.2rem 0; }
+.add-system label { display:grid; gap:.3rem; min-width:12rem; }
+
+@media (max-width:1000px) { .ship-stats { grid-template-columns:repeat(3,minmax(0,1fr)); } .ship-fields { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media (max-width:560px) { .ship-stats, .ship-fields { grid-template-columns:repeat(2,minmax(0,1fr)); } }

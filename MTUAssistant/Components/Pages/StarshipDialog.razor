@@ -1,0 +1,158 @@
+@implements IAsyncDisposable
+@inject StarshipService StarshipStore
+@inject IJSRuntime JS
+
+<dialog @ref="dialog" class="sheet starship-dialog" aria-labelledby="starship-dialog-heading">
+    <header class="sheet-toolbar">
+        <h2 id="starship-dialog-heading">@(Item.Id == 0 ? "Add Starship" : "Edit Starship")</h2>
+        <div class="actions">
+            <button type="button" class="btn btn-outline-secondary" @onclick="Cancel" disabled="@busy">Cancel</button>
+            <button type="button" class="btn btn-primary" @onclick="Save" disabled="@busy">@(Item.Id == 0 ? "Add Starship" : "Save")</button>
+        </div>
+    </header>
+    <div class="sheet-body">
+        @if (error is not null) { <p class="error" role="alert">@error</p> }
+        <section class="sheet-panel" aria-label="Ship data">
+            <div class="sheet-bar"><span>01 / Ship Data</span><span class="sheet-bar-note">Starship record@(Item.Equipped ? " · Equipped" : null)</span></div>
+            <div class="ship-data">
+                <div class="sheet-fields ship-identity">
+                    <label><span class="sheet-label">Name</span><input class="sheet-input sheet-name" maxlength="120" placeholder="Starship name" @bind="name" disabled="@busy" /></label>
+                    <label><span class="sheet-label">Type</span><input class="sheet-input" maxlength="120" placeholder="Free Trader" @bind="classification" disabled="@busy" /></label>
+                </div>
+                <div class="sheet-fields ship-fields">
+                    <label><span class="sheet-label">Tech Level</span><input class="sheet-input" type="number" min="@StarshipRules.MinTechLevel" max="@StarshipRules.MaxTechLevel" step="1" @bind="techLevel" disabled="@busy" /></label>
+                    <label><span class="sheet-label">Displacement (tons)</span><input class="sheet-input" type="number" min="@StarshipRules.MinDisplacement" max="@StarshipRules.MaxDisplacement" step="1" @bind="displacement" disabled="@busy" /></label>
+                    <label><span class="sheet-label">Damage Taken</span><input class="sheet-input" type="number" min="0" step="1" @bind="damageTaken" disabled="@busy" /></label>
+                    <div title="Worked out from the systems' costs: 90% of their total for a standard design, the full total for a prototype"><span class="sheet-label">Purchase Cost (MCr)</span><span class="sheet-static">@PurchaseCost.ToString("#,0.000")</span>
+                        <label class="sheet-toggle" title="A one-off design pays full price for its systems"><input type="checkbox" @bind="prototype" disabled="@busy" /> Prototype</label></div>
+                    <div title="Purchase Cost in credits ÷ 12,000, rounded down"><span class="sheet-label">Maintenance (Cr / month)</span><span class="sheet-static">@StarshipRules.MaintenanceCost(PurchaseCost).ToString("N0")</span></div>
+                </div>
+                <label class="crew"><span class="sheet-label">Crew</span><input class="sheet-input" maxlength="1000" placeholder="Pilot, Astrogator, Engineer x3" @bind="crew" disabled="@busy" />
+                    <span class="sheet-hint">Positions separated by commas; add x2, x3… for more than one. @(StarshipRules.CrewCount(crew) is > 0 and var count ? $"{count} crew in all." : null)</span></label>
+            </div>
+        </section>
+        @{ var performance = StarshipRules.Performance(rows.Select(r => r.ToSystem())); }
+        <section class="sheet-panel" aria-label="Performance">
+            <div class="sheet-bar"><span>02 / Performance</span><span class="sheet-bar-note">Worked out from the systems</span></div>
+            <div class="ship-stats">
+                <div class="ship-stat"><span class="sheet-label">Hull Points</span><strong>@performance.HullPoints</strong><small>@(damageTaken > 0 ? $"{Math.Max(0, performance.HullPoints - damageTaken)} left · " : null)standard hull @StarshipRules.StandardHullPoints(displacement)</small></div>
+                <div class="ship-stat"><span class="sheet-label">M-Drive</span><strong>@performance.Thrust</strong><small>Thrust (G)</small></div>
+                <div class="ship-stat"><span class="sheet-label">J-Drive</span><strong>@performance.Jump</strong><small>Jump (parsecs)</small></div>
+                <div class="ship-stat @(performance.PowerRequired > performance.PowerOutput ? "warning" : null)"><span class="sheet-label">Power Plant</span><strong>@Number(performance.PowerOutput)</strong><small>needs @Number(performance.PowerRequired)</small></div>
+                <div class="ship-stat"><span class="sheet-label">Cargo</span><strong>@Number(performance.CargoTons)</strong><small>tons</small></div>
+                <div class="ship-stat @(performance.TonsAllocated > displacement ? "warning" : null)"><span class="sheet-label">Tons Used</span><strong>@Number(performance.TonsAllocated)</strong><small>of @displacement.ToString("N0")</small></div>
+            </div>
+        </section>
+        <section class="sheet-panel systems" aria-label="Systems">
+            <div class="sheet-bar"><span>03 / Systems</span><span class="sheet-bar-note">@rows.Count @(rows.Count == 1 ? "system" : "systems")</span></div>
+            @if (rows.Count == 0) { <p class="empty-message">No systems yet. Add the hull, drives, power plant and cargo below.</p> }
+            else
+            {
+                <div class="systems-wrap"><table class="table systems-table">
+                    <thead><tr><th>Type</th><th>Description</th><th>Tons</th><th>Cost (MCr)</th><th>Power</th><th>Rating</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+                    <tbody>@foreach (var row in rows.OrderBy(r => r.Type))
+                    {
+                        <tr @key="row">
+                            <td><select class="sheet-input form-select" @bind="row.Type" disabled="@busy" aria-label="System type">@foreach (var type in StarshipRules.SystemTypes) { <option value="@type">@StarshipRules.Label(type)</option> }</select></td>
+                            <td><input class="sheet-input" maxlength="200" placeholder="@StarshipRules.Label(row.Type)" @bind="row.Description" disabled="@busy" aria-label="Description" /></td>
+                            <td><input class="sheet-input number" type="number" min="0" step="any" @bind="row.Displacement" disabled="@busy" aria-label="Tons" /></td>
+                            <td><input class="sheet-input number" type="number" min="0" step="any" @bind="row.Cost" disabled="@busy" aria-label="Cost in MCr" /></td>
+                            <td><input class="sheet-input number" type="number" min="0" step="any" @bind="row.PowerRequirement" disabled="@busy" aria-label="Power requirement" /></td>
+                            <td><input class="sheet-input number" type="number" min="0" step="1" @bind="row.Rating" disabled="@busy" aria-label="Rating" title="@StarshipRules.RatingHint(row.Type)" />@if (StarshipRules.RatingHint(row.Type) is { Length: > 0 } hint) { <span class="sheet-hint">@hint</span> }</td>
+                            <td class="row-actions"><button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => rows.Remove(row)" disabled="@busy">Remove</button></td>
+                        </tr>
+                    }</tbody>
+                    <tfoot><tr><th colspan="2">Totals</th><td>@Number(performance.TonsAllocated)</td><td>@rows.Sum(r => r.Cost).ToString("#,0.###")</td><td>@Number(performance.PowerRequired)</td><td colspan="2"></td></tr></tfoot>
+                </table></div>
+            }
+            <div class="add-system">
+                <label><span class="sheet-label">New system</span><select class="form-select" @bind="newType" disabled="@busy">@foreach (var type in StarshipRules.SystemTypes) { <option value="@type">@StarshipRules.Label(type)</option> }</select></label>
+                <button type="button" class="btn btn-outline-secondary" @onclick="AddSystem" disabled="@(busy || rows.Count >= StarshipRules.MaxSystems)">Add System</button>
+            </div>
+        </section>
+    </div>
+</dialog>
+
+@code {
+    [Parameter, EditorRequired] public Starship Item { get; set; } = default!;
+    /// <summary>The ship was saved and the dialog should close.</summary>
+    [Parameter] public EventCallback OnSaved { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    // A system being edited. Rows are listed by type; a row keeps its place among its type.
+    private sealed class SystemRow
+    {
+        public StarshipSystemType Type { get; set; }
+        public string Description { get; set; } = "";
+        public decimal Displacement { get; set; }
+        public decimal Cost { get; set; }
+        public decimal PowerRequirement { get; set; }
+        public int Rating { get; set; }
+        public StarshipSystem ToSystem() => new(0, Type, Description, Displacement, Cost, PowerRequirement, Rating);
+    }
+
+    private string name = "", classification = "", crew = "";
+    private int techLevel, displacement, damageTaken;
+    private bool prototype;
+    private decimal PurchaseCost => StarshipRules.PurchaseCost(rows.Select(r => r.ToSystem()), prototype);
+    private List<SystemRow> rows = [];
+    private StarshipSystemType newType = StarshipSystemType.Hull;
+    private bool busy;
+    private string? error;
+    private ElementReference dialog;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<StarshipDialog>? reference;
+
+    private static string Number(decimal value) => value.ToString("#,0.##");
+
+    protected override void OnInitialized()
+    {
+        name = Item.Name; classification = Item.Classification; crew = Item.Crew;
+        techLevel = Item.TechLevel; displacement = Item.Displacement; damageTaken = Item.DamageTaken;
+        prototype = Item.Prototype;
+        rows = Item.Systems.Select(s => new SystemRow { Type = s.Type, Description = s.Description, Displacement = s.Displacement, Cost = s.Cost, PowerRequirement = s.PowerRequirement, Rating = s.Rating }).ToList();
+        // Start the picker on the first kind of system the ship doesn't have yet.
+        newType = StarshipRules.SystemTypes.FirstOrDefault(t => rows.All(r => r.Type != t), StarshipSystemType.Cargo);
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/EquipmentDialog.js");
+            reference = DotNetObjectReference.Create(this);
+            await module.InvokeVoidAsync("open", dialog, reference);
+        }
+        catch (JSDisconnectedException) { }
+    }
+    [JSInvokable] public async Task Cancel() { if (!busy) await OnClose.InvokeAsync(); }
+    private void AddSystem()
+    {
+        rows.Add(new SystemRow { Type = newType, Rating = newType == StarshipSystemType.Hull ? StarshipRules.StandardHullPoints(displacement) : 0 });
+        newType = StarshipRules.SystemTypes.FirstOrDefault(t => rows.All(r => r.Type != t), newType);
+    }
+    private async Task Save()
+    {
+        if (busy) return;
+        busy = true;
+        try
+        {
+            await StarshipStore.SaveAsync(Item with { Name = name, Classification = classification, Crew = crew, TechLevel = techLevel, Displacement = displacement, DamageTaken = damageTaken,
+                Prototype = prototype, Systems = rows.OrderBy(r => r.Type).Select(r => r.ToSystem()).ToArray() });
+            error = null;
+            await OnSaved.InvokeAsync();
+        }
+        catch (ArgumentException ex) { error = ex.Message; }
+        catch (Exception) { error = "Unable to save this Starship."; }
+        finally { busy = false; }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (module is not null)
+        {
+            try { await module.InvokeVoidAsync("close", dialog); await module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+        reference?.Dispose();
+    }
+}

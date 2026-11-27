@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject CampaignService Campaigns
 @inject CharacterService CharacterStore
+@inject StarshipService StarshipStore
 @page "/passengers-cargo"
 @inject MTUAssistant.Services.SelectedWorldState WorldState
 @inject SystemDataProvider SystemData
@@ -142,16 +143,18 @@
             <div class="panel-body">
                 <div class="passenger-controls">
                     <label>Effect of Broker/Streetwise <input class="form-control" type="number" min="-100" max="100" @bind="freightEffect" disabled="@busy" /></label>
-                    <label>Highest Naval/Scout Rank <input class="form-control" value="@mailRank" readonly /></label>
-                    <label>Highest SOC DM <input class="form-control" value="@(mailSoc.HasValue ? FormatDm(mailSoc.Value) : "—")" readonly /></label>
+                    <label title="From the campaign's Travellers">Highest Naval/Scout Rank <input class="form-control" value="@mailRank" readonly disabled /></label>
+                    <label title="From the campaign's Travellers">Highest SOC DM <input class="form-control" value="@(mailSoc.HasValue ? FormatDm(mailSoc.Value) : "—")" readonly disabled /></label>
                     <label class="armed-option"><input type="checkbox" class="form-check-input" @bind="shipArmed" disabled="@busy" /> Armed Ship</label>
                     <button class="btn btn-primary" type="button" @onclick="RollFreight" disabled="@(WorldState.World is null || destination is null || busy)">Roll</button>
                     <div class="cargo-controls">
-                        <label>Cargo Capacity (T) <input class="form-control" type="number" min="0" @bind="cargoCapacity" disabled="@busy" /></label>
-                        <button class="btn btn-primary" type="button" @onclick="TakeCargo" disabled="@(freightResult is null || busy)">Take Cargo</button>
-                        <button class="btn btn-primary" type="button" @onclick="TakeMail" disabled="@(freightResult?.Mail is not { Containers: > 0 } || busy)">Take Mail</button>
+                        <label title="The Cargo tons of the equipped starship">Cargo Capacity (T) <input class="form-control" value="@(ship is null ? "—" : cargoCapacity.ToString("N0"))" readonly disabled /></label>
+                        <button class="btn btn-primary" type="button" @onclick="TakeCargo" disabled="@(freightResult is null || ship is null || busy)">Take Cargo</button>
+                        <button class="btn btn-primary" type="button" @onclick="TakeMail" disabled="@(freightResult?.Mail is not { Containers: > 0 } || ship is null || busy)">Take Mail</button>
                     </div>
                 </div>
+                @if (ship is null) { <p class="ship-note">No starship is equipped, so there's no Cargo Capacity. Tick Equipped on the <a href="starships">Starships</a> page to take cargo and mail.</p> }
+                else { <p class="ship-note">Cargo Capacity is the hold of <strong>@ship.Name</strong>, the equipped starship.</p> }
                 @if (freightError is not null) { <p class="passenger-error" role="alert">@freightError</p> }
                 @if (freightResult is { } freight)
                 {
@@ -201,7 +204,7 @@
     {
         var changed = activeCampaign?.Id != campaign?.Id;
         activeCampaign = campaign;
-        if (changed) { await LoadMailModifiers(); await LoadStewardModifier(); }
+        if (changed) { await LoadMailModifiers(); await LoadStewardModifier(); await LoadShip(); }
         StateHasChanged();
     });
 
@@ -228,6 +231,18 @@
             if (activeCampaign?.Id == campaign.Id) { steward = modifier.Value; hasSteward = modifier.HasSkill; stewardMissingInt = modifier.MissingInt; }
         }
         catch (Exception) { passengerError = "Unable to load campaign Steward skill."; }
+    }
+    private async Task LoadShip()
+    {
+        var campaign = activeCampaign;
+        ship = null;
+        if (campaign is null) return;
+        try
+        {
+            var equipped = await StarshipStore.EquippedAsync(campaign.Id);
+            if (activeCampaign?.Id == campaign.Id) ship = equipped;
+        }
+        catch (Exception) { freightError = "Unable to load the equipped Starship."; }
     }
     public void Dispose() => Campaigns.Changed -= CampaignChanged;
     private int effect;
@@ -275,7 +290,9 @@
     private int mailRank;
     private int? mailSoc;
     private bool shipArmed = true;
-    private int cargoCapacity;
+    // The equipped starship gives the Cargo Capacity; whole tons only.
+    private Starship? ship;
+    private int cargoCapacity => ship is null ? 0 : (int)Math.Floor(ship.Performance.CargoTons);
     private static readonly (int Distance, int Fee)[] freightFees = [(1, 1000), (2, 1600), (3, 2600), (4, 4400), (5, 8500), (6, 32000)];
     private FreightResult? freightResult;
     private FreightResult? savedFreightResult;
@@ -330,6 +347,7 @@
         activeCampaign = (await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive);
         await LoadMailModifiers();
         await LoadStewardModifier();
+        await LoadShip();
         var world = WorldState.World;
         if (world is null) return;
         destinations = TradeDestinations.Within(SystemData.Catalogue, world.SectorId, world.Hex);
@@ -353,7 +371,6 @@
             {
                 freightEffect = freight.Effect;
                 shipArmed = freight.Mail is null || freight.Mail.ArmedDm != 0;
-                cargoCapacity = freight.CargoCapacity ?? 0;
                 if (destination is null && freight.Destination is not null)
                 {
                     var savedDestination = destinations.FirstOrDefault(item => item.Sector.Id == freight.DestinationSectorId && item.System.Hex == freight.DestinationHex);

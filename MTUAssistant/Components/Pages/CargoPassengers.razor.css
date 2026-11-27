@@ -40,6 +40,9 @@ h1 { margin: 0; font-size: 1.8rem; }
 .outdated-badge { padding: .2rem .5rem; border: 1px solid rgba(243,195,108,.4); border-radius: 2px; color: #f3c36c; background: rgba(243,195,108,.1); font-size: .7rem; font-weight: 650; }
 
 .cargo-controls { display: flex; flex-wrap: wrap; align-items: end; gap: .8rem; margin-left: auto; }
+/* Rank, SOC and Cargo Capacity come from the Travellers and the equipped starship, so they are shown, not edited. */
+.passenger-controls input[readonly]:disabled { opacity: 1; color: var(--app-text); cursor: default; }
+.ship-note { margin: -.4rem 0 1rem; color: var(--app-muted); font-size: .85rem; }
 
 .mail-available { color: #a3e8c2; border-color: rgba(100, 210, 145, .55); background: rgba(35, 150, 85, .2); }
 .mail-danger { color: #ffaaaa; border-color: rgba(255, 100, 100, .55); background: rgba(190, 45, 45, .2); }
