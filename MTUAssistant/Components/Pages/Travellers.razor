@@ -12,7 +12,7 @@
     else
     {
         @if (error is not null) { <p class="error" role="alert">@error</p> }
-        @if (editing is { } traveller) { <TravellerDialog @key="traveller" Item="traveller" OnSaved="Saved" OnChanged="RefreshSkills" OnClose="() => editing = null" /> }
+        @if (editing is { } traveller) { <TravellerDialog @key="traveller" Item="traveller" Campaign="campaign" OnSaved="Saved" OnChanged="RefreshSkills" OnClose="() => editing = null" /> }
         @if (pendingDelete is { } deleting)
         {
             <DeleteConfirmDialog @key="deleting.Id" Title="Delete Traveller" ConfirmText="Delete Traveller" Busy="busy" Error="@error" OnConfirm="Delete" OnCancel="CancelDelete"><p>Delete <strong>@deleting.Name</strong>? This cannot be undone.</p></DeleteConfirmDialog>

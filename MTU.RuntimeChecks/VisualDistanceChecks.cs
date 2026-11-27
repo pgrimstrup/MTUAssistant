@@ -64,21 +64,21 @@ public static class VisualDistanceChecks
                 SceneImageChecks.Png(250, 180)
             );
 
-            // The scene's Ambient Visual Distance.
+            // The scene's Ambient Light.
             Check(
                 await scenes.AmbientVisualDistanceAsync(1, scene.Id) == 0,
-                "A new scene has no Ambient Visual Distance"
+                "A new scene has no Ambient Light"
             );
             await scenes.SetAmbientVisualDistanceAsync(1, scene.Id, 24);
             Check(
                 await new SceneService(
                     provider.GetRequiredService<IServiceScopeFactory>()
                 ).AmbientVisualDistanceAsync(1, scene.Id) == 24,
-                "The Ambient Visual Distance is saved with the scene"
+                "The Ambient Light is saved with the scene"
             );
             await Reject(
                 () => scenes.SetAmbientVisualDistanceAsync(1, scene.Id, -1),
-                "A negative Ambient Visual Distance is rejected"
+                "A negative Ambient Light is rejected"
             );
             await Reject(
                 () =>
@@ -87,22 +87,22 @@ public static class VisualDistanceChecks
                         scene.Id,
                         LineOfSight.MaxVisualDistance + 1
                     ),
-                "An Ambient Visual Distance over the limit is rejected"
+                "An Ambient Light over the limit is rejected"
             );
             await Reject(
                 () => scenes.SetAmbientVisualDistanceAsync(2, scene.Id, 6),
-                "Setting the Ambient Visual Distance respects campaigns"
+                "Setting the Ambient Light respects campaigns"
             );
             await Reject(
                 async () =>
                 {
                     await scenes.AmbientVisualDistanceAsync(2, scene.Id);
                 },
-                "Reading the Ambient Visual Distance respects campaigns"
+                "Reading the Ambient Light respects campaigns"
             );
             Check(
                 await scenes.AmbientVisualDistanceAsync(1, scene.Id) == 24,
-                "Rejected changes leave the Ambient Visual Distance alone"
+                "Rejected changes leave the Ambient Light alone"
             );
             await scenes.SaveGridAsync(1, scene.Id, "#ffffff", 1, 20, 50);
             await scenes.SaveAsync(
@@ -117,13 +117,48 @@ public static class VisualDistanceChecks
             );
             Check(
                 await scenes.AmbientVisualDistanceAsync(1, scene.Id) == 24,
-                "A new grid size or background keeps the Ambient Visual Distance"
+                "A new grid size or background keeps the Ambient Light"
+            );
+            // The Scenes edit dialog saves the Ambient Light with the other scene details.
+            var edited = await scenes.SaveAsync(
+                new SceneInput
+                {
+                    Id = scene.Id,
+                    CampaignId = 1,
+                    Name = "Sight",
+                    GridSize = 50,
+                    AmbientVisualDistance = 12,
+                }
+            );
+            Check(
+                edited.AmbientVisualDistance == 12
+                    && await scenes.AmbientVisualDistanceAsync(1, scene.Id) == 12
+                    && (await scenes.FindAsync(1, scene.Id))?.AmbientVisualDistance == 12,
+                "Saving a scene's details saves and lists its Ambient Light"
+            );
+            await Reject(
+                () =>
+                    scenes.SaveAsync(
+                        new SceneInput
+                        {
+                            Id = scene.Id,
+                            CampaignId = 1,
+                            Name = "Sight",
+                            GridSize = 50,
+                            AmbientVisualDistance = -1,
+                        }
+                    ),
+                "Saving a scene rejects a negative Ambient Light"
+            );
+            Check(
+                await scenes.AmbientVisualDistanceAsync(1, scene.Id) == 12,
+                "A rejected scene save leaves the Ambient Light alone"
             );
             await scenes.SetAmbientVisualDistanceAsync(1, scene.Id, LineOfSight.MaxVisualDistance);
             await scenes.SetAmbientVisualDistanceAsync(1, scene.Id, 0);
             Check(
                 await scenes.AmbientVisualDistanceAsync(1, scene.Id) == 0,
-                "The Ambient Visual Distance can be set back to 0"
+                "The Ambient Light can be set back to 0"
             );
 
             // A Traveller's own Visual Distance.

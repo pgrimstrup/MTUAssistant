@@ -1,20 +1,37 @@
 :root {
-    --app-bg: #0d1117;
-    --app-surface: #161b22;
-    --app-surface-2: #1c232d;
-    --app-border: #2a313c;
-    --app-text: #e6edf3;
-    --app-muted: #8b949e;
-    --app-accent: #7c8cff;
-    --app-accent-2: #a78bfa;
-    --app-accent-soft: rgba(124, 140, 255, 0.14);
-    --app-radius: 10px;
+    /* Character sheet palette (see "Character sheet style" below): dark square panels with a red accent. */
+    --sheet-bg: #16181c;
+    --sheet-panel: #1e2126;
+    --sheet-panel-2: #262a30;
+    --sheet-line: #343941;
+    --sheet-label: #8d939c;
+    --sheet-red: #b3333a;
+    --sheet-red-text: #ec6a70;
+    --sheet-current: #4cc9b0;
+    --sheet-reduced: #f2a33a;
+    --sheet-body: 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --sheet-mono: 'Cascadia Mono', 'JetBrains Mono', 'IBM Plex Mono', Consolas, monospace;
+    --sheet-display: 'Bahnschrift Condensed', 'Bahnschrift SemiCondensed', 'Barlow Condensed', 'Oswald', 'Arial Narrow', sans-serif;
+
+    --app-bg: #121417;
+    --app-surface: var(--sheet-panel);
+    --app-surface-2: var(--sheet-panel-2);
+    --app-border: var(--sheet-line);
+    --app-text: #e6e8eb;
+    --app-muted: var(--sheet-label);
+    --app-accent: var(--sheet-red-text);
+    --app-accent-2: #f39297;
+    --app-accent-soft: rgba(179, 51, 58, 0.18);
+    --app-radius: 2px;
 
     --bs-body-bg: var(--app-bg);
     --bs-body-color: var(--app-text);
     --bs-border-color: var(--app-border);
-    --bs-link-color-rgb: 124, 140, 255;
-    --bs-link-hover-color-rgb: 167, 139, 250;
+    --bs-link-color-rgb: 236, 106, 112;
+    --bs-link-hover-color-rgb: 243, 146, 151;
+    --bs-border-radius: 2px;
+    --bs-border-radius-sm: 2px;
+    --bs-border-radius-lg: 3px;
     color-scheme: dark;
 }
 
@@ -30,6 +47,12 @@ h1, h2, h3, h4, h5, h6 {
     letter-spacing: -0.02em;
 }
 
+/* Page titles use the sheet's condensed face. */
+h1 {
+    font-family: var(--sheet-display);
+    letter-spacing: .01em;
+}
+
 a, .btn-link {
     color: var(--app-accent);
     text-decoration: none;
@@ -40,7 +63,7 @@ a, .btn-link {
     }
 
 .btn {
-    border-radius: 8px;
+    border-radius: 2px;
     font-weight: 500;
     transition: background-color .15s, border-color .15s, transform .05s;
 }
@@ -51,28 +74,48 @@ a, .btn-link {
 
 .btn-primary {
     color: #fff;
-    background-image: linear-gradient(135deg, #6672f5, #8b5cf6);
+    background-image: none;
+    background-color: var(--sheet-red);
     border: none;
 }
 
     .btn-primary:hover, .btn-primary:focus {
         color: #fff;
-        filter: brightness(1.12);
+        background-color: #c43c43;
+        filter: none;
     }
 
+.btn-outline-primary {
+    --bs-btn-color: var(--sheet-red-text);
+    --bs-btn-border-color: var(--sheet-red);
+    --bs-btn-hover-color: #fff;
+    --bs-btn-hover-bg: var(--sheet-red);
+    --bs-btn-hover-border-color: var(--sheet-red);
+    --bs-btn-active-color: #fff;
+    --bs-btn-active-bg: #c43c43;
+    --bs-btn-active-border-color: #c43c43;
+    --bs-btn-disabled-color: var(--sheet-red-text);
+    --bs-btn-disabled-border-color: var(--sheet-red);
+}
+
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-    box-shadow: 0 0 0 0.2rem rgba(124, 140, 255, 0.35);
+    box-shadow: 0 0 0 0.2rem rgba(236, 106, 112, 0.3);
+}
+
+.form-check-input:checked {
+    background-color: var(--sheet-red);
+    border-color: var(--sheet-red);
 }
 
 .form-control, .form-select {
-    background-color: var(--app-surface);
+    background-color: var(--sheet-panel-2);
     border-color: var(--app-border);
     color: var(--app-text);
-    border-radius: 8px;
+    border-radius: 2px;
 }
 
     .form-control:focus, .form-select:focus {
-        background-color: var(--app-surface-2);
+        background-color: var(--sheet-panel-2);
         border-color: var(--app-accent);
         color: var(--app-text);
     }
@@ -91,6 +134,7 @@ h1:focus {
     border-radius: var(--app-radius);
 }
 
+/* Tables follow the sheet: panel rows, monospaced capital headings and compact buttons. */
 .table {
     --bs-table-bg: var(--app-surface);
     --bs-table-color: var(--app-text);
@@ -104,11 +148,19 @@ h1:focus {
 
     .table thead th {
         color: var(--app-muted);
-        font-size: .75rem;
-        font-weight: 600;
-        letter-spacing: .06em;
+        font-family: var(--sheet-mono);
+        font-size: .66rem;
+        font-weight: 500;
+        letter-spacing: .1em;
         text-transform: uppercase;
         background-color: var(--app-surface-2);
+    }
+
+    .table .btn {
+        --bs-btn-padding-y: .1rem;
+        --bs-btn-padding-x: .45rem;
+        --bs-btn-font-size: .75rem;
+        --bs-btn-line-height: 1.4;
     }
 
 ::-webkit-scrollbar {
@@ -175,3 +227,129 @@ h1:focus {
 .combat-description-text { white-space:pre-wrap; overflow-wrap:anywhere; margin:0; }
 .combat-description-dialog h3 { font-size:1rem; margin:.8rem 0 .4rem; }
 @media(max-width:560px) { .combat-description-body { grid-template-columns:1fr; } .combat-description-overview { grid-template-columns:1fr; } }
+
+/* Character sheet style: square panels, a red section bar, small monospaced capitals for labels and a
+   condensed face for names and numbers. Put .sheet on a dialog to use it; the Traveller and
+   Patron/Enemy dialogs are the first. Fields are inputs styled as text, so the sheet stays editable. */
+.sheet {
+    width: min(78rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+    padding: 0;
+    border: 1px solid var(--sheet-line);
+    border-radius: 3px;
+    color: var(--app-text);
+    background: var(--sheet-bg);
+}
+.sheet::backdrop { background: rgba(0,0,0,.7); }
+/* Smaller dialogs in the sheet style: add "sheet sheet-dialog" to the dialog and "sheet-title" to its
+   heading, which becomes the red bar across the top. The doubled class outranks each dialog's own
+   scoped padding and corners. */
+.sheet.sheet-dialog.sheet-dialog { padding: 0 1.25rem 1.25rem; border-color: var(--sheet-line); border-radius: 3px; background: var(--sheet-bg); box-shadow: 0 1rem 3rem rgba(0,0,0,.55); }
+.sheet .sheet-title.sheet-title { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1rem; margin: 0 -1.25rem 1rem; padding: .55rem 1.25rem; background: var(--sheet-red); color: #fff; font-family: var(--sheet-mono); font-size: .76rem; font-weight: 600; line-height: 1.5; letter-spacing: .12em; text-transform: uppercase; }
+.sheet .sheet-title :is(h1, h2, h3, h4, h5) { margin: 0; font: inherit; letter-spacing: inherit; }
+.sheet .sheet-title .btn { margin-left: auto; letter-spacing: normal; text-transform: none; }
+.sheet .sheet-title .btn-outline-primary, .sheet .sheet-title .btn-outline-secondary { --bs-btn-color: #fff; --bs-btn-border-color: rgba(255,255,255,.6); --bs-btn-hover-bg: rgba(255,255,255,.15); --bs-btn-hover-border-color: #fff; --bs-btn-hover-color: #fff; }
+/* Field labels: a label holding a form control reads as a small monospaced capital caption. */
+.sheet label:has(> :is(.form-control, .form-select, select:not(.sheet-input), textarea:not(.sheet-input), input:not([type=checkbox], [type=radio], .sheet-input))), .sheet .field-label { color: var(--sheet-label); font-family: var(--sheet-mono); font-size: .68rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }
+.sheet :is(.form-control, .form-select, .btn, textarea, select) { font-family: var(--sheet-body); letter-spacing: normal; text-transform: none; }
+.sheet label:has(> :is(.form-control, .form-select)) > span { font: inherit; }
+.sheet legend { color: var(--sheet-label); font-family: var(--sheet-mono); font-size: .7rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }
+.sheet .hint { color: var(--sheet-label); }
+.sheet-toolbar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem 1rem; padding: .7rem 1rem; background: var(--sheet-bg); border-bottom: 1px solid var(--sheet-line); }
+.sheet-toolbar h2 { margin: 0; font-family: var(--sheet-mono); font-size: .8rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--sheet-label); }
+.sheet-toolbar .actions { display: flex; gap: .5rem; }
+.sheet-body { display: grid; gap: 1rem; padding: 1rem; }
+.sheet .error { margin: 0; color: #ffaaaa; }
+.sheet-panel { border: 1px solid var(--sheet-line); border-radius: 2px; background: var(--sheet-panel); }
+.sheet-bar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .3rem 1rem; padding: .45rem 1rem; background: var(--sheet-red); color: #fff; font-family: var(--sheet-mono); font-size: .72rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+.sheet-bar .sheet-bar-note { color: rgba(255,255,255,.82); font-weight: 400; }
+.sheet-label { display: block; margin-bottom: .3rem; color: var(--sheet-label); font-family: var(--sheet-mono); font-size: .68rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }
+.sheet-section-title { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .3rem 1rem; margin-bottom: .55rem; font-family: var(--sheet-mono); font-size: .74rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+.sheet-divider { height: 1px; margin: .9rem 0; background: var(--sheet-line); }
+
+/* Inputs that read as text until hovered or focused. */
+.sheet .sheet-input { display: block; width: 100%; min-width: 0; padding: .1rem 0; border: 0; border-bottom: 1px solid transparent; border-radius: 0; color: var(--app-text); background-color: transparent; font-size: 1.05rem; box-shadow: none; outline: none; }
+.sheet .sheet-input:hover:not(:disabled) { border-bottom-color: var(--sheet-line); }
+.sheet .sheet-input:focus { border-bottom-color: var(--sheet-red-text); background-color: transparent; color: var(--app-text); box-shadow: none; }
+.sheet .sheet-input::placeholder { color: #5c626b; }
+.sheet .sheet-input.form-select { padding-right: 1.6rem; background-position: right .1rem center; background-size: 12px 9px; }
+.sheet .sheet-input.form-select option, .sheet .sheet-input.form-select optgroup { color: var(--app-text); background: var(--sheet-panel); }
+.sheet .sheet-input:disabled { opacity: 1; color: var(--app-text); cursor: default; }
+.sheet .sheet-input.form-select:disabled { background-image: none; padding-right: 0; }
+.sheet .sheet-name { font-family: var(--sheet-display); font-size: 2.3rem; font-weight: 600; line-height: 1.1; letter-spacing: .01em; }
+.sheet textarea.sheet-input { resize: vertical; line-height: 1.55; font-size: .98rem; }
+.sheet input[type=number].sheet-input, .sheet .stat-value { -moz-appearance: textfield; appearance: textfield; }
+.sheet input[type=number].sheet-input::-webkit-inner-spin-button, .sheet .stat-value::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.sheet .sheet-static { display: block; padding: .1rem 0; font-size: 1.05rem; }
+.sheet-toggle { display: flex; align-items: center; gap: .5rem; min-height: 1.9rem; font-size: .95rem; cursor: pointer; }
+.sheet-toggle input { width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--sheet-red); }
+
+/* Personal data: the fields beside a token column. */
+.sheet-personal { display: grid; grid-template-columns: minmax(0,1fr) 14rem; }
+.sheet-personal-main { padding: 1rem 1.2rem 1.1rem; }
+.sheet-personal-token { display: flex; flex-direction: column; align-items: center; gap: .45rem; margin: 1rem 0; padding: 0 1rem; border-left: 1px solid var(--sheet-line); text-align: center; }
+.sheet-personal-token .sheet-label { align-self: stretch; text-align: left; }
+.sheet-fields { display: grid; gap: .9rem 1.4rem; }
+.sheet-token { display: grid; place-items: center; width: 7.5rem; height: 7.5rem; border: 3px solid var(--sheet-red-text); border-radius: 50%; background: var(--sheet-panel-2); color: var(--sheet-label); font-family: var(--sheet-mono); font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; object-fit: cover; }
+.sheet-token-pick { position: relative; overflow: hidden; color: var(--sheet-red-text); font-weight: 600; font-size: .9rem; cursor: pointer; }
+.sheet-token-pick input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.sheet-token-pick:focus-within { outline: 2px solid var(--sheet-red-text); outline-offset: 2px; }
+.sheet-token-pick.disabled { opacity: .5; cursor: default; }
+.sheet-link-button { padding: 0; border: 0; background: none; color: var(--sheet-label); font-size: .8rem; text-decoration: underline; }
+.sheet-link-button:hover:not(:disabled) { color: var(--app-text); }
+.sheet-hint { color: var(--sheet-label); font-family: var(--sheet-mono); font-size: .64rem; letter-spacing: .02em; }
+.sheet .form-check-input:checked { border-color: var(--sheet-red); background-color: var(--sheet-red); }
+
+/* Injury Tolerance as a row of chips. */
+.sheet .injury-tolerance.injury-tolerance { gap: .4rem; margin: .9rem 0 0; padding: 0; border: 0; }
+.sheet .injury-tolerance.injury-tolerance legend { float: left; width: 100%; margin-bottom: .3rem; padding: 0; color: var(--sheet-label); font-family: var(--sheet-mono); font-size: .68rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }
+.sheet .injury-tolerance.injury-tolerance label { padding: .2rem .6rem; border: 1px solid var(--sheet-line); border-radius: 2px; background: var(--sheet-panel-2); font-family: var(--sheet-mono); font-size: .72rem; letter-spacing: .04em; cursor: pointer; }
+.sheet .injury-tolerance.injury-tolerance label:has(input:checked) { border-color: var(--sheet-red); background: rgba(179,51,58,.22); }
+.sheet .injury-tolerance.injury-tolerance input { accent-color: var(--sheet-red); }
+
+/* Characteristics: one card per score. */
+.sheet-upp { display: flex; align-items: baseline; gap: 1.2rem; color: var(--sheet-label); font-weight: 500; }
+.sheet-upp strong { color: var(--sheet-red-text); font-family: var(--sheet-display); font-size: 1.5rem; letter-spacing: .08em; }
+.stat-cards { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: .6rem; }
+.stat-card { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); grid-template-areas: "code code code" "value now dm" "name name name"; align-items: center; gap: .1rem .45rem; padding: .7rem .8rem .65rem; border: 1px solid var(--sheet-line); border-top: 2px solid #4a5058; border-radius: 2px; background: var(--sheet-panel); }
+.stat-code { grid-area: code; margin: 0; font-family: var(--sheet-mono); font-size: .78rem; font-weight: 700; letter-spacing: .08em; }
+.sheet .stat-value { grid-area: value; width: 100%; min-width: 0; padding: 0; border: 0; border-bottom: 1px solid transparent; color: var(--app-text); background: transparent; font-family: var(--sheet-display); font-size: 2.5rem; font-weight: 600; line-height: 1.05; outline: none; }
+.sheet .stat-value:hover:not(:disabled) { border-bottom-color: var(--sheet-line); }
+.sheet .stat-value:focus { border-bottom-color: var(--sheet-red-text); }
+.stat-box { display: flex; flex-direction: column; align-items: center; gap: .2rem; }
+.stat-box strong { display: grid; place-items: center; min-width: 2.5rem; padding: .3rem .35rem; border-radius: 2px; background: var(--sheet-panel-2); font-family: var(--sheet-mono); font-size: .95rem; font-weight: 600; }
+.stat-box small { color: var(--sheet-label); font-family: var(--sheet-mono); font-size: .58rem; letter-spacing: .1em; text-transform: uppercase; }
+.stat-dm { grid-area: dm; justify-self: end; }
+.stat-dm strong { color: var(--sheet-red-text); }
+.stat-current { grid-area: now; }
+.stat-current strong { min-width: 2rem; padding: .2rem .3rem; color: var(--sheet-current); font-size: .85rem; background: rgba(76,201,176,.12); }
+.stat-current.reduced strong { color: var(--sheet-reduced); background: rgba(242,163,58,.16); }
+.stat-current.unknown strong { color: var(--sheet-label); }
+.stat-name { grid-area: name; color: var(--sheet-label); font-size: .78rem; }
+
+/* Records: the tabs and their tables. */
+.sheet-records { padding: 0 1.2rem 1.1rem; }
+.sheet .sheet-records .tab-bar { margin: 0 -1.2rem 1rem; padding-right: 1.2rem; border-bottom: 1px solid var(--sheet-line); }
+.sheet .sheet-records .tab-bar .tab-list { gap: 0; }
+.sheet .sheet-records .tab-bar .tab { min-width: 9rem; padding: .75rem 1.4rem; border: 0; border-right: 1px solid var(--sheet-line); border-bottom: 2px solid transparent; border-radius: 0; color: var(--app-text); font-size: .95rem; font-weight: 500; text-align: left; }
+.sheet .sheet-records .tab-bar .tab:hover { background: rgba(255,255,255,.04); }
+.sheet .sheet-records .tab-bar .tab[aria-selected="true"] { color: var(--sheet-red-text); border-bottom-color: var(--sheet-red-text); background: rgba(179,51,58,.14); }
+.sheet .sheet-records .tab-bar .tab:focus-visible { outline: 2px solid var(--sheet-red-text); }
+.sheet .sheet-records .tab-bar .tab .tab-badge { margin-left: .9rem; border-radius: 2px; font-family: var(--sheet-mono); }
+.sheet .sheet-records .tab-bar .tab[aria-selected="true"] .tab-badge { color: #fff; background: var(--sheet-red); }
+.sheet .sheet-records .tab-bar .tab-extras { color: var(--sheet-label); font-family: var(--sheet-mono); font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; }
+.sheet .table { --bs-table-bg: transparent; --bs-table-striped-bg: transparent; --bs-table-border-color: var(--sheet-line); --bs-table-hover-bg: rgba(255,255,255,.03); border-radius: 0; }
+.sheet .table > thead > tr > th { padding: .5rem .7rem; border-bottom: 0; background: var(--sheet-panel-2); color: var(--sheet-label); font-family: var(--sheet-mono); font-size: .66rem; font-weight: 500; letter-spacing: .1em; }
+.sheet .table > tbody > tr > th, .sheet .table > tbody > tr > td { padding: .5rem .7rem; }
+.sheet .table > tbody > tr > th[scope=row] { font-weight: 500; }
+.sheet .btn { border-radius: 2px; }
+.sheet .btn-primary { background-image: none; background-color: var(--sheet-red); }
+.sheet .btn-primary:hover, .sheet .btn-primary:focus { background-color: #c43c43; filter: none; }
+.sheet :where(.form-control, .form-select):not(.sheet-input) { border-color: var(--sheet-line); border-radius: 2px; background-color: var(--sheet-panel-2); }
+.sheet .sheet-records label { color: var(--sheet-label); }
+.sheet .empty-message { color: var(--sheet-label); }
+
+@media (max-width: 1000px) { .stat-cards { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+@media (max-width: 760px) { .sheet-personal { grid-template-columns: minmax(0,1fr); } .sheet-personal-token { margin: 0 1rem 1rem; padding: 1rem 0 0; border-left: 0; border-top: 1px solid var(--sheet-line); } .sheet-fields { grid-template-columns: repeat(2, minmax(0,1fr)) !important; } }
+@media (max-width: 480px) { .stat-cards { grid-template-columns: repeat(2, minmax(0,1fr)); } }

@@ -8,8 +8,8 @@
     var running = Refresh.Status == TileRefreshStatus.Running;
 
     <div class="dialog-backdrop">
-        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="tile-dialog-title">
-            <h5 id="tile-dialog-title">Refresh Sector Data</h5>
+        <div class="sheet sheet-dialog dialog" role="dialog" aria-modal="true" aria-labelledby="tile-dialog-title">
+            <h5 id="tile-dialog-title" class="sheet-title">Refresh Sector Data</h5>
 
             <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Refresh.Percent.ToString("0")">
                 <div class="progress-fill" style="width: @Refresh.Percent.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%"></div>

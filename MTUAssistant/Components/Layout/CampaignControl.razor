@@ -26,8 +26,8 @@
 @if (dialogOpen)
 {
     <div class="campaign-backdrop">
-        <div class="campaign-dialog" role="dialog" aria-modal="true" aria-labelledby="campaign-dialog-title">
-            <h2 id="campaign-dialog-title">@(editingId == 0 ? "Add Campaign" : "Edit Campaign")</h2>
+        <div class="sheet sheet-dialog campaign-dialog" role="dialog" aria-modal="true" aria-labelledby="campaign-dialog-title">
+            <h2 id="campaign-dialog-title" class="sheet-title">@(editingId == 0 ? "Add Campaign" : "Edit Campaign")</h2>
             <label>Name <input class="form-control" maxlength="120" @bind="name" /></label>
             <div class="date-fields">
                 <label>Day <input class="form-control" type="number" min="1" max="365" @bind="day" /></label>

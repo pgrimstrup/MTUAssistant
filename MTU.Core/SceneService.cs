@@ -13,6 +13,9 @@ public sealed class SceneInput
     public string GridColour { get; set; } = "#000000";
     public int GridOpacity { get; set; } = 50;
     public double GridlineWidth { get; set; } = 2;
+
+    /// <summary>Ambient Light in metres. Null leaves the saved value as it is.</summary>
+    public int? AmbientVisualDistance { get; set; }
 }
 
 public sealed record SceneSummary(
@@ -26,7 +29,9 @@ public sealed record SceneSummary(
     long Revision,
     int ImageBytes,
     // True when an active Traveller is in the scene's roster, placed on the map or not.
-    bool HasTravellers = false
+    bool HasTravellers = false,
+    // The scene's Ambient Light in metres.
+    int AmbientVisualDistance = 0
 );
 
 public sealed record SceneImage(byte[] Bytes, string ContentType);
@@ -101,7 +106,8 @@ public sealed partial class SceneService(IServiceScopeFactory scopes)
                     && !t.Character.IsNpc
                     && !t.Character.IsAnimal
                     && !t.Character.Inactive
-                )
+                ),
+                s.AmbientVisualDistance
             ))
             .ToArrayAsync();
     }
@@ -137,6 +143,8 @@ public sealed partial class SceneService(IServiceScopeFactory scopes)
             );
         if (!System.Text.RegularExpressions.Regex.IsMatch(input.GridColour, "^#[0-9a-fA-F]{6}$"))
             throw new ArgumentException("Choose a valid grid colour.");
+        if (input.AmbientVisualDistance is { } ambient)
+            LineOfSight.Validate(ambient, "Ambient Light");
         string? contentType = null;
         if (image is not null)
         {
@@ -167,6 +175,8 @@ public sealed partial class SceneService(IServiceScopeFactory scopes)
         entity.GridColour = input.GridColour;
         entity.GridOpacity = input.GridOpacity;
         entity.GridlineWidth = input.GridlineWidth;
+        if (input.AmbientVisualDistance is { } metres)
+            entity.AmbientVisualDistance = metres;
         entity.Revision++;
         if (image is not null)
         {
@@ -190,7 +200,8 @@ public sealed partial class SceneService(IServiceScopeFactory scopes)
                 && !t.Character.IsNpc
                 && !t.Character.IsAnimal
                 && !t.Character.Inactive
-            )
+            ),
+            entity.AmbientVisualDistance
         );
     }
 

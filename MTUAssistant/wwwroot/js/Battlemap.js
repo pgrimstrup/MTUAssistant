@@ -7,7 +7,7 @@ import { movementGeometry, weaponRangeBand, measureGeometry, measureLabel, measu
 import { attachCastWindow } from './CastWindow.js';
 import { presentationSession } from './PresentationSync.js';
 import { createRingTextures, destroyRingTextures, ringRotation, ringSpriteScale, selectionRingPlacements, RING_OUTER_EXTENTS, RING_SPEEDS, RING_TINTS } from './SelectionRings.js';
-import { connectBattlemapPresentation, playerMeasure, playerTokens, playerCombatants, playerMovementRanges, playerMovementTrails, playerTargetSelection } from './BattlemapPresentationSync.js';
+import { connectBattlemapPresentation, playerScene, playerMeasure, playerTokens, playerCombatants, playerMovementRanges, playerMovementTrails, playerTargetSelection } from './BattlemapPresentationSync.js';
 export function fitView(width, height, imageWidth, imageHeight) {
     const scale = Math.min(width / imageWidth, height / imageHeight);
     return { x: (width - imageWidth * scale) / 2, y: (height - imageHeight * scale) / 2, scale };
@@ -57,7 +57,7 @@ export async function createBattlemap(host, url, scene, key, tokens = [], callba
     map.fogHistory = []; map.fogBrush = 3;
     // Polygons are GM-only, so a read-only presentation map never holds any.
     if (!map.readOnly && validPolygons(options.polygons)) map.polygons = options.polygons.map(polygon => ({points:polygon.points.map(({x,y}) => ({x,y})),active:polygon.active !== false}));
-    // The scene's Ambient Visual Distance in metres, for line-of-sight fog. The player view never reveals fog itself.
+    // The scene's Ambient Light in metres, for line-of-sight fog. The player view never reveals fog itself.
     if (!map.readOnly) map.ambientSight = Number(options.ambientSight) > 0 ? Number(options.ambientSight) : 0;
     try { await map.start(url); await Promise.all(tokens.filter(t => t.column != null && t.row != null).map(token => map.upsertToken(token))); if (presentationLink) map.attachPresentation(presentationLink); return map; }
     catch (error) { await map.dispose(); throw error; }
@@ -564,7 +564,7 @@ export class Battlemap {
         this.sightKey=null; this.revealSight();
     }
     // Line-of-sight fog (experimental). While fog is on, the squares the selected Traveller can see are cleared
-    // whenever the selection, that Traveller's position or Visual Distance, the map's Ambient Visual Distance or
+    // whenever the selection, that Traveller's position or Visual Distance, the map's Ambient Light or
     // the polygons change. The Traveller sees as far as the higher of the two distances; when both are 0 nothing
     // is cleared and the GM reveals the map by hand. Seen squares stay seen: fog is never put back.
     setAmbientSight(metres) {
@@ -1157,7 +1157,7 @@ export class Battlemap {
             tracker:visible.tracker,movementRanges:playerMovementRanges(visible.ranges),measure:playerMeasure(this.measure,this.revealedFog),
             movementTrails:playerMovementTrails(visible.trails,visible.tokens),
             targetSelection:this.combatMode ? playerTargetSelection(this.targetActorId,this.targetIds ?? this.targetId,visible.tokens,this.targetRange) : null,
-            scene:this.scene,tokens:playerTokens(visible.tokens),
+            scene:playerScene(this.scene),tokens:playerTokens(visible.tokens),
             view:{...this.view,width:this.width,height:this.height,imageWidth:this.imageWidth,imageHeight:this.imageHeight}});
     }
     publishPresentationPointer() {

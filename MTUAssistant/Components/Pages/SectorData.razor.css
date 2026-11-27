@@ -2,7 +2,7 @@
 .page-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:.8rem; }
 h1 { margin:0; font-size:1.8rem; }
 .intro { color:var(--app-muted); }
-.refresh-badge { display:inline-block; white-space:nowrap; padding:.3rem .7rem; border:1px solid var(--app-border); border-radius:999px; background:var(--app-surface-2); color:var(--app-text); font-size:.85rem; }
+.refresh-badge { display:inline-block; white-space:nowrap; padding:.3rem .7rem; border:1px solid var(--app-border); border-radius:2px; background:var(--app-surface-2); color:var(--app-text); font-size:.85rem; }
 .statistics { display:grid; grid-template-columns:repeat(auto-fit,minmax(12rem,1fr)); gap:1rem; margin:1.5rem 0; }
 .statistics > div { padding:1.2rem; border:1px solid var(--app-border); border-radius:var(--app-radius); background:var(--app-surface); }
 .statistics dt { font-size:.85rem; font-weight:400; color:var(--app-muted); }

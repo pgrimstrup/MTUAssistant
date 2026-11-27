@@ -25,6 +25,9 @@ public sealed record Character(
     int VisualDistance = 0
 );
 
+/// <summary>How many entries each tab of a character sheet holds.</summary>
+public sealed record CharacterRecordCounts(int Career, int Skills, int Armour, int Weapons);
+
 public sealed record CharacterSkill(int Id, int CharacterId, string Name, int Level);
 
 public sealed record StewardModifier(int? Value, bool HasSkill, IReadOnlyList<string> MissingInt);
@@ -213,7 +216,7 @@ public sealed class CharacterService(MtuDbContext db)
         InjuryToleranceRules.Validate(character.InjuryTolerance);
         if (character.Speed < 0)
             throw new ArgumentException("Speed must be zero or greater.");
-        LineOfSight.Validate(character.VisualDistance, "Visual Distance");
+        LineOfSight.Validate(character.VisualDistance, "Light");
         var name = character.Name?.Trim() ?? "";
         var player = character.PlayerName?.Trim() ?? "";
         var race = character.Race?.Trim() ?? "";
@@ -255,6 +258,26 @@ public sealed class CharacterService(MtuDbContext db)
         entity.Inactive = character.Inactive;
         await db.SaveChangesAsync();
         return entity.Id;
+    }
+
+    /// <summary>Counts a Traveller's or NPC's career terms, skills, armour and weapons for the
+    /// tab badges of the character sheet. A character from another campaign counts as empty.</summary>
+    public async Task<CharacterRecordCounts> RecordCountsAsync(int campaignId, int characterId)
+    {
+        if (!await db.Characters.AnyAsync(c => c.Id == characterId && c.CampaignId == campaignId))
+            return new(0, 0, 0, 0);
+        var career = await db.CareerTerms.CountAsync(t => t.CharacterId == characterId);
+        var skills = await db.CharacterSkills.CountAsync(s => s.CharacterId == characterId);
+        var kinds = await db
+            .CharacterEquipment.Where(e => e.CharacterId == characterId)
+            .Select(e => e.Equipment.Kind)
+            .ToListAsync();
+        return new(
+            career,
+            skills,
+            kinds.Count(k => k == EquipmentKind.Armour),
+            kinds.Count(k => k == EquipmentKind.Weapon)
+        );
     }
 
     public async Task<IReadOnlyList<CharacterSkill>> ListSkillsAsync(

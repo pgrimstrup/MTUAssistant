@@ -1,0 +1,45 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@* A small modal dialog in the character sheet style: the title is the red bar across the top.
+   The page renders it while it should be open and removes it to close it. Escape calls OnCancel. *@
+<dialog @ref="dialog" class="sheet sheet-dialog sheet-modal" style="@($"width:min({Width},calc(100vw - 2rem))")" aria-labelledby="@HeadingId">
+    <h2 id="@HeadingId" class="sheet-title">@Title</h2>
+    @ChildContent
+</dialog>
+
+@code {
+    private static int count;
+    private readonly string HeadingId = $"sheet-dialog-heading-{Interlocked.Increment(ref count)}";
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    /// <summary>A CSS width such as 40rem; the dialog never grows past the window.</summary>
+    [Parameter] public string Width { get; set; } = "36rem";
+    /// <summary>While true, Escape does nothing.</summary>
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    private ElementReference dialog;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<SheetDialog>? reference;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/EquipmentDialog.js");
+            reference = DotNetObjectReference.Create(this);
+            await module.InvokeVoidAsync("open", dialog, reference);
+        }
+        catch (JSDisconnectedException) { }
+    }
+    [JSInvokable] public async Task Cancel() { if (!Busy) await OnCancel.InvokeAsync(); }
+    public async ValueTask DisposeAsync()
+    {
+        if (module is not null)
+        {
+            try { await module.InvokeVoidAsync("close", dialog); await module.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+        reference?.Dispose();
+    }
+}

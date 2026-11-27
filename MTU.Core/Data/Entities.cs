@@ -172,7 +172,7 @@ public class CharacterEntity
     public int Speed { get; set; } = 6;
 
     /// <summary>How far the character can see by its own means, in metres, when clearing fog by
-    /// line of sight. 0 leaves it to the scene's Ambient Visual Distance.</summary>
+    /// line of sight. 0 leaves it to the scene's Ambient Light.</summary>
     public int VisualDistance { get; set; }
     public InjuryTolerance InjuryTolerance { get; set; }
     public byte[]? TokenImage { get; set; }

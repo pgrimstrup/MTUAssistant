@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {playerTokens,validBattlemapSnapshot,connectBattlemapPresentation} from '../../wwwroot/js/BattlemapPresentationSync.js';
+import {playerTokens,playerScene,validBattlemapSnapshot,connectBattlemapPresentation} from '../../wwwroot/js/BattlemapPresentationSync.js';
 const visible={id:1,characterId:10,name:'Mercenary 1',isNpc:true,hasTokenImage:false,isVisible:true,column:2,row:3,container:{secret:true}};
 const hidden={...visible,id:2,name:'Hidden captain',isVisible:false};
 const offMap={...visible,id:3,column:null,row:null};
@@ -70,3 +70,10 @@ for(const diameter of [4.5,7.5,10.5,13.5,19.5,25.5,37.5]) assert.ok(validBattlem
 
 for(const diameter of [1.5,5,8.5,15.5,31.5,55.5,73.5]) assert.ok(validBattlemapSnapshot({...state,movementRanges:[{...ranges[0],diameter}]}),'cast accepts custom character Speed movement');
 for(const diameter of [0,-1,NaN,Infinity]) assert.equal(validBattlemapSnapshot({...state,movementRanges:[{...ranges[0],diameter}]}),false,'cast rejects invalid Speed movement diameter');
+
+const gmScene={id:3,campaignId:1,name:'Dock',gridSize:100,gridColour:'#000000',gridOpacity:50,gridlineWidth:2,revision:4,ambientVisualDistance:24};
+const castScene=playerScene(gmScene);
+assert.equal('ambientVisualDistance' in castScene,false,'the cast scene leaves out the Ambient Light');
+assert.deepEqual(castScene,{id:3,campaignId:1,name:'Dock',gridSize:100,gridColour:'#000000',gridOpacity:50,gridlineWidth:2,revision:4},'the cast scene keeps the grid');
+assert.equal(gmScene.ambientVisualDistance,24,'the GM scene is not changed');
+console.log('Cast scene privacy passed.');

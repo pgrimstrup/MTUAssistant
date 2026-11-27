@@ -6,7 +6,7 @@
         {
             var index = i;
             var selected = index == ActiveIndex;
-            <button @ref="buttons[index]" type="button" role="tab" class="tab" id="@TabId(index)" aria-selected="@(selected ? "true" : "false")" aria-controls="@PanelId" tabindex="@(selected ? 0 : -1)" @onclick="() => Select(index)">@(TabLabel?.Invoke(Tabs[index]) ?? Tabs[index].ToString())</button>
+            <button @ref="buttons[index]" type="button" role="tab" class="tab" id="@TabId(index)" aria-selected="@(selected ? "true" : "false")" aria-controls="@PanelId" tabindex="@(selected ? 0 : -1)" @onclick="() => Select(index)">@(TabLabel?.Invoke(Tabs[index]) ?? Tabs[index].ToString())@if (TabBadge?.Invoke(Tabs[index]) is { } badge) { <span class="tab-badge">@badge</span> }</button>
         }
     </div>
     @if (Extras is not null) { <div class="tab-extras">@Extras</div> }
@@ -21,6 +21,8 @@
     [Parameter, EditorRequired] public string IdPrefix { get; set; } = "";
     [Parameter, EditorRequired] public string AriaLabel { get; set; } = "";
     [Parameter] public Func<TValue, string>? TabLabel { get; set; }
+    /// <summary>Optional short text shown beside a tab label, such as how many entries it holds.</summary>
+    [Parameter] public Func<TValue, string?>? TabBadge { get; set; }
     [Parameter] public RenderFragment? Extras { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
     private ElementReference[] buttons = [];

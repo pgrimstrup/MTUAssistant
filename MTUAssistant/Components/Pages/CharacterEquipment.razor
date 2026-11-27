@@ -45,22 +45,13 @@
         }
     }
     <div class="equipment-controls">
-        <label>@KindName("Equipment", "Armour", "Weapon") <select class="form-select" @bind="selectedId" disabled="@(busy || loading)">
-            <option value="0">Select @KindName("equipment", "armour", "a weapon")</option>
-            @foreach (var kind in Kinds)
-            {
-                <optgroup label="@(kind == EquipmentKind.Armour ? "Armour" : "Weapons")">
-                    @foreach (var item in catalogue.Where(e => e.Kind == kind && !equipment.Any(owned => owned.Equipment.Id == e.Id)))
-                    {
-                        <option value="@item.Id">@item.Name · TL @item.Tl — @(item.Kind == EquipmentKind.Armour ? $"DR {item.Protection:+0;-0;+0}" : $"{(item.Range == 0 ? "Melee" : $"{item.Range}m")}, {item.Damage}")</option>
-                    }
-                </optgroup>
-            }
-        </select></label>
-        <button type="button" class="btn btn-primary" @onclick="Add" disabled="@(busy || loading || selectedId == 0)">Add @KindName("Equipment", "Armour", "Weapon")</button>
+        @foreach (var kind in Kinds)
+        {
+            <button type="button" class="btn btn-primary" @onclick="() => Add(kind)" disabled="@(busy || loading)">+ Add @(kind == EquipmentKind.Armour ? "Armour" : "Weapon")</button>
+        }
         <button type="button" class="btn btn-outline-secondary" @onclick="New" disabled="@(busy || loading)">New @KindName("Equipment", "Armour", "Weapon")</button>
     </div>
-    @if (detailsEditing is not null) { <CharacterEquipmentDialog @key="detailsEditing" Character="Character" Item="detailsEditing" Adding="addingDetails" OnSaved="DetailsSaved" OnClose="() => detailsEditing = null" /> }
+    @if (detailsEditing is not null) { <CharacterEquipmentDialog @key="detailsEditing" Character="Character" Item="detailsEditing" Adding="addingDetails" Kind="addingKind" Choices="Available" OnSaved="DetailsSaved" OnClose="() => detailsEditing = null" /> }
     @if (editing is not null) { <EquipmentDialog @key="editing" Item="editing" OnSaved="Saved" OnClose="() => editing = null" /> }
 </section>
 
@@ -79,7 +70,9 @@
     private CharacterEquipmentDetails? detailsEditing;
     private bool addingDetails;
     private EquipmentItem? editing;
-    private int selectedId;
+    private EquipmentKind addingKind = EquipmentKind.Armour;
+    // Catalogue items the character doesn't carry yet: the choices in the Add dialog.
+    private IReadOnlyList<EquipmentItem> Available => [.. catalogue.Where(e => !equipment.Any(owned => owned.Equipment.Id == e.Id))];
     private bool busy, loading = true;
     private string? error;
     protected override async Task OnInitializedAsync() => await Load();
@@ -118,22 +111,28 @@
         var isNew = editing?.Id == 0;
         editing = null;
         await Load();
-        if (isNew && (Kind is null || item.Kind == Kind)) selectedId = item.Id;
+        // A new catalogue item opens the Add dialog with it already chosen, ready to set a quantity.
+        if (isNew && (Kind is null || item.Kind == Kind) && catalogue.FirstOrDefault(e => e.Id == item.Id) is { } created)
+            Add(created.Kind, created);
         await OnChanged.InvokeAsync();
     }
-    private void Add()
+    private void Add(EquipmentKind kind) => Add(kind, null);
+    private void Add(EquipmentKind kind, EquipmentItem? chosen)
     {
         if (busy) return;
-        var item = catalogue.FirstOrDefault(e => e.Id == selectedId);
-        if (item is null) return;
+        addingKind = kind;
         addingDetails = true;
-        detailsEditing = new() { Equipment = item };
+        detailsEditing = new() { Equipment = chosen ?? new EquipmentItem { Kind = kind } };
     }
-    private void Options(CharacterEquipmentDetails item) { addingDetails = false; detailsEditing = item; }
+    private void Options(CharacterEquipmentDetails item)
+    {
+        addingKind = item.Equipment.Kind;
+        addingDetails = false;
+        detailsEditing = item;
+    }
     private async Task DetailsSaved()
     {
         detailsEditing = null;
-        selectedId = 0;
         await Load();
         await OnChanged.InvokeAsync();
     }

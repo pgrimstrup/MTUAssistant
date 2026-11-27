@@ -2,6 +2,12 @@ import { validFog, fogKey, fogVisible } from './FogOfWar.js';
 import { validDescription } from './CombatDescription.js';
 import { validSession, validPointer } from './PresentationSync.js';
 
+// The scene goes to players without its Ambient Light, which is the GM's sight setting.
+export function playerScene(scene) {
+    if (!scene) return scene;
+    const { ambientVisualDistance, ...rest } = scene;
+    return rest;
+}
 // Copy only public data, never Pixi objects or hidden combatants.
 export function playerTokens(tokens) {
     return tokens.filter(t => t.isVisible === true && t.column != null && t.row != null)

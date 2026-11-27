@@ -35,7 +35,7 @@ public partial class Battlemap
         }
     }
 
-    // Experimental. The scene's Ambient Visual Distance in metres, saved with the scene. With each
+    // Experimental. The scene's Ambient Light in metres, saved with the scene. With each
     // Traveller's own Visual Distance it sets how far line of sight clears fog; 0 for both leaves
     // the fog to the GM.
     private int ambientVisualDistance;
@@ -59,7 +59,7 @@ public partial class Battlemap
             error =
                 ex is ArgumentException
                     ? ex.Message
-                    : "Unable to save the Ambient Visual Distance. Please try again.";
+                    : "Unable to save the Ambient Light. Please try again.";
             // Show the stored value again rather than the one that was refused.
             try
             {

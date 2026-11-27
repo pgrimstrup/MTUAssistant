@@ -1,0 +1,53 @@
+@* The characteristics of a character sheet: one card per score with its DM, and for STR, DEX and END
+   the current value left by damage in the Combat Tracker. The scores are edited in place in Scores. *@
+<section class="sheet-characteristics" aria-label="Characteristics">
+    <div class="sheet-section-title">
+        <span>@Number / Characteristics</span>
+        <span class="sheet-upp"><span>Universal Personal Profile</span><strong>@Upp</strong></span>
+    </div>
+    <div class="stat-cards">
+        @for (var i = 0; i < Scores.Length && i < CharacteristicProfile.Labels.Count; i++)
+        {
+            var index = i;
+            var score = Scores[index];
+            var now = Current.Value(index, score);
+            <div class="stat-card">
+                <label class="stat-code" for="@($"{IdPrefix}-stat-{index}")">@CharacteristicProfile.Labels[index]</label>
+                <input id="@($"{IdPrefix}-stat-{index}")" class="stat-value" type="number" min="0" max="@CharacteristicProfile.MaxScore" step="1" @bind="Scores[index]" disabled="@Disabled" aria-label="@Names[index]" />
+                @if (now is int value)
+                {
+                    <span class="stat-box stat-current @(value < score ? "reduced" : null)" title="@(value < score ? $"Current {Names[index]} after damage in the Combat Tracker" : $"Current {Names[index]}: no damage recorded")"><strong>@value</strong><small>Now</small></span>
+                }
+                else if (index < 3 && Current.Instances > 1)
+                {
+                    <span class="stat-box stat-current unknown" title="On the map more than once. Each instance's damage is in the Combat Tracker."><strong>–</strong><small>Now</small></span>
+                }
+                <span class="stat-box stat-dm" title="Characteristic DM"><strong>@(score is int s ? Encounter.Dm(s).ToString("+0;-0;+0") : "–")</strong><small>DM</small></span>
+                <span class="stat-name">@Names[index]</span>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private static readonly string[] Names = ["Strength", "Dexterity", "Endurance", "Intellect", "Education", "Social standing"];
+
+    /// <summary>The six scores, edited in place.</summary>
+    [Parameter, EditorRequired] public int?[] Scores { get; set; } = [];
+    /// <summary>Digits after SOC, such as PSI, shown at the end of the profile.</summary>
+    [Parameter] public string Extra { get; set; } = "";
+    [Parameter] public CurrentCharacteristics Current { get; set; } = CurrentCharacteristics.None;
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter, EditorRequired] public string IdPrefix { get; set; } = "";
+    /// <summary>The section number in the sheet heading, such as "02".</summary>
+    [Parameter] public string Number { get; set; } = "02";
+
+    private string Upp
+    {
+        get
+        {
+            try { return CharacteristicProfile.Join(Scores, Extra) is { Length: > 0 } upp ? upp : "—"; }
+            catch (ArgumentException) { return "—"; }
+        }
+    }
+}

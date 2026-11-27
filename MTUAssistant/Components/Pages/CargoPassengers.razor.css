@@ -37,7 +37,7 @@ h1 { margin: 0; font-size: 1.8rem; }
 .fees-heading { margin: 1.5rem 0 .3rem; color: var(--app-text); font-size: 1rem; }
 .fees-caption { margin: 0 0 .6rem; font-size: .8rem; }
 
-.outdated-badge { padding: .2rem .5rem; border: 1px solid rgba(243,195,108,.4); border-radius: 999px; color: #f3c36c; background: rgba(243,195,108,.1); font-size: .7rem; font-weight: 650; }
+.outdated-badge { padding: .2rem .5rem; border: 1px solid rgba(243,195,108,.4); border-radius: 2px; color: #f3c36c; background: rgba(243,195,108,.1); font-size: .7rem; font-weight: 650; }
 
 .cargo-controls { display: flex; flex-wrap: wrap; align-items: end; gap: .8rem; margin-left: auto; }
 

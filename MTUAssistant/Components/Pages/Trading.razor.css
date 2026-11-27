@@ -27,7 +27,7 @@ h2 { margin: 0; font-size: 1.15rem; }
 .trade-credit { margin-top:1rem; font-size:.75rem; color:var(--app-muted); }
 
 .header-status { display:flex; align-items:center; gap:.6rem; }
-.outdated-badge { padding:.2rem .5rem; border:1px solid rgba(243,195,108,.4); border-radius:999px; color:#f3c36c; background:rgba(243,195,108,.1); font-size:.7rem; font-weight:650; }
+.outdated-badge { padding:.2rem .5rem; border:1px solid rgba(243,195,108,.4); border-radius:2px; color:#f3c36c; background:rgba(243,195,108,.1); font-size:.7rem; font-weight:650; }
 
 .destination-label { display:grid; gap:.3rem; color:var(--app-muted); font-size:.8rem; margin-bottom:.5rem; }
 .danger-badge { color:#ffaaaa; border-color:rgba(255,100,100,.55); background:rgba(190,45,45,.2); }

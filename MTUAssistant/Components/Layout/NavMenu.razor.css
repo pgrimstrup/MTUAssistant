@@ -37,7 +37,7 @@
         color: var(--app-muted);
         background: none;
         border: none;
-        border-radius: 8px;
+        border-radius: 2px;
         transition: background-color .15s, color .15s;
         height: 3rem;
         display: flex;

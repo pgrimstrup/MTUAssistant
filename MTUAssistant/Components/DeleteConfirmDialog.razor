@@ -1,8 +1,8 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 
-<dialog @ref="dialog" class="delete-confirm-dialog" aria-labelledby="delete-confirm-heading" aria-describedby="delete-confirm-message">
-    <h2 id="delete-confirm-heading">@Title</h2>
+<dialog @ref="dialog" class="sheet sheet-dialog delete-confirm-dialog" aria-labelledby="delete-confirm-heading" aria-describedby="delete-confirm-message">
+    <h2 id="delete-confirm-heading" class="sheet-title">@Title</h2>
     @if (Error is not null) { <p class="error" role="alert">@Error</p> }
     <div id="delete-confirm-message" class="message">@ChildContent</div>
     <div class="actions">

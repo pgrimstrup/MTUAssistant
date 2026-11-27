@@ -98,7 +98,7 @@ Get-ChildItem MTUAssistant -Recurse -Filter *.test.mjs | ForEach-Object { node $
 csharpier check .
 ```
 
-**Baseline (22 Nov 2026):** 0 warnings, 0 errors, all RuntimeChecks pass, all 22 `.mjs` tests pass. A new warning counts as a regression. When you add or remove a test file, update this count and date in the same change. If you can't run something, say so plainly. Paul checks the UI in a browser himself, so finish by telling him what to look at.
+**Baseline (27 Nov 2026):** 0 warnings, 0 errors, all RuntimeChecks pass, all 23 `.mjs` tests pass. A new warning counts as a regression. When you add or remove a test file, update this count and date in the same change. If you can't run something, say so plainly. Paul checks the UI in a browser himself, so finish by telling him what to look at.
 
 ## Documentation
 
@@ -131,5 +131,5 @@ Each GM tab sends snapshots over a named **BroadcastChannel** and caches them in
 - **Right-drag** targets during combatant targeting. Otherwise it measures square centre to square centre, and the measurement is cast to players when both ends are revealed.
 - **Polygon mode (experimental)** is switched on by the Polygon toolbar button. Left-click adds a point snapped to a square corner or centre, and clicking the first point completes the polygon. Right-click takes back the last point, or deletes a finished polygon; Esc cancels the one being drawn. Left-drag still pans. Tokens, fog, measuring and targeting are off while it is on. Polygons are GM-only, saved in `Scenes.PolygonState`, and drawn red with a light fill in Polygon mode and faint blue outside it.
 - **Polygons open and close:** outside Polygon mode, a left-click on a polygon switches it between active (shaded: solid, blocks sight) and inactive (outline only: ignored, like an open door).
-- **Line-of-sight fog (experimental):** with fog on, fog clears from the squares the selected Traveller can see, as far as the higher of the scene's Ambient Visual Distance (toolbar, `Scenes.AmbientVisualDistance`) and the Traveller's own Visual Distance (Traveller dialog, `Characters.VisualDistance`). Both are in metres and default to 0, and when both are 0 the GM reveals the map by hand. It reveals when the selection, a saved move, a distance or a polygon changes. Active polygons block sight, and squares inside them stay hidden. Seen squares stay seen.
+- **Line-of-sight fog (experimental):** with fog on, fog clears from the squares the selected Traveller can see, as far as the higher of the scene's Ambient Light (toolbar, `Scenes.AmbientVisualDistance`) and the Traveller's own Light (Traveller dialog, `Characters.VisualDistance`). Both are in metres and default to 0, and when both are 0 the GM reveals the map by hand. It reveals when the selection, a saved move, a distance or a polygon changes. Active polygons block sight, and squares inside them stay hidden. Seen squares stay seen.
 - The browser context menu is suppressed on the GM map.

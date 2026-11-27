@@ -1,10 +1,19 @@
 @inject CareerService Careers
 
 <section class="career-panel" aria-label="@($"{Character.Name} career")">
-    @if (error is not null) { <p class="error" role="alert">@error</p> }
-    @if (loading) { <p class="empty-message">Loading career…</p> }
-    else if (terms.Count == 0) { <p class="empty-message">No career terms recorded.</p> }
-    else
+    @if (error is not null && !editorOpen) { <p class="error" role="alert">@error</p> }
+    @* The latest service, how long the career ran and the highest rank held in each service. *@
+    <div class="career-summary">
+        @if (loading) { <p class="empty-message">Loading career…</p> }
+        else if (terms.Count == 0) { <p class="empty-message">No career terms recorded.</p> }
+        else
+        {
+            <h3>@terms[^1].Service</h3>
+            <span>@terms.Count @(terms.Count == 1 ? "term" : "terms") / @(terms.Count * CareerRules.YearsPerTerm) years served@(string.Concat(Standing.Select(rank => $" / {rank}")))</span>
+        }
+        <button type="button" class="btn btn-sm btn-outline-secondary add-term" @onclick="Add" disabled="@(busy || loading)">+ Add term</button>
+    </div>
+    @if (!loading && terms.Count > 0)
     {
         var progress = CareerRules.RankAfterEachTerm(terms);
         var promotions = CareerRules.PromotionInEachTerm(terms);
@@ -17,7 +26,7 @@
                 // One body per term keeps a term and its notes row together.
                 <tbody @key="term.Id" class="@(editingId == term.Id ? "editing" : null)">
                     <tr>
-                        <th scope="row">@term.Number</th>
+                        <th scope="row" class="term-number">@term.Number.ToString("00")</th>
                         <td>@CareerRules.AgeAtStart(term.Number)</td>
                         <td>@term.Service</td>
                         <td>@Outcome(term.Survival)</td>
@@ -30,25 +39,32 @@
                 </tbody>
             }
         </table></div>
-        @if (Standing.Count > 0) { <p class="standing">Highest rank: @string.Join(" · ", Standing)</p> }
     }
-    <div class="term-editor" role="group" aria-label="@(editingId == 0 ? "Add a career term" : "Edit career term")">
-        <div class="term-fields">
-            <label>Service <select class="form-select service-select" value="@service" @onchange="ChangeService" disabled="@busy">
-                @foreach (var name in CareerServices.All) { <option value="@name">@name</option> }
-                <option value="@CareerServices.Other">Other</option>
-            </select></label>
-            @if (service == CareerServices.Other) { <label>Service Name <input class="form-control" maxlength="120" @bind="otherService" disabled="@busy" /></label> }
-            <label class="check"><input type="checkbox" class="form-check-input" @bind="survival" disabled="@busy" /> Survival Check</label>
-            <label class="check @(CanCommission ? null : "unavailable")" title="@(CanCommission ? null : Military ? "Already commissioned in another term" : "Only military services have a Commission Check")"><input type="checkbox" class="form-check-input" checked="@Commissioned" @onchange="e => commission = e.Value is true" disabled="@(busy || !CanCommission)" /> Commission Check</label>
-            <label class="check @(CanAdvance ? null : "unavailable")" title="@(CanAdvance ? null : Commissioned ? "Commissioned this term, so there is no Advancement Check" : $"{ServiceName} has no Advancement Check")"><input type="checkbox" class="form-check-input" checked="@(advancement && CanAdvance)" @onchange="e => advancement = e.Value is true" disabled="@(busy || !CanAdvance)" /> Advancement Check</label>
-        </div>
-        <label class="notes-field">Notes <textarea class="form-control" rows="2" maxlength="4000" placeholder="Events during this term" @bind="notes" disabled="@busy"></textarea></label>
-        <div class="term-actions">
-            <button type="button" class="btn btn-primary" @onclick="Save" disabled="@(busy || loading)">@(editingId == 0 ? "Add Term" : "Save Term")</button>
-            @if (editingId != 0) { <button type="button" class="btn btn-outline-secondary" @onclick="CancelEdit" disabled="@busy">Cancel</button> }
-        </div>
-    </div>
+    @if (editorOpen)
+    {
+        <SheetDialog Title="@(editingId == 0 ? $"Add term {terms.Count + 1:00}" : $"Edit term {terms.FirstOrDefault(t => t.Id == editingId)?.Number ?? 0:00}")" Width="40rem" Busy="busy" OnCancel="CancelEdit">
+            @if (error is not null) { <p class="error" role="alert">@error</p> }
+            <div class="term-editor" role="group" aria-label="@(editingId == 0 ? "Add a career term" : "Edit career term")">
+                <div class="term-fields">
+                    <label>Service <select class="form-select service-select" value="@service" @onchange="ChangeService" disabled="@busy">
+                        @foreach (var name in CareerServices.All) { <option value="@name">@name</option> }
+                        <option value="@CareerServices.Other">Other</option>
+                    </select></label>
+                    @if (service == CareerServices.Other) { <label>Service Name <input class="form-control" maxlength="120" @bind="otherService" disabled="@busy" /></label> }
+                </div>
+                <div class="term-checks">
+                    <label class="check"><input type="checkbox" class="form-check-input" @bind="survival" disabled="@busy" /> Survival Check</label>
+                    <label class="check @(CanCommission ? null : "unavailable")" title="@(CanCommission ? null : Military ? "Already commissioned in another term" : "Only military services have a Commission Check")"><input type="checkbox" class="form-check-input" checked="@Commissioned" @onchange="e => commission = e.Value is true" disabled="@(busy || !CanCommission)" /> Commission Check</label>
+                    <label class="check @(CanAdvance ? null : "unavailable")" title="@(CanAdvance ? null : Commissioned ? "Commissioned this term, so there is no Advancement Check" : $"{ServiceName} has no Advancement Check")"><input type="checkbox" class="form-check-input" checked="@(advancement && CanAdvance)" @onchange="e => advancement = e.Value is true" disabled="@(busy || !CanAdvance)" /> Advancement Check</label>
+                </div>
+                <label class="notes-field">Notes <textarea class="form-control" rows="3" maxlength="4000" placeholder="Events during this term" @bind="notes" disabled="@busy"></textarea></label>
+                <div class="term-actions">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="CancelEdit" disabled="@busy">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="Save" disabled="@(busy || loading)">@(editingId == 0 ? "Add Term" : "Save Term")</button>
+                </div>
+            </div>
+        </SheetDialog>
+    }
     @if (pendingDelete is { } deleting)
     {
         <DeleteConfirmDialog @key="deleting.Id" Title="Delete Career Term" ConfirmText="Delete Term" Busy="busy" Error="@error" OnConfirm="Delete" OnCancel="CancelDelete"><p>Delete term <strong>@deleting.Number</strong> (@deleting.Service)? Later terms move up, so their ages change. This cannot be undone.</p></DeleteConfirmDialog>
@@ -62,6 +78,8 @@
     private CareerTerm? pendingDelete;
     private string service = CareerServices.All[0], otherService = "", notes = "";
     private bool survival = true, advancement, commission, busy, loading = true;
+    // The term editor is a dialog over the career table, opened by Add term or a row's Edit.
+    private bool editorOpen;
     private int editingId;
     private string? error;
     private string ServiceName => service == CareerServices.Other ? otherService.Trim() : service;
@@ -96,10 +114,11 @@
     }
     private void Edit(CareerTerm term)
     {
-        editingId = term.Id; survival = term.Survival; advancement = term.Advancement; commission = term.Commission; notes = term.Notes; error = null;
+        editingId = term.Id; survival = term.Survival; advancement = term.Advancement; commission = term.Commission; notes = term.Notes; error = null; editorOpen = true;
         SetService(term.Service);
     }
-    private void CancelEdit() { Reset(); error = null; }
+    private void Add() { Reset(); error = null; editorOpen = true; }
+    private void CancelEdit() { Reset(); error = null; editorOpen = false; }
     private void ConfirmDelete(CareerTerm term) { pendingDelete = term; error = null; }
     private void CancelDelete() { pendingDelete = null; error = null; }
     private async Task Save()
@@ -112,6 +131,7 @@
             await Careers.SaveAsync(Character.CampaignId, new CareerTerm(editingId, Character.Id, 0, ServiceName, survival, advancement && CanAdvance, Commissioned, notes));
             terms = await Careers.ListAsync(Character.CampaignId, Character.Id);
             Reset();
+            editorOpen = false;
             error = null;
             await OnChanged.InvokeAsync();
         }

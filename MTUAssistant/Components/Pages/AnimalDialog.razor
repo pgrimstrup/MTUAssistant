@@ -2,54 +2,70 @@
 @inject AnimalService Animals
 @inject IJSRuntime JS
 
-<dialog @ref="dialog" class="animal-dialog" aria-labelledby="animal-dialog-heading">
-    <header class="dialog-header">
+<dialog @ref="dialog" class="sheet animal-dialog" aria-labelledby="animal-dialog-heading">
+    <header class="sheet-toolbar">
         <h2 id="animal-dialog-heading">@(IsNew ? "Add Animal" : "Edit Animal")</h2>
         <div class="actions">
             <button type="button" class="btn btn-outline-secondary" @onclick="Cancel" disabled="@busy">@(IsNew ? "Cancel" : "Close")</button>
             <button type="button" class="btn btn-primary" @onclick="Save" disabled="@busy">@(IsNew ? "Add Animal" : "Save")</button>
         </div>
     </header>
-    @if (error is not null) { <p class="error" role="alert">@error</p> }
-    <section class="details" aria-label="Animal details">
-        <div class="fields">
-            <label>Name <input class="form-control" @bind="name" maxlength="120" disabled="@busy" /></label>
-            <label>Animal Type <select class="form-select" @bind="animalType" disabled="@busy">@foreach (var value in AnimalTypes.All) { <option value="@value">@value</option> }</select></label>
-            <label>Behaviour <select class="form-select" @bind="behaviour" disabled="@busy">@foreach (var value in AnimalTypes.Behaviours) { <option value="@value">@value</option> }</select></label>
-            <label>Traits <input class="form-control" @bind="traits" placeholder="Trait, Trait 2" maxlength="1000" disabled="@busy" /></label>
-        </div>
-        <div class="ratings">
-            <label>Hits <input class="form-control" type="number" min="1" @bind="hits" disabled="@busy" /></label>
-            <label>Speed (m) <input class="form-control" type="number" min="0" @bind="speed" disabled="@busy" /></label>
-            <label class="shared-toggle"><input type="checkbox" @bind="shared" disabled="@busy" /> Shared</label>
-        </div>
-        <label class="character-description-field">Description <textarea class="form-control" rows="2" @bind="description" disabled="@busy"></textarea></label>
-        <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
-        <div class="token-editor">
-            @if (CharacterToken.DataUri(tokenImage) is { } preview) { <img class="token-preview" src="@preview" alt="Token preview" /> }
-            <label>Token image <InputFile @key="tokenInputKey" class="form-control" accept="image/png,image/jpeg,image/gif,image/webp" OnChange="SelectToken" disabled="@busy" /><span class="token-hint">PNG, JPEG, GIF or WebP, up to 2 MB</span></label>
-            @if (tokenImage is not null) { <button type="button" class="btn btn-outline-secondary" @onclick="RemoveToken" disabled="@busy">Remove token</button> }
-        </div>
-    </section>
-    <TabBar TValue="AnimalTab" Tabs="Tabs" @bind-Active="activeTab" IdPrefix="animal" AriaLabel="Animal records">
-        @if (!IsNew && activeTab == AnimalTab.Skills) { <CharacterSkills @key="activeTab" Character="current.Character" Embedded="true" OnChanged="Changed" /> }
-        else if (!IsNew) { <AnimalAttacks @key="activeTab" Animal="current" Embedded="true" OnChanged="Changed" /> }
-        else if (activeTab == AnimalTab.Skills)
-        {
-            @* A new animal's skills are generated and saved with it; they become editable once it exists. *@
-            <section class="generated" aria-label="Generated skills">
-                <p>@(current.Character.Skills is { Count: > 0 } skills ? string.Join(", ", skills.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).Select(s => $"{s.Name} {s.Level}")) : "No generated skills.")</p>
-                <p class="secondary">Add the animal to edit its skills.</p>
-            </section>
-        }
-        else
-        {
-            <section class="generated" aria-label="Generated attacks">
-                @if (current.NaturalAttacks.Count > 0) { <p>@string.Join(", ", current.NaturalAttacks.Select(a => $"{a.Name} ({a.Damage})"))</p> }
-                <p class="secondary">Add the animal first, then record its attacks here.</p>
-            </section>
-        }
-    </TabBar>
+    <div class="sheet-body">
+        @if (error is not null) { <p class="error" role="alert">@error</p> }
+        <section class="sheet-panel" aria-label="Animal details">
+            <div class="sheet-bar"><span>01 / Creature Data</span><span class="sheet-bar-note">@animalType · @behaviour@(shared ? " · Shared" : null)</span></div>
+            <div class="sheet-personal">
+                <div class="sheet-personal-main">
+                    <div class="sheet-fields identity">
+                        <label><span class="sheet-label">Name</span><input class="sheet-input sheet-name" @bind="name" maxlength="120" placeholder="Name" disabled="@busy" /></label>
+                        <label><span class="sheet-label">Animal Type</span><select class="form-select sheet-input" @bind="animalType" disabled="@busy">@foreach (var value in AnimalTypes.All) { <option value="@value">@value</option> }</select></label>
+                        <label><span class="sheet-label">Behaviour</span><select class="form-select sheet-input" @bind="behaviour" disabled="@busy">@foreach (var value in AnimalTypes.Behaviours) { <option value="@value">@value</option> }</select></label>
+                    </div>
+                    <div class="sheet-divider"></div>
+                    <div class="sheet-fields ratings">
+                        <label><span class="sheet-label">Hits</span><input class="sheet-input" type="number" min="1" @bind="hits" disabled="@busy" /></label>
+                        <label><span class="sheet-label">Speed (m)</span><input class="sheet-input" type="number" min="0" @bind="speed" disabled="@busy" /></label>
+                        <label class="traits"><span class="sheet-label">Traits</span><input class="sheet-input" @bind="traits" placeholder="Trait, Trait 2" maxlength="1000" disabled="@busy" /></label>
+                        <div><span class="sheet-label">Campaigns</span><label class="sheet-toggle" title="A shared animal can be used in every campaign"><input type="checkbox" @bind="shared" disabled="@busy" /> Shared</label></div>
+                    </div>
+                    <label class="description"><span class="sheet-label">Description</span><textarea class="sheet-input" rows="3" placeholder="Appearance, habits, habitat" @bind="description" disabled="@busy"></textarea></label>
+                    <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
+                </div>
+                <div class="sheet-personal-token">
+                    <span class="sheet-label">Token</span>
+                    @if (CharacterToken.DataUri(tokenImage) is { } preview) { <img class="sheet-token" src="@preview" alt="Token preview" /> }
+                    else { <div class="sheet-token" aria-hidden="true">No token</div> }
+                    <label class="sheet-token-pick @(busy ? "disabled" : null)">@(tokenImage is null ? "Add token" : "Replace token")<InputFile @key="tokenInputKey" accept="image/png,image/jpeg,image/gif,image/webp" OnChange="SelectToken" disabled="@busy" /></label>
+                    @if (tokenImage is not null) { <button type="button" class="sheet-link-button" @onclick="RemoveToken" disabled="@busy">Remove token</button> }
+                    <span class="sheet-hint">PNG, JPEG, GIF or WebP · 2 MB</span>
+                </div>
+            </div>
+        </section>
+        <section class="sheet-panel sheet-records" aria-label="Animal records">
+            <TabBar TValue="AnimalTab" Tabs="Tabs" @bind-Active="activeTab" IdPrefix="animal" AriaLabel="Animal records" TabBadge="Badge">
+                <Extras>02 / Abilities</Extras>
+                <ChildContent>
+                    @if (!IsNew && activeTab == AnimalTab.Skills) { <CharacterSkills @key="activeTab" Character="current.Character" Embedded="true" OnChanged="Changed" /> }
+                    else if (!IsNew) { <AnimalAttacks @key="activeTab" Animal="current" Embedded="true" OnChanged="Changed" /> }
+                    else if (activeTab == AnimalTab.Skills)
+                    {
+                        @* A new animal's skills are generated and saved with it; they become editable once it exists. *@
+                        <section class="generated" aria-label="Generated skills">
+                            <p>@(current.Character.Skills is { Count: > 0 } skills ? string.Join(", ", skills.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).Select(s => $"{s.Name} {s.Level}")) : "No generated skills.")</p>
+                            <p class="secondary">Add the animal to edit its skills.</p>
+                        </section>
+                    }
+                    else
+                    {
+                        <section class="generated" aria-label="Generated attacks">
+                            @if (current.NaturalAttacks.Count > 0) { <p>@string.Join(", ", current.NaturalAttacks.Select(a => $"{a.Name} ({a.Damage})"))</p> }
+                            <p class="secondary">Add the animal first, then record its attacks here.</p>
+                        </section>
+                    }
+                </ChildContent>
+            </TabBar>
+        </section>
+    </div>
 </dialog>
 
 @code {
@@ -67,6 +83,7 @@
     [Parameter] public EventCallback OnClose { get; set; }
 
     private AnimalTab activeTab = AnimalTab.Skills;
+    private string? Badge(AnimalTab tab) => IsNew ? null : (tab == AnimalTab.Skills ? current.Character.Skills?.Count ?? 0 : current.NaturalAttacks.Count).ToString();
     private Animal current = default!;
     private bool IsNew => current.Character.Id == 0;
     private string name = "", animalType = "Herbivore", behaviour = "Eater", traits = "", description = "";

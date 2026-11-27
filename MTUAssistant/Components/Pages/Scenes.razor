@@ -10,27 +10,30 @@
     <header><div><h1>Scenes</h1>@if (campaign is not null) { <p>@campaign.Name</p> }</div>
         @if (campaign is not null) { <button class="btn btn-primary" @onclick="Add" disabled="@busy">Add Scene</button> }
     </header>
-    @if (error is not null) { <p class="error" role="alert">@error</p> }
+    @if (error is not null && editing is null) { <p class="error" role="alert">@error</p> }
     @if (campaign is null) { <p>Select a campaign to manage its scenes.</p> }
     else
     {
         @if (editing is not null)
         {
-            <section class="scene-editor" aria-labelledby="scene-editor-title">
-                <h2 id="scene-editor-title">@(editing.Id == 0 ? "Add Scene" : "Edit Scene")</h2>
-                <div class="scene-fields">
-                    <label>Name <input class="form-control" maxlength="120" @bind="editing.Name" disabled="@busy" /></label>
-                    <label>Grid Size (pixels) <input class="form-control" type="number" min="1" @bind="editing.GridSize" disabled="@busy" /></label>
-                    <label>Grid Colour <input class="form-control form-control-color" type="color" @bind="editing.GridColour" disabled="@busy" /></label>
-                    <label>Grid Opacity (%) <input class="form-control" type="number" min="0" max="100" @bind="editing.GridOpacity" disabled="@busy" /></label>
-                    <label>Gridline Width (pixels) <input class="form-control" type="number" min="0.1" step="0.1" @bind="editing.GridlineWidth" disabled="@busy" /></label>
-                </div>
-                <label class="image-upload">Background image <InputFile @key="fileKey" OnChange="Upload" accept="image/png,image/jpeg,image/gif,image/webp" class="form-control" disabled="@busy" /></label>
-                <p class="muted">PNG, JPEG, GIF or WebP, maximum @SceneService.MaxImageDimension × @SceneService.MaxImageDimension pixels. Each square represents 1.5 m × 1.5 m.</p>
-                @if (uploadName is not null) { <p>@uploadName</p> }
-                else if (editing.Id != 0) { <p class="muted">The existing image will be kept unless you choose a replacement.</p> }
-                <div class="actions"><button class="btn btn-outline-secondary" @onclick="Cancel" disabled="@busy">Cancel</button><button class="btn btn-primary" @onclick="Save" disabled="@busy">Save</button></div>
-            </section>
+            <SheetDialog Title="@(editing.Id == 0 ? "Add scene" : $"Edit scene · {editingName}")" Width="44rem" Busy="busy" OnCancel="Cancel">
+                <form class="scene-editor" @onsubmit="Save" @onsubmit:preventDefault>
+                    @if (error is not null) { <p class="error" role="alert">@error</p> }
+                    <div class="scene-fields">
+                        <label class="scene-name">Name <input class="form-control" maxlength="120" @bind="editing.Name" disabled="@busy" required /></label>
+                        <label>Grid Size (px) <input class="form-control" type="number" min="1" @bind="editing.GridSize" disabled="@busy" /></label>
+                        <label>Line Width (px) <input class="form-control" type="number" min="0.1" step="0.1" @bind="editing.GridlineWidth" disabled="@busy" /></label>
+                        <label>Grid Opacity (%) <input class="form-control" type="number" min="0" max="100" @bind="editing.GridOpacity" disabled="@busy" /></label>
+                        <label>Grid Colour <input class="form-control form-control-color" type="color" @bind="editing.GridColour" disabled="@busy" /></label>
+                        <label title="How far a Traveller can see on this map, in metres. With fog of war on, fog clears as far as the higher of this and the Traveller's own Light. 0 leaves the fog to you.">Ambient Light (m) <input class="form-control" type="number" min="0" max="@LineOfSight.MaxVisualDistance" step="1" @bind="ambientLight" disabled="@busy" /></label>
+                    </div>
+                    <label class="image-upload">Background image <InputFile @key="fileKey" OnChange="Upload" accept="image/png,image/jpeg,image/gif,image/webp" class="form-control" disabled="@busy" /></label>
+                    <p class="muted">PNG, JPEG, GIF or WebP, maximum @SceneService.MaxImageDimension × @SceneService.MaxImageDimension pixels. Each square represents 1.5 m × 1.5 m.</p>
+                    @if (uploadName is not null) { <p>@uploadName</p> }
+                    else if (editing.Id != 0) { <p class="muted">The existing image will be kept unless you choose a replacement. A new image or grid size clears the scene's fog and polygons.</p> }
+                    <div class="actions"><button type="button" class="btn btn-outline-secondary" @onclick="Cancel" disabled="@busy">Cancel</button><button type="submit" class="btn btn-primary" disabled="@busy">@(editing.Id == 0 ? "Add Scene" : "Save")</button></div>
+                </form>
+            </SheetDialog>
         }
         @if (pendingDelete is { } deleting)
         {
@@ -40,11 +43,11 @@
         else if (scenes.Count == 0) { <p class="muted">No scenes in this campaign yet.</p> }
         else
         {
-            <div class="table-wrap"><table class="table scenes-table"><thead><tr><th>Name</th><th>Grid Size</th><th>Colour</th><th>Opacity</th><th>Line Width</th><th>Image</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+            <div class="table-wrap"><table class="table scenes-table"><thead><tr><th>Name</th><th>Grid Size</th><th>Colour</th><th>Opacity</th><th>Line Width</th><th>Ambient Light</th><th>Image</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
                 <tbody>@foreach (var scene in scenes)
                 {
                     <tr @key="scene.Id"><th scope="row">@scene.Name @if (Battlemap.Current?.Id == scene.Id && Battlemap.Current.CampaignId == scene.CampaignId) { <span class="badge text-bg-success ms-2">Open</span> } @if (scene.HasTravellers) { <span class="badge text-bg-info ms-2">Travellers</span> }</th>
-                        <td>@scene.GridSize px</td><td><span class="colour-swatch" style="background:@scene.GridColour"></span> @scene.GridColour</td><td>@scene.GridOpacity%</td><td>@scene.GridlineWidth px</td><td>@((scene.ImageBytes / 1048576d).ToString("0.##")) MB</td>
+                        <td>@scene.GridSize px</td><td><span class="colour-swatch" style="background:@scene.GridColour"></span> @scene.GridColour</td><td>@scene.GridOpacity%</td><td>@scene.GridlineWidth px</td><td>@scene.AmbientVisualDistance m</td><td>@((scene.ImageBytes / 1048576d).ToString("0.##")) MB</td>
                         <td class="row-actions"><button class="btn btn-sm btn-primary" @onclick="() => Open(scene)" disabled="@busy">Open</button> <button class="btn btn-sm btn-outline-secondary" @onclick="() => Edit(scene)" disabled="@busy">Edit</button> <button class="btn btn-sm btn-outline-danger" @onclick="() => ConfirmDelete(scene)" disabled="@busy">Delete</button></td>
                     </tr>
                 }</tbody>
@@ -59,9 +62,9 @@
     private SceneInput? editing;
     private SceneSummary? pendingDelete;
     private byte[]? image;
-    private string? error, uploadName;
+    private string? error, uploadName, editingName;
     private bool busy, loading, disposed;
-    private int fileKey, version;
+    private int fileKey, version, ambientLight;
     protected override async Task OnInitializedAsync()
     {
         Campaigns.Changed += CampaignChanged;
@@ -83,11 +86,12 @@
         catch (Exception) { if (!disposed && request == version) error = "Unable to load scenes."; }
         finally { if (request == version) loading = false; }
     }
-    private void Add() { if (campaign is { } current) { Cancel(); editing = new SceneInput { CampaignId = current.Id }; } }
+    private void Add() { if (campaign is { } current) { Cancel(); editing = new SceneInput { CampaignId = current.Id }; ambientLight = 0; } }
     private void Edit(SceneSummary scene)
     {
         Cancel(); editing = new SceneInput { Id = scene.Id, CampaignId = scene.CampaignId, Name = scene.Name, GridSize = scene.GridSize,
             GridColour = scene.GridColour, GridOpacity = scene.GridOpacity, GridlineWidth = scene.GridlineWidth };
+        ambientLight = scene.AmbientVisualDistance; editingName = scene.Name;
     }
     private void Cancel() { editing = null; image = null; uploadName = null; pendingDelete = null; error = null; fileKey++; }
     private void ConfirmDelete(SceneSummary scene) { pendingDelete = scene; error = null; }
@@ -114,6 +118,7 @@
         busy = true;
         try
         {
+            current.AmbientVisualDistance = ambientLight;
             var saved = await ScenesStore.SaveAsync(current, image);
             if (!disposed && campaign?.Id == current.CampaignId) { Battlemap.Update(saved); Cancel(); await Reload(); }
         }

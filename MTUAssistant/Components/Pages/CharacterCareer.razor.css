@@ -6,14 +6,20 @@
 .career-table .notes-row td { padding-top:0; color:var(--app-muted); font-size:.85em; white-space:pre-wrap; overflow-wrap:anywhere; }
 .career-table tbody.editing > tr > * { --bs-table-bg:var(--app-accent-soft); }
 .row-actions { text-align:right; }
-.standing { margin:.6rem 0 0; color:var(--app-muted); font-size:.85rem; }
-.term-editor { margin-top:1rem; }
+.career-summary { display:flex; flex-wrap:wrap; align-items:center; gap:.3rem 1.4rem; margin:.2rem 0 .8rem; }
+.career-summary .empty-message { margin:0; }
+.add-term { margin-left:auto; }
+.career-summary h3 { margin:0; font-family:var(--sheet-display, inherit); font-size:1.75rem; font-weight:600; letter-spacing:.01em; }
+.career-summary span { color:var(--sheet-label, var(--app-muted)); font-family:var(--sheet-mono, inherit); font-size:.75rem; letter-spacing:.06em; }
+.career-table .term-number { color:var(--sheet-red-text, inherit); font-family:var(--sheet-mono, inherit); font-weight:600; }
+.term-editor { margin:0; }
 .term-fields { display:flex; flex-wrap:wrap; align-items:end; gap:.7rem 1.2rem; }
-.term-fields label, .notes-field { display:grid; gap:.3rem; color:var(--app-muted); font-size:.8rem; }
-.term-fields label.check { display:flex; align-items:center; gap:.45rem; min-height:2.4rem; color:var(--app-text); font-size:.9rem; }
-.term-fields label.unavailable { color:var(--app-muted); }
+.term-fields label, .notes-field { display:grid; gap:.3rem; }
+.term-checks { display:flex; flex-wrap:wrap; gap:.4rem 1.4rem; margin-top:.9rem; }
+.term-checks label.check { display:flex; align-items:center; gap:.45rem; min-height:2rem; color:var(--app-text); font-size:.9rem; }
+.term-checks label.unavailable { color:var(--app-muted); }
 .service-select { min-width:12rem; }
-.notes-field { margin-top:.7rem; }
-.term-actions { display:flex; gap:.5rem; margin-top:.7rem; }
+.notes-field { margin-top:.9rem; }
+.term-actions { display:flex; justify-content:flex-end; gap:.5rem; margin-top:1.1rem; }
 .empty-message { color:var(--app-muted); margin:.4rem 0; }
 .error { color:#ffaaaa; }

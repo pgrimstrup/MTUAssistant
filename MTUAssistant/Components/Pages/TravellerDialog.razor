@@ -1,52 +1,64 @@
 @implements IAsyncDisposable
 @inject CharacterService CharacterStore
+@inject SceneService Scenes
+@inject CampaignService Campaigns
 @inject IJSRuntime JS
 
-<dialog @ref="dialog" class="traveller-dialog" aria-labelledby="traveller-dialog-heading">
-    <header class="dialog-header">
+<dialog @ref="dialog" class="sheet traveller-dialog" aria-labelledby="traveller-dialog-heading">
+    <header class="sheet-toolbar">
         <h2 id="traveller-dialog-heading">@(current.Id == 0 ? "Add Traveller" : "Edit Traveller")</h2>
         <div class="actions">
             <button type="button" class="btn btn-outline-secondary" @onclick="Cancel" disabled="@busy">@(current.Id == 0 ? "Cancel" : "Close")</button>
             <button type="button" class="btn btn-primary" @onclick="Save" disabled="@busy">@(current.Id == 0 ? "Add Traveller" : "Save")</button>
         </div>
     </header>
-    @if (error is not null) { <p class="error" role="alert">@error</p> }
-    <section class="details" aria-label="Traveller details">
-        <div class="fields">
-            <label>Traveller Name <input class="form-control" maxlength="120" @bind="travellerName" disabled="@busy" /></label>
-            <label>Player Name <input class="form-control" maxlength="120" @bind="playerName" disabled="@busy" /></label>
-            <label>Race <input class="form-control" maxlength="120" @bind="race" disabled="@busy" /></label>
-        </div>
-        <div class="numbers">
-            <div class="characteristics" role="group" aria-label="Characteristics">
-                @for (var i = 0; i < scores.Length; i++)
-                {
-                    var index = i;
-                    <label>@CharacteristicProfile.Labels[index] <input class="form-control" type="number" min="0" max="@CharacteristicProfile.MaxScore" step="1" @bind="scores[index]" disabled="@busy" /></label>
-                }
+    <div class="sheet-body">
+        @if (error is not null) { <p class="error" role="alert">@error</p> }
+        <section class="sheet-panel" aria-label="Personal data">
+            <div class="sheet-bar"><span>01 / Personal Data</span><span class="sheet-bar-note">Traveller record@(inactive ? " · Inactive" : null)</span></div>
+            <div class="sheet-personal">
+                <div class="sheet-personal-main">
+                    <div class="sheet-fields identity">
+                        <label><span class="sheet-label">Name</span><input class="sheet-input sheet-name" maxlength="120" placeholder="Traveller name" @bind="travellerName" disabled="@busy" /></label>
+                        <label><span class="sheet-label">Race</span><input class="sheet-input" maxlength="120" placeholder="Human" @bind="race" disabled="@busy" /></label>
+                        <div title="@(campaign is null ? null : $"On the campaign date, day {campaign.Day} of {campaign.Year}, from the career terms and birthday")"><span class="sheet-label">Age</span><span class="sheet-static">@(Age?.ToString() ?? "—")</span></div>
+                        <label><span class="sheet-label">Player</span><input class="sheet-input" maxlength="120" placeholder="Player name" @bind="playerName" disabled="@busy" /></label>
+                    </div>
+                    <div class="sheet-divider"></div>
+                    <div class="sheet-fields ratings">
+                        <label title="Day of the year, 1 to 365"><span class="sheet-label">Birthday (day)</span><input class="sheet-input" type="number" min="1" max="@CharacterAge.DaysInYear" step="1" @bind="birthday" disabled="@busy" /></label>
+                        <label><span class="sheet-label">Speed (m)</span><input class="sheet-input" type="number" min="0" step="1" @bind="speed" disabled="@busy" /></label>
+                        <label title="How far this Traveller can see by their own light, in metres, when fog is cleared by line of sight. The higher of this and the map's Ambient Light is used. 0 leaves it to the map."><span class="sheet-label">Light (m)</span><input class="sheet-input" type="number" min="0" max="@LineOfSight.MaxVisualDistance" step="1" @bind="visualDistance" disabled="@busy" /></label>
+                        <label><span class="sheet-label">Natural DR</span><input class="sheet-input" type="number" min="0" @bind="naturalDr" disabled="@busy" /></label>
+                        <div><span class="sheet-label">Status</span><label class="sheet-toggle" title="An inactive Traveller stays on file but is not added to scenes"><input type="checkbox" @bind="inactive" disabled="@busy" /> Inactive</label></div>
+                    </div>
+                    <label class="description"><span class="sheet-label">Description</span><textarea class="sheet-input" rows="3" placeholder="Appearance, manner, background" @bind="description" disabled="@busy"></textarea></label>
+                    <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
+                </div>
+                <div class="sheet-personal-token">
+                    <span class="sheet-label">Player token</span>
+                    @if (CharacterToken.DataUri(tokenImage) is { } preview) { <img class="sheet-token" src="@preview" alt="Token preview" /> }
+                    else { <div class="sheet-token" aria-hidden="true">No token</div> }
+                    <label class="sheet-token-pick @(busy ? "disabled" : null)">@(tokenImage is null ? "Add token" : "Replace token")<InputFile @key="tokenInputKey" accept="image/png,image/jpeg,image/gif,image/webp" OnChange="SelectToken" disabled="@busy" /></label>
+                    @if (tokenImage is not null) { <button type="button" class="sheet-link-button" @onclick="RemoveToken" disabled="@busy">Remove token</button> }
+                    <span class="sheet-hint">PNG, JPEG, GIF or WebP · 2 MB</span>
+                </div>
             </div>
-            <div class="ratings">
-                <label title="Day of the year, 1 to 365">Birthday (day) <input class="form-control" type="number" min="1" max="@CharacterAge.DaysInYear" step="1" @bind="birthday" disabled="@busy" /></label>
-                <label>Speed (m) <input class="form-control" type="number" min="0" step="1" @bind="speed" disabled="@busy" /></label>
-                <label title="How far this Traveller can see by their own means, in metres, when fog is cleared by line of sight. The higher of this and the map's Ambient Visual Distance is used. 0 leaves it to the map.">Visual Distance (m) <input class="form-control" type="number" min="0" max="@LineOfSight.MaxVisualDistance" step="1" @bind="visualDistance" disabled="@busy" /></label>
-                <label>Natural DR <input class="form-control" type="number" min="0" @bind="naturalDr" disabled="@busy" /></label>
-            </div>
-        </div>
-        <label class="character-description-field">Description <textarea class="form-control" rows="2" @bind="description" disabled="@busy"></textarea></label>
-        <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
-        <div class="token-editor">
-            @if (CharacterToken.DataUri(tokenImage) is { } preview) { <img class="token-preview" src="@preview" alt="Token preview" /> }
-            <label>Player Token <InputFile @key="tokenInputKey" class="form-control" accept="image/png,image/jpeg,image/gif,image/webp" OnChange="SelectToken" disabled="@busy" /><span class="token-hint">PNG, JPEG, GIF or WebP, up to 2 MB</span></label>
-            @if (tokenImage is not null) { <button type="button" class="btn btn-outline-secondary" @onclick="RemoveToken" disabled="@busy">Remove token</button> }
-            <label class="inactive-toggle"><input type="checkbox" @bind="inactive" disabled="@busy" /> Inactive</label>
-        </div>
-    </section>
-    <TabBar TValue="TravellerTab" Tabs="Tabs" @bind-Active="activeTab" IdPrefix="traveller" AriaLabel="Traveller records">
-        @if (current.Id == 0) { <p class="empty-message">Add the Traveller first, then record @(activeTab == TravellerTab.Career ? "career terms" : activeTab == TravellerTab.Skills ? "skills" : activeTab == TravellerTab.Armour ? "armour" : "weapons") here.</p> }
-        else if (activeTab == TravellerTab.Career) { <CharacterCareer @key="activeTab" Character="current" OnChanged="OnChanged" /> }
-        else if (activeTab == TravellerTab.Skills) { <CharacterSkills @key="activeTab" Character="current" Embedded="true" OnChanged="OnChanged" /> }
-        else { <CharacterEquipment @key="activeTab" Character="current" Kind="@(activeTab == TravellerTab.Armour ? EquipmentKind.Armour : EquipmentKind.Weapon)" OnChanged="OnChanged" /> }
-    </TabBar>
+        </section>
+        <CharacteristicCards Scores="scores" Extra="@extraDigits" Current="currentStats" Disabled="busy" IdPrefix="traveller" />
+        <section class="sheet-panel sheet-records" aria-label="Traveller records">
+            <TabBar TValue="TravellerTab" Tabs="Tabs" @bind-Active="activeTab" IdPrefix="traveller" AriaLabel="Traveller records" TabBadge="Badge">
+                <Extras>03 / Service record</Extras>
+                <ChildContent>
+                    @if (current.Id == 0) { <p class="empty-message">Add the Traveller first, then record @(activeTab == TravellerTab.Career ? "career terms" : activeTab == TravellerTab.Skills ? "skills" : activeTab == TravellerTab.Armour ? "armour" : "weapons") here.</p> }
+                    else if (!recordsLoaded) { <p class="empty-message">Loading…</p> }
+                    else if (activeTab == TravellerTab.Career) { <CharacterCareer @key="activeTab" Character="current" OnChanged="RecordsChanged" /> }
+                    else if (activeTab == TravellerTab.Skills) { <CharacterSkills @key="activeTab" Character="current" Embedded="true" OnChanged="RecordsChanged" /> }
+                    else { <CharacterEquipment @key="activeTab" Character="current" Kind="@(activeTab == TravellerTab.Armour ? EquipmentKind.Armour : EquipmentKind.Weapon)" OnChanged="RecordsChanged" /> }
+                </ChildContent>
+            </TabBar>
+        </section>
+    </div>
 </dialog>
 
 @code {
@@ -59,8 +71,17 @@
     /// <summary>Something was saved while the dialog stays open: a new Traveller, a skill or equipment.</summary>
     [Parameter] public EventCallback OnChanged { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
+    /// <summary>The campaign, whose date gives the Traveller's age. Looked up when not given.</summary>
+    [Parameter] public Campaign? Campaign { get; set; }
 
     private TravellerTab activeTab = TravellerTab.Career;
+    // Tab badges and the current STR, DEX and END. The tabs wait for these, so no two queries share the database context at once.
+    private CharacterRecordCounts? counts;
+    private bool recordsLoaded;
+    private CurrentCharacteristics currentStats = CurrentCharacteristics.None;
+    private Campaign? campaign;
+    private long? Age => campaign is null ? null : CharacterAge.Calculate(counts?.Career ?? current.Career?.Count ?? 0, birthday, campaign.Year, campaign.Day);
+    private string? Badge(TravellerTab tab) => counts is not { } c || current.Id == 0 ? null : (tab switch { TravellerTab.Career => c.Career, TravellerTab.Skills => c.Skills, TravellerTab.Armour => c.Armour, _ => c.Weapons }).ToString();
     private Character current = default!;
     private string playerName = "", travellerName = "", race = "", description = "";
     // The UPP is stored as text. The scores are edited apart and joined on save; digits after SOC (such as PSI) are kept.
@@ -83,6 +104,31 @@
         injuryTolerance = Item.InjuryTolerance; description = Item.Description; tokenImage = Item.TokenImage; inactive = Item.Inactive;
         (scores, extraDigits) = CharacteristicProfile.Split(Item.Upp);
         savedScores = [.. scores];
+    }
+    protected override async Task OnInitializedAsync()
+    {
+        // The Combat Tracker's Edit opens this dialog without the campaign.
+        campaign = Campaign;
+        if (campaign is null)
+        {
+            try { campaign = (await Campaigns.ListAsync()).FirstOrDefault(c => c.Id == current.CampaignId); }
+            catch (Exception) { campaign = null; }
+        }
+        if (current.Id == 0) { counts = new(0, 0, 0, 0); recordsLoaded = true; return; }
+        try
+        {
+            counts = await CharacterStore.RecordCountsAsync(current.CampaignId, current.Id);
+            currentStats = await Scenes.CurrentCharacteristicsAsync(current.CampaignId, current.Id);
+        }
+        catch (Exception) { counts = null; }
+        finally { recordsLoaded = true; }
+    }
+    // A tab saved something: refresh its badge, then let the page reload its list.
+    private async Task RecordsChanged()
+    {
+        try { counts = await CharacterStore.RecordCountsAsync(current.CampaignId, current.Id); }
+        catch (Exception) { counts = null; }
+        await OnChanged.InvokeAsync();
     }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -133,6 +179,7 @@
             if (!isNew) { await OnSaved.InvokeAsync(); return; }
             // A new Traveller stays open so skills, armour and weapons can be added straight away.
             current = saved with { Id = id };
+            counts = new(0, 0, 0, 0);
             savedScores = [.. scores];
             await OnChanged.InvokeAsync();
         }

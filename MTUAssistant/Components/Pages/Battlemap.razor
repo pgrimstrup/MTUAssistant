@@ -31,7 +31,7 @@
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 19a4.5 4.5 0 0 1-.62-8.96A6 6 0 0 1 17.56 8.6 5.25 5.25 0 0 1 17.75 19H6.5Z" /></svg>
                 </button>
                 @* Experimental: line-of-sight fog. Players only ever receive the resulting revealed squares. *@
-                <label title="Ambient Visual Distance in metres: how far a Traveller can see on this map. With fog of war on, fog clears from every square the selected Traveller can see, as far as the higher of this and their own Visual Distance. Active polygons block sight. 0 for both leaves the fog to you.">Ambient visual (m)<input class="form-control grid-number" type="number" min="0" max="@LineOfSight.MaxVisualDistance" step="1" @bind="ambientVisualDistance" @bind:after="SaveAmbientVisualDistance" disabled="@(map is null || busy)" /></label>
+                <label title="Ambient Light in metres: how far a Traveller can see on this map. With fog of war on, fog clears from every square the selected Traveller can see, as far as the higher of this and their own Light. Active polygons block sight. 0 for both leaves the fog to you.">Ambient light (m)<input class="form-control grid-number" type="number" min="0" max="@LineOfSight.MaxVisualDistance" step="1" @bind="ambientVisualDistance" @bind:after="SaveAmbientVisualDistance" disabled="@(map is null || busy)" /></label>
                 @* Experimental and GM-only: polygons are never cast to players. *@
                 <button class="btn @(polygonMode ? "btn-secondary active" : "btn-outline-secondary")" aria-pressed="@(polygonMode ? "true" : "false")"
                         title="Polygon mode (experimental, GM only). Click to add points, which snap to square corners and centres; click the first point to finish. Right-click takes back the last point, or deletes a finished polygon. Esc cancels the polygon being drawn. Tokens and fog can't be edited while it is on. With the mode off, click a polygon to switch it between active (shaded: it blocks line of sight) and inactive (outline only), like closing and opening a door." @onclick="TogglePolygonMode" disabled="@(map is null || busy)">Polygon</button>
@@ -69,8 +69,8 @@
         @if (preEngagement)
         {
             <div class="encounter-backdrop">
-                <section class="encounter-dialog" role="dialog" aria-modal="true" aria-labelledby="engagement-title">
-                    <h2 id="engagement-title">Pre-engagement</h2>
+                <section class="sheet sheet-dialog encounter-dialog" role="dialog" aria-modal="true" aria-labelledby="engagement-title">
+                    <h2 id="engagement-title" class="sheet-title">Pre-engagement</h2>
                     <label><input type="checkbox" @bind="enemyAware" /> Enemy aware of the Travellers</label>
                     <label><input type="checkbox" @bind="travellersAware" /> Travellers aware of the Enemy</label>
                     <label>Traveller Tactics (Military) Effect<input class="form-control" type="number" @bind="travellerTactics" disabled="@(!travellersAware || !TacticsTravellers.Any())" aria-describedby="traveller-tactics-skills" /></label>

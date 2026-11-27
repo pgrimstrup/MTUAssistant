@@ -2,8 +2,8 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 
-<dialog @ref="dialog" class="attack-dialog" aria-labelledby="attack-dialog-title">
-    <header><h2 id="attack-dialog-title">Resolve Attack@(TargetCount > 1 ? $" ({TargetNumber}/{TargetCount})" : "")</h2><button type="button" class="btn btn-sm btn-outline-primary auto-roll" disabled="@Busy" @onclick="AutoRoll">Auto Roll</button></header>
+<dialog @ref="dialog" class="sheet sheet-dialog attack-dialog" aria-labelledby="attack-dialog-title">
+    <header class="sheet-title"><h2 id="attack-dialog-title">Resolve Attack@(TargetCount > 1 ? $" ({TargetNumber}/{TargetCount})" : "")</h2><button type="button" class="btn btn-sm btn-outline-primary auto-roll" disabled="@Busy" @onclick="AutoRoll">Auto Roll</button></header>
     <p class="combatants"><strong>@Resolution.ActorName</strong> → <strong>@Resolution.TargetName</strong></p>
     <p class="weapon">@Resolution.Weapon.Name · @Resolution.Weapon.Damage damage</p>
     <div class="roll-fields">

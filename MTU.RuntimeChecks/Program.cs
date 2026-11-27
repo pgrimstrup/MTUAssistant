@@ -11,6 +11,7 @@ await InstanceNameChecks.RunAsync();
 await FogChecks.RunAsync();
 await PolygonChecks.RunAsync();
 await VisualDistanceChecks.RunAsync();
+await CharacterSheetChecks.RunAsync();
 await CoverProtectionChecks.RunAsync();
 await WeaponSkillChecks.RunAsync();
 WeaponAttackChecks.Run();

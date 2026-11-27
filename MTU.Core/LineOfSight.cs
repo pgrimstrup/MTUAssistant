@@ -5,7 +5,7 @@ using MTU.Core.Data;
 namespace MTU.Core;
 
 /// <summary>Line-of-sight fog on the Battlemap (experimental). Two distances are in play: a scene's
-/// Ambient Visual Distance and a character's own Visual Distance, both in metres. The selected
+/// Ambient Light and a character's own Visual Distance, both in metres. The selected
 /// Traveller sees as far as the higher of the two, and when both are 0 the fog is left to the GM.
 /// The visibility test itself runs in <c>wwwroot/js/LineOfSight.js</c>, beside the fog painting it
 /// feeds.</summary>
@@ -30,7 +30,7 @@ public static class LineOfSight
 
 public sealed partial class SceneService
 {
-    /// <summary>The scene's Ambient Visual Distance in metres. 0 by default.</summary>
+    /// <summary>The scene's Ambient Light in metres. 0 by default.</summary>
     public async Task<int> AmbientVisualDistanceAsync(int campaignId, int sceneId)
     {
         await using var scope = scopes.CreateAsyncScope();
@@ -45,7 +45,7 @@ public sealed partial class SceneService
 
     public async Task SetAmbientVisualDistanceAsync(int campaignId, int sceneId, int metres)
     {
-        LineOfSight.Validate(metres, "Ambient Visual Distance");
+        LineOfSight.Validate(metres, "Ambient Light");
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<MtuDbContext>();
         var changed = await db

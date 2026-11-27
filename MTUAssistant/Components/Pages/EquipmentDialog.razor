@@ -2,9 +2,9 @@
 @inject EquipmentService EquipmentStore
 @inject IJSRuntime JS
 
-<dialog @ref="dialog" class="equipment-dialog" aria-labelledby="equipment-dialog-heading">
+<dialog @ref="dialog" class="sheet sheet-dialog equipment-dialog" aria-labelledby="equipment-dialog-heading">
     <form @onsubmit="Save" @onsubmit:preventDefault>
-        <h2 id="equipment-dialog-heading">@(Item.Id == 0 ? "Add equipment" : "Edit equipment")</h2>
+        <h2 id="equipment-dialog-heading" class="sheet-title">@(Item.Id == 0 ? "Add equipment" : "Edit equipment")</h2>
         @if (error is not null) { <p class="error" role="alert">@error</p> }
         @if (Item.Id != 0) { <p class="hint">Catalogue changes apply to every Traveller using this item.</p> }
         <div class="fields">

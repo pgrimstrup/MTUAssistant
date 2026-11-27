@@ -4,7 +4,7 @@
 const squareCentre = (column,row) => ({x:2*column+1,y:2*row+1});
 // Squares are 1.5 m across.
 export const squareMetres = 1.5;
-// How far a Traveller sees, in squares: the higher of the map's Ambient Visual Distance and the Traveller's
+// How far a Traveller sees, in squares: the higher of the map's Ambient Light and the Traveller's
 // own Visual Distance, both in metres. 0 means sight clears no fog and the GM reveals the map by hand.
 export function sightRangeSquares(ambientMetres,characterMetres) {
     return Math.max(Number(ambientMetres) || 0,Number(characterMetres) || 0,0)/squareMetres;

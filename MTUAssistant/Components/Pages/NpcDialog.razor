@@ -1,88 +1,100 @@
 @implements IAsyncDisposable
 @inject NpcService Characters
+@inject CharacterService CharacterStore
+@inject SceneService Scenes
 @inject IJSRuntime JS
 
-<dialog @ref="dialog" class="npc-dialog" aria-labelledby="npc-dialog-heading">
-    <header class="dialog-header">
+<dialog @ref="dialog" class="sheet npc-dialog" aria-labelledby="npc-dialog-heading">
+    <header class="sheet-toolbar">
         <h2 id="npc-dialog-heading">@(IsNew ? "Add Character" : "Edit Character")</h2>
         <div class="actions">
             <button type="button" class="btn btn-outline-secondary" @onclick="Cancel" disabled="@busy">@(IsNew ? "Cancel" : "Close")</button>
             <button type="button" class="btn btn-primary" @onclick="Save" disabled="@busy">@(IsNew ? "Add Character" : "Save")</button>
         </div>
     </header>
-    @if (error is not null) { <p class="error" role="alert">@error</p> }
-    <section class="details" aria-label="Character details">
-        <div class="fields identity">
-            <label>Name <input class="form-control" @bind="name" maxlength="120" disabled="@busy" /></label>
-            <label>NPC Type <select class="form-select" @bind="npcType" @bind:after="ChangeNpcType" disabled="@(busy || !IsNew)">
-                @foreach (var type in Enum.GetValues<NpcType>()) { <option value="@type">@NpcTypes.Label(type)</option> }
-            </select></label>
-            <label>Skill Level <select class="form-select" @bind="skillLevel" @bind:after="UpdateGeneratedSkills" disabled="@(busy || !IsNew)">
-                @foreach (var level in Enum.GetValues<NpcSkillLevel>()) { <option value="@level">@((int)level + 1) — @level</option> }
-            </select></label>
-            <label>Occupation <select class="form-select" @bind="occupation" @bind:after="ChangeOccupation" disabled="@(busy || !IsNew)">
-                @if (!NpcGenerator.Occupations(npcType).Contains(occupation)) { <option value="@occupation">@(string.IsNullOrEmpty(occupation) ? "Unspecified" : occupation)</option> }
-                @foreach (var profession in NpcGenerator.Occupations(npcType)) { <option value="@profession">@(string.IsNullOrEmpty(profession) ? "Unspecified" : profession)</option> }
-            </select></label>
-            <label>Race <select class="form-select" @bind="race" @bind:after="ChangeRace" disabled="@(busy || !IsNew)">
-                @if (!NpcRaces.All.Contains(race)) { <option value="@race">@race</option> }
-                @foreach (var choice in NpcRaces.All) { <option value="@choice">@choice</option> }
-            </select></label>
-        </div>
-        <div class="numbers">
-            <div class="characteristics" role="group" aria-label="Characteristics">
-                @for (var i = 0; i < scores.Length; i++)
-                {
-                    var index = i;
-                    <label>@CharacteristicProfile.Labels[index] <input class="form-control" type="number" min="0" max="@CharacteristicProfile.MaxScore" step="1" @bind="scores[index]" disabled="@busy" /></label>
-                }
+    <div class="sheet-body">
+        @if (error is not null) { <p class="error" role="alert">@error</p> }
+        <section class="sheet-panel" aria-label="Personal data">
+            <div class="sheet-bar"><span>01 / Personal Data</span><span class="sheet-bar-note">@NpcTypes.Label(npcType) record</span></div>
+            <div class="sheet-personal">
+                <div class="sheet-personal-main">
+                    <div class="sheet-fields identity">
+                        <label><span class="sheet-label">Name</span><input class="sheet-input sheet-name" @bind="name" maxlength="120" placeholder="Name" disabled="@busy" /></label>
+                        <label><span class="sheet-label">Race</span><select class="form-select sheet-input" @bind="race" @bind:after="ChangeRace" disabled="@(busy || !IsNew)">
+                            @if (!NpcRaces.All.Contains(race)) { <option value="@race">@race</option> }
+                            @foreach (var choice in NpcRaces.All) { <option value="@choice">@choice</option> }
+                        </select></label>
+                        <label><span class="sheet-label">Age</span><input class="sheet-input" type="number" min="0" @bind="age" placeholder="—" disabled="@busy" /></label>
+                        <label><span class="sheet-label">Gender</span><input class="sheet-input" @bind="gender" @bind:after="RefreshGeneratedName" maxlength="120" disabled="@busy" /></label>
+                    </div>
+                    <div class="sheet-divider"></div>
+                    <div class="sheet-fields ratings">
+                        <label><span class="sheet-label">NPC Type</span><select class="form-select sheet-input" @bind="npcType" @bind:after="ChangeNpcType" disabled="@(busy || !IsNew)">
+                            @foreach (var type in Enum.GetValues<NpcType>()) { <option value="@type">@NpcTypes.Label(type)</option> }
+                        </select></label>
+                        <label><span class="sheet-label">Skill Level</span><select class="form-select sheet-input" @bind="skillLevel" @bind:after="UpdateGeneratedSkills" disabled="@(busy || !IsNew)">
+                            @foreach (var level in Enum.GetValues<NpcSkillLevel>()) { <option value="@level">@((int)level + 1) — @level</option> }
+                        </select></label>
+                        <label><span class="sheet-label">Occupation</span><select class="form-select sheet-input" @bind="occupation" @bind:after="ChangeOccupation" disabled="@(busy || !IsNew)">
+                            @if (!NpcGenerator.Occupations(npcType).Contains(occupation)) { <option value="@occupation">@(string.IsNullOrEmpty(occupation) ? "Unspecified" : occupation)</option> }
+                            @foreach (var profession in NpcGenerator.Occupations(npcType)) { <option value="@profession">@(string.IsNullOrEmpty(profession) ? "Unspecified" : profession)</option> }
+                        </select></label>
+                        <label title="Day of the year, 1 to 365"><span class="sheet-label">Birthday (day)</span><input class="sheet-input" type="number" min="1" max="@CharacterAge.DaysInYear" step="1" @bind="birthday" disabled="@busy" /></label>
+                        <label><span class="sheet-label">Speed (m)</span><input class="sheet-input" type="number" min="0" step="1" @bind="speed" disabled="@busy" /></label>
+                        <label><span class="sheet-label">Natural DR</span><input class="sheet-input" type="number" min="0" @bind="naturalDr" disabled="@busy" /></label>
+                    </div>
+                    <div class="sheet-fields quirks">
+                        <label><span class="sheet-label">Quirks 1</span><input class="sheet-input" @bind="quirks1" maxlength="500" placeholder="—" disabled="@busy" /></label>
+                        <label><span class="sheet-label">Quirks 2</span><input class="sheet-input" @bind="quirks2" maxlength="500" placeholder="—" disabled="@busy" /></label>
+                    </div>
+                    <label class="description"><span class="sheet-label">Description</span><textarea class="sheet-input" rows="3" placeholder="Appearance, manner, background" @bind="description" disabled="@busy"></textarea></label>
+                    <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
+                </div>
+                <div class="sheet-personal-token">
+                    <span class="sheet-label">Token</span>
+                    @if (CharacterToken.DataUri(tokenImage) is { } preview) { <img class="sheet-token" src="@preview" alt="Token preview" /> }
+                    else { <div class="sheet-token" aria-hidden="true">No token</div> }
+                    <label class="sheet-token-pick @(busy ? "disabled" : null)">@(tokenImage is null ? "Add token" : "Replace token")<InputFile @key="tokenInputKey" accept="image/png,image/jpeg,image/gif,image/webp" OnChange="SelectToken" disabled="@busy" /></label>
+                    @if (tokenImage is not null) { <button type="button" class="sheet-link-button" @onclick="RemoveToken" disabled="@busy">Remove token</button> }
+                    <span class="sheet-hint">PNG, JPEG, GIF or WebP · 2 MB</span>
+                </div>
             </div>
-            <div class="ratings">
-                <label>Gender <input class="form-control" @bind="gender" @bind:after="RefreshGeneratedName" maxlength="120" disabled="@busy" /></label>
-                <label>Age <input class="form-control" type="number" min="0" @bind="age" disabled="@busy" /></label>
-                <label title="Day of the year, 1 to 365">Birthday (day) <input class="form-control" type="number" min="1" max="@CharacterAge.DaysInYear" step="1" @bind="birthday" disabled="@busy" /></label>
-                <label>Speed (m) <input class="form-control" type="number" min="0" step="1" @bind="speed" disabled="@busy" /></label>
-            </div>
-        </div>
-        <div class="fields quirks">
-            <label>Quirks 1 <input class="form-control" @bind="quirks1" maxlength="500" disabled="@busy" /></label>
-            <label>Quirks 2 <input class="form-control" @bind="quirks2" maxlength="500" disabled="@busy" /></label>
-        </div>
-        <label class="character-description-field">Description <textarea class="form-control" rows="2" @bind="description" disabled="@busy"></textarea></label>
-        <InjuryToleranceEditor @bind-Value="injuryTolerance" Disabled="busy" />
-        <div class="token-editor">
-            @if (CharacterToken.DataUri(tokenImage) is { } preview) { <img class="token-preview" src="@preview" alt="Token preview" /> }
-            <label>Token image <InputFile @key="tokenInputKey" class="form-control" accept="image/png,image/jpeg,image/gif,image/webp" OnChange="SelectToken" disabled="@busy" /><span class="token-hint">PNG, JPEG, GIF or WebP, up to 2 MB</span></label>
-            @if (tokenImage is not null) { <button type="button" class="btn btn-outline-secondary" @onclick="RemoveToken" disabled="@busy">Remove token</button> }
-        </div>
-    </section>
-    <TabBar TValue="NpcTab" Tabs="Tabs" @bind-Active="activeTab" IdPrefix="npc" AriaLabel="Character records">
-        @if (activeTab == NpcTab.Career)
-        {
-            @if (IsNew) { <p class="empty-message">Add the character first, then record career terms here.</p> }
-            else { <CharacterCareer @key="activeTab" Character="current.Character" OnChanged="OnChanged" /> }
-        }
-        else if (!IsNew && activeTab == NpcTab.Skills) { <CharacterSkills @key="activeTab" Character="current.Character" Embedded="true" OnChanged="OnChanged" /> }
-        else if (!IsNew) { <CharacterEquipment @key="activeTab" Character="current.Character" Kind="@TabKind" OnChanged="OnChanged" /> }
-        else if (activeTab == NpcTab.Skills)
-        {
-            @* A new NPC's skills are generated and saved with it; they become editable once it exists. *@
-            <section class="generated" aria-label="Generated skills">
-                @if (generatedArchetype is not null) { <p class="secondary">@(string.IsNullOrEmpty(generatedArchetype.D66) ? "Combatant" : $"D66 {generatedArchetype.D66}") · @NpcGenerator.SkillRollCount(skillLevel) skill rolls using 2D. Changing occupation rerolls skills. @(NpcRaces.SupportsGeneration(race) ? "Changing skill level rerolls skills, age and UPP." : "Changing skill level rerolls skills.")</p> }
-                <p>@(GeneratedSkills.Length == 0 ? "No generated skills." : string.Join(", ", GeneratedSkills))</p>
-                <p class="secondary">Add the character to edit its skills.</p>
-            </section>
-        }
-        else
-        {
-            var loadout = (current.Character.Equipment ?? []).Where(e => e.Kind == TabKind).ToArray();
-            <section class="generated" aria-label="@($"Generated {TabNoun}")">
-                @if (npcType != NpcType.Combatant) { <p class="secondary">Add the character first, then record @TabNoun here.</p> }
-                else if (loadout.Length > 0) { <p>@string.Join(", ", loadout.Select(e => e.Summary))</p><p class="secondary">Marked Worn or Equipped when the character is added.</p> }
-                else { <p class="secondary">No compatible @TabNoun in the Supply Catalog.</p> }
-            </section>
-        }
-    </TabBar>
+        </section>
+        <CharacteristicCards Scores="scores" Extra="@extraDigits" Current="currentStats" Disabled="busy" IdPrefix="npc" />
+        <section class="sheet-panel sheet-records" aria-label="Character records">
+            <TabBar TValue="NpcTab" Tabs="Tabs" @bind-Active="activeTab" IdPrefix="npc" AriaLabel="Character records" TabBadge="Badge">
+                <Extras>03 / Service record</Extras>
+                <ChildContent>
+                    @if (!IsNew && !recordsLoaded) { <p class="empty-message">Loading…</p> }
+                    else if (activeTab == NpcTab.Career)
+                    {
+                        @if (IsNew) { <p class="empty-message">Add the character first, then record career terms here.</p> }
+                        else { <CharacterCareer @key="activeTab" Character="current.Character" OnChanged="RecordsChanged" /> }
+                    }
+                    else if (!IsNew && activeTab == NpcTab.Skills) { <CharacterSkills @key="activeTab" Character="current.Character" Embedded="true" OnChanged="RecordsChanged" /> }
+                    else if (!IsNew) { <CharacterEquipment @key="activeTab" Character="current.Character" Kind="@TabKind" OnChanged="RecordsChanged" /> }
+                    else if (activeTab == NpcTab.Skills)
+                    {
+                        @* A new NPC's skills are generated and saved with it; they become editable once it exists. *@
+                        <section class="generated" aria-label="Generated skills">
+                            @if (generatedArchetype is not null) { <p class="secondary">@(string.IsNullOrEmpty(generatedArchetype.D66) ? "Combatant" : $"D66 {generatedArchetype.D66}") · @NpcGenerator.SkillRollCount(skillLevel) skill rolls using 2D. Changing occupation rerolls skills. @(NpcRaces.SupportsGeneration(race) ? "Changing skill level rerolls skills, age and UPP." : "Changing skill level rerolls skills.")</p> }
+                            <p>@(GeneratedSkills.Length == 0 ? "No generated skills." : string.Join(", ", GeneratedSkills))</p>
+                            <p class="secondary">Add the character to edit its skills.</p>
+                        </section>
+                    }
+                    else
+                    {
+                        var loadout = (current.Character.Equipment ?? []).Where(e => e.Kind == TabKind).ToArray();
+                        <section class="generated" aria-label="@($"Generated {TabNoun}")">
+                            @if (npcType != NpcType.Combatant) { <p class="secondary">Add the character first, then record @TabNoun here.</p> }
+                            else if (loadout.Length > 0) { <p>@string.Join(", ", loadout.Select(e => e.Summary))</p><p class="secondary">Marked Worn or Equipped when the character is added.</p> }
+                            else { <p class="secondary">No compatible @TabNoun in the Supply Catalog.</p> }
+                        </section>
+                    }
+                </ChildContent>
+            </TabBar>
+        </section>
+    </div>
 </dialog>
 
 @code {
@@ -115,7 +127,12 @@
     private NpcType npcType;
     private NpcSkillLevel skillLevel = NpcSkillLevel.Novice;
     private int? age;
-    private int speed = 6, birthday = 1, tokenInputKey;
+    private int speed = 6, birthday = 1, naturalDr, tokenInputKey;
+    // Tab badges and the current STR, DEX and END. The tabs wait for these, so no two queries share the database context at once.
+    private CharacterRecordCounts? counts;
+    private bool recordsLoaded;
+    private CurrentCharacteristics currentStats = CurrentCharacteristics.None;
+    private string? Badge(NpcTab tab) => IsNew || counts is not { } c ? null : (tab switch { NpcTab.Career => c.Career, NpcTab.Skills => c.Skills, NpcTab.Armour => c.Armour, _ => c.Weapons }).ToString();
     private InjuryTolerance injuryTolerance;
     private byte[]? tokenImage;
     private bool busy, disposed;
@@ -131,6 +148,28 @@
         // and open on Skills: it has no career to show until it is saved.
         if (IsNew) { generatedArchetype = NpcGenerator.ArchetypeFor(Item); activeTab = NpcTab.Skills; }
     }
+    protected override async Task OnInitializedAsync()
+    {
+        if (IsNew) { recordsLoaded = true; return; }
+        try
+        {
+            counts = await CharacterStore.RecordCountsAsync(current.Character.CampaignId, current.Character.Id);
+            currentStats = await Scenes.CurrentCharacteristicsAsync(current.Character.CampaignId, current.Character.Id);
+        }
+        catch (Exception) { counts = null; }
+        finally { recordsLoaded = true; }
+    }
+    private async Task LoadCounts()
+    {
+        try { counts = await CharacterStore.RecordCountsAsync(current.Character.CampaignId, current.Character.Id); }
+        catch (Exception) { counts = null; }
+    }
+    // A tab saved something: refresh its badge, then let the page reload its list.
+    private async Task RecordsChanged()
+    {
+        await LoadCounts();
+        await OnChanged.InvokeAsync();
+    }
     private void Load(Npc item)
     {
         current = item;
@@ -138,7 +177,7 @@
         name = item.Character.Name; occupation = item.Occupation; race = item.Character.Race; gender = item.Gender;
         automaticName = item.Character.Id == 0 ? name : null;
         quirks1 = item.Quirks1; quirks2 = item.Quirks2; skillLevel = item.SkillLevel; age = item.Age; npcType = item.Type;
-        injuryTolerance = item.Character.InjuryTolerance; description = item.Character.Description; speed = item.Character.Speed; birthday = item.Character.Birthday;
+        injuryTolerance = item.Character.InjuryTolerance; description = item.Character.Description; speed = item.Character.Speed; birthday = item.Character.Birthday; naturalDr = item.Character.NaturalDr;
         tokenImage = item.Character.TokenImage; tokenInputKey++;
         SetUpp(item.Character.Upp);
     }
@@ -241,14 +280,17 @@
         {
             var isNew = IsNew;
             var campaignId = current.Character.CampaignId;
-            var id = await Characters.SaveAsync(current with { Character = current.Character with { Name = name, Race = race, Upp = Upp(), Speed = speed, Birthday = birthday, InjuryTolerance = injuryTolerance, TokenImage = tokenImage, Description = description }, Occupation = occupation, Gender = gender, Quirks1 = quirks1, Quirks2 = quirks2, SkillLevel = skillLevel, Age = age, Type = npcType }, replaceSkills: skillsRerolled);
+            var id = await Characters.SaveAsync(current with { Character = current.Character with { Name = name, Race = race, Upp = Upp(), Speed = speed, Birthday = birthday, NaturalDr = naturalDr, InjuryTolerance = injuryTolerance, TokenImage = tokenImage, Description = description }, Occupation = occupation, Gender = gender, Quirks1 = quirks1, Quirks2 = quirks2, SkillLevel = skillLevel, Age = age, Type = npcType }, replaceSkills: skillsRerolled);
             error = null;
             if (!isNew) { await OnSaved.InvokeAsync(); return; }
             // A new NPC stays open so its generated skills and equipment can be adjusted straight away.
             // Reload it, because saving fills in defaults such as a blank UPP.
             var saved = (await Characters.ListAsync(campaignId)).FirstOrDefault(n => n.Character.Id == id);
             if (saved is null) { await OnSaved.InvokeAsync(); return; }
+            recordsLoaded = false;
             Load(saved);
+            await LoadCounts();
+            recordsLoaded = true;
             await OnChanged.InvokeAsync();
         }
         catch (ArgumentException ex) { error = ex.Message; }

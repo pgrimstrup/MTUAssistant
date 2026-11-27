@@ -1,23 +1,7 @@
-.npc-dialog { width:min(76rem,calc(100vw - 2rem)); max-height:calc(100vh - 2rem); overflow:auto; padding:1.4rem; border:1px solid var(--app-border); border-radius:var(--app-radius); color:var(--app-text); background:var(--app-surface); }
-.npc-dialog::backdrop { background:rgba(0,0,0,.65); }
-.dialog-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.8rem; margin-bottom:1rem; }
-h2 { margin:0; font-size:1.2rem; }
-.actions { display:flex; gap:.5rem; }
-.details { margin-bottom:1.2rem; }
-.fields { display:grid; gap:.8rem; }
-.identity { grid-template-columns:repeat(5,minmax(0,1fr)); }
-.quirks { grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:.8rem; }
-.numbers { display:flex; flex-wrap:wrap; gap:.8rem 2rem; margin-top:.8rem; }
-.characteristics { display:grid; grid-template-columns:repeat(6,4.6rem); gap:.5rem; }
-.ratings { display:grid; grid-template-columns:9rem 6.5rem 7.5rem 6.5rem; gap:.5rem; }
-.fields label, .characteristics label, .ratings label, .token-editor label { display:grid; gap:.3rem; min-width:0; color:var(--app-muted); font-size:.8rem; }
-.characteristics label { color:var(--app-text); font-weight:600; letter-spacing:.04em; }
-.token-editor { display:flex; flex-wrap:wrap; align-items:end; gap:.8rem; }
-.token-hint { font-size:.75rem; }
-.token-preview { width:4rem; height:4rem; object-fit:cover; border-radius:50%; border:1px solid var(--app-border); background:var(--app-surface); }
+/* The shared character sheet style is in app.css (.sheet); this is the Patron/Enemy layout. */
+.identity { grid-template-columns:minmax(0,2.2fr) minmax(0,1.4fr) minmax(0,.5fr) minmax(0,1.1fr); align-items:start; }
+.ratings { grid-template-columns:minmax(0,1.2fr) minmax(0,1.2fr) minmax(0,1.5fr) repeat(3,minmax(0,.8fr)); align-items:start; }
+.quirks { grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:.9rem; }
+.description { display:block; margin-top:.9rem; }
 .generated p { margin:0 0 .4rem; }
-.secondary { color:var(--app-muted); font-size:.85em; }
-.empty-message { color:var(--app-muted); margin:.4rem 0; }
-.error { color:#ffaaaa; }
-@media(max-width:900px) { .identity { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-@media(max-width:560px) { .identity, .quirks { grid-template-columns:minmax(0,1fr); } .characteristics { grid-template-columns:repeat(3,minmax(0,1fr)); } .ratings { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+.secondary { color:var(--sheet-label); font-size:.85em; }
