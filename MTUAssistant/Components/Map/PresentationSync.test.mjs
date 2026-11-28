@@ -51,6 +51,23 @@ assert.equal(validMapState({ ...jump, destination: { x: 5, y: Infinity } }), fal
 assert.equal(validMapState({ ...jump, destination: { x: 5, y: 6, key: 7 } }), false);
 assert.equal(validMapState({ ...jump, measure: { from: { x: 1, y: 2 } } }), false);
 assert.equal(validMapState({ ...jump, measure: { from: { x: 1, y: 2 }, to: { x: NaN, y: 6 } } }), false);
+// Jump routes: the jump range, up to four route options and how many there are in all.
+const routed = { from: { x: 1, y: 2 }, to: { x: 5, y: 6 } };
+const option = [{ x: 1, y: 2 }, { x: 3, y: 4 }, { x: 5, y: 6 }];
+assert.equal(validMapState({ ...jump, measure: { ...routed, jump: 2, routes: [option], count: 1 } }), true);
+assert.equal(validMapState({ ...jump, measure: { ...routed, jump: 2, routes: [option, option], count: 9 } }), true, 'more routes than are sent');
+assert.equal(validMapState({ ...jump, measure: { ...routed, jump: 2, routes: [], count: 0 } }), true, 'no route is an empty list');
+assert.equal(validMapState({ ...jump, destinationRoute: { ...routed, jump: 2, routes: [option], count: 1 } }), true, 'the destination route');
+assert.equal(validMapState({ ...jump, destinationRoute: null }), true);
+const badPlans = [{ jump: 2 }, { routes: [], count: 0 }, { count: 0 }, { jump: 0, routes: [], count: 0 }, { jump: 1.5, routes: [], count: 0 },
+    { jump: '2', routes: [], count: 0 }, { jump: 2, routes: [], count: -1 }, { jump: 2, routes: [option, option], count: 1 },
+    { jump: 2, routes: [[{ x: 1, y: 2 }]], count: 1 }, { jump: 2, routes: [[{ x: 1, y: 2 }, { x: NaN, y: 4 }]], count: 1 },
+    { jump: 2, routes: 'x', count: 0 }, { jump: 2, routes: Array(5).fill(option), count: 5 },
+    { jump: 2, routes: [Array.from({ length: 1001 }, () => ({ x: 1, y: 2 }))], count: 1 }];
+for (const bad of badPlans)
+    assert.equal(validMapState({ ...jump, measure: { ...routed, ...bad } }), false, `invalid jump plan ${JSON.stringify(bad).slice(0, 60)}`);
+for (const bad of [...badPlans.slice(1), { jump: 2, routes: [], count: 0, from: null }, { jump: 2, routes: [], count: 0, to: { x: 1 } }])
+    assert.equal(validMapState({ ...jump, destinationRoute: { ...routed, ...bad } }), false, `invalid destination route ${JSON.stringify(bad).slice(0, 60)}`);
 assert.throws(() => connectPresentation({ ...options, session: '' }), /Present map/);
 let pointer, otherPointer;
 const pointerViewer = connectPresentation({ ...options, readOnly: true, onPointer: point => pointer = point });

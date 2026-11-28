@@ -4,6 +4,8 @@
 @inject SystemDataProvider SystemData
 @inject MTUAssistant.Services.SelectedWorldState WorldState
 @inject MTUAssistant.Services.MapPointerLocation PointerLocation
+@inject CampaignService Campaigns
+@inject StarshipService StarshipStore
 @inject ILogger<MapView> Logger
 
 <div class="map-shell @(ReadOnly ? "presentation-map" : null)">
@@ -55,7 +57,36 @@
     private bool disposed;
     private bool reloadPending;
 
-    protected override void OnInitialized() => SystemData.Reloaded += OnCatalogueReloaded;
+    protected override void OnInitialized()
+    {
+        SystemData.Reloaded += OnCatalogueReloaded;
+        if (!ReadOnly) Campaigns.Changed += OnCampaignChanged;
+    }
+
+    private void OnCampaignChanged(Campaign? campaign) => _ = InvokeAsync(() => SendJumpRange(campaign));
+
+    // Measurements longer than the equipped ship's jump range plot a jump route. With no
+    // equipped ship (or no J-Drive) the map only measures the distance.
+    private async Task SendJumpRange(Campaign? campaign)
+    {
+        if (disposed || ReadOnly || map is null) return;
+        int? jump = null;
+        try
+        {
+            if (campaign is not null)
+                jump = (await StarshipStore.EquippedAsync(campaign.Id))?.Performance.Jump;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unable to load the equipped Starship for jump routes");
+        }
+        if (disposed || map is null) return;
+        try
+        {
+            await map.InvokeVoidAsync("setJumpRange", jump);
+        }
+        catch (JSDisconnectedException) { }
+    }
 
     private void OnCatalogueReloaded() => _ = InvokeAsync(async () =>
     {
@@ -279,6 +310,15 @@
             if (!disposed)
             {
                 if (ReadOnly) { await InvokeAsync(StateHasChanged); return; }
+                try
+                {
+                    await SendJumpRange((await Campaigns.ListAsync()).FirstOrDefault(c => c.IsActive));
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Unable to load the active campaign for jump routes");
+                }
+                if (disposed) return;
                 if (reloadPending) await ReloadMapData();
                 if (disposed) return;
                 if (SystemId is not null || SectorId is not null || SubsectorId is not null) await FocusSearchTarget();
@@ -313,6 +353,7 @@
     {
         disposed = true;
         SystemData.Reloaded -= OnCatalogueReloaded;
+        Campaigns.Changed -= OnCampaignChanged;
         PointerLocation.Set(null, null);
         selectionVersion++;
         try

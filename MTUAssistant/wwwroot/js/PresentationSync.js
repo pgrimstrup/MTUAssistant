@@ -20,14 +20,27 @@ export function presentationSession(storage, newId = () => crypto.randomUUID?.()
 const validMapPoint = point => !!point && [point.x, point.y].every(Number.isFinite);
 const validMarkedHex = hex => validMapPoint(hex) && (hex.key == null || typeof hex.key === "string");
 
+// A jump plan: the jump range, up to 4 fewest-jump routes (each its stops, origin to target, as
+// hex centres; none when the target is out of reach) and how many such routes there are.
+const validRoute = route => Array.isArray(route) && route.length >= 2 && route.length <= 1000 && route.every(validMapPoint);
+const validJumpPlan = plan => Number.isInteger(plan.jump) && plan.jump > 0 && plan.jump <= 99
+    && Array.isArray(plan.routes) && plan.routes.length <= 4 && plan.routes.every(validRoute)
+    && Number.isFinite(plan.count) && plan.count >= plan.routes.length;
+const validEnds = value => validMapPoint(value.from) && validMapPoint(value.to);
+// A measurement longer than the ship's jump range carries a plan; shorter ones carry none.
+const validMeasure = measure => validEnds(measure) && (measure.jump === undefined
+    ? measure.routes === undefined && measure.count === undefined : validJumpPlan(measure));
+
 // The Galaxy Map has no GM-only data: the snapshot holds the camera, the selected world, the
-// jump destination and any jump measurement in progress. Older snapshots omit the last two.
+// jump destination, any jump measurement in progress and the route to the destination. Older
+// snapshots omit the last three.
 export function validMapState(state) {
     return state?.version === 1 && [state.x, state.y, state.zoom].every(Number.isFinite)
         && state.zoom > 0 && state.zoom <= 192
         && (state.selected === null || validMarkedHex(state.selected))
         && (state.destination == null || validMarkedHex(state.destination))
-        && (state.measure == null || (validMapPoint(state.measure.from) && validMapPoint(state.measure.to)));
+        && (state.measure == null || validMeasure(state.measure))
+        && (state.destinationRoute == null || (validEnds(state.destinationRoute) && validJumpPlan(state.destinationRoute)));
 }
 
 // Snapshots are paired to one Admin tab, shared only within this browser profile/origin.

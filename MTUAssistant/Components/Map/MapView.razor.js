@@ -6,9 +6,13 @@ import { drawHexSelection, hexSelectionGeometry, drawHexDestination, hexDestinat
 import { HEX_X, SECTOR_WIDTH, SECTOR_HEIGHT, MAP_PADDING, DETAIL_LEVELS,
     hexCenter, findHex, parseHex, detailLevel, intersects, worldPriority, worldLabelRules,
     mapAppearance, baseSymbols, isSubsectorCapital, worldName, borderSegments, routePoints, insetBorderSegment,
-    globalHex, hexDistance, jumpLabel } from "../../js/MapGeometry.js";
+    globalHex, hexDistance } from "../../js/MapGeometry.js";
+import { JumpRouter, jumpPlan, jumpPlanLabel, dashedSegments, routeLists, moreRoutesLabel, sectorHex } from "../../js/JumpRoute.js";
 
 const MAX_ZOOM = 192;
+const ROUTE_BLOCKED_COLOUR = 0xffa500;
+const ROUTE_DASH_SPEED = 20; // Screen pixels per second along the direction of travel.
+const ROUTE_OPTION_ALPHA = .45; // Other options with the same number of jumps as the quickest.
 const VIEW_STORAGE_KEY = "mtu.map.view";
 const SELECTION_STORAGE_KEY = "mtu.map.selection";
 const MAX_CACHED_SECTORS = 24;
@@ -158,6 +162,7 @@ export class DynamicMap {
             result.points = sector.worlds.map(world => this.positionWorld(result, world)).filter(Boolean);
             return result;
         });
+        this.jumpRouter = null;
 
     }
 
@@ -171,6 +176,7 @@ export class DynamicMap {
         if (this.disposed) return;
         this.selected = null;
         this.cancelMeasure();
+        this.jumpRouter = null;
         this.restoreDestination();
         this.presentationSelectionKey = null;
         this.updatePointerLocation();
@@ -231,10 +237,11 @@ export class DynamicMap {
     onTick(ticker) {
         if (this.disposed) return;
         this.selectionTime += ticker?.deltaMS ?? 0;
-        // Selection and destination markers animate every frame, and the screen-space measurement
-        // follows wheel zoom mid-drag; the rest of the map redraws on view changes.
+        // Selection and destination markers and route dashes animate every frame, and the
+        // screen-space measurement and routes follow the view; the rest of the map redraws on
+        // view changes. drawSelection also draws the measurement and routes.
         if ((this.selected || this.destination) && this.reducedMotion?.matches !== true) this.drawSelection(this.viewport.scale.x);
-        if (this.measure) this.drawMeasure();
+        else if (this.measure || this.destinationRoute) this.drawMeasure();
         const v = this.viewport;
         const signature = `${v.left.toFixed(2)},${v.top.toFixed(2)},${v.scale.x.toFixed(4)},${this.host.clientWidth},${this.host.clientHeight}`;
         const retryDue = [...this.sectorCache.values()].some(entry => entry.state === "failed" && entry.retryAt <= Date.now());
@@ -571,6 +578,7 @@ export class DynamicMap {
         event.preventDefault();
         const hex = this.hexAtClient(event);
         this.measure = { id: event.pointerId, origin: hex, target: hex };
+        this.planMeasure();
         // Capture keeps the drag alive outside the canvas; an inactive pointer cannot be captured.
         try { this.app.canvas.setPointerCapture?.(event.pointerId); } catch { /* Measure without capture. */ }
         this.drawMeasure();
@@ -583,6 +591,7 @@ export class DynamicMap {
         const target = this.hexAtClient(event);
         if (target.column === measure.target.column && target.row === measure.target.row) return;
         measure.target = target;
+        this.planMeasure();
         this.drawMeasure();
         this.publishPresentation();
     }
@@ -602,41 +611,148 @@ export class DynamicMap {
         // The presentation only mirrors the GM's measurement from snapshots.
         if (!measure || this.readOnly) return;
         this.measure = null;
+        this.measureRoute = null;
         if (measure.id != null && this.app?.canvas?.hasPointerCapture?.(measure.id)) this.app.canvas.releasePointerCapture(measure.id);
         this.drawMeasure();
         this.publishPresentation();
+    }
+
+    // The equipped ship's jump range in parsecs, or null when no ship (or no J-Drive) is equipped.
+    setJumpRange(jump) {
+        if (this.readOnly || this.disposed) return;
+        this.jumpRange = Number.isInteger(jump) && jump > 0 ? jump : null;
+        this.planMeasure();
+        this.planDestination();
+        this.drawMeasure();
+        this.publishPresentation();
+    }
+
+    // Charted systems by global hex, for routing and for the stop-over lists.
+    router() {
+        this.jumpRouter ??= new JumpRouter((this.sectors ?? []).flatMap(sector => sector.points ?? []));
+        return this.jumpRouter;
+    }
+
+    // A measurement longer than the ship's jump range plots the quickest routes through charted systems.
+    planMeasure() {
+        if (this.readOnly) return;
+        const measure = this.measure;
+        this.measureRoute = measure && this.jumpRange ? jumpPlan(this.router(), measure.origin, measure.target, this.jumpRange) : null;
+    }
+
+    // The route stays on the map, from the hex the measurement started at, while the destination is set.
+    planDestination() {
+        if (this.readOnly) return;
+        const from = this.destinationOrigin, destination = this.destination;
+        const to = destination ? globalHex(destination.x, destination.y) : null;
+        const plan = from && to && this.jumpRange ? jumpPlan(this.router(), from, to, this.jumpRange) : null;
+        this.destinationRoute = plan ? { from, to, ...plan } : null;
+    }
+
+    // What the routes and lists show now: the live measurement, otherwise the destination route.
+    shownRoute() {
+        if (this.measure) return this.measureRoute ? { from: this.measure.origin, to: this.measure.target, ...this.measureRoute } : null;
+        return this.destinationRoute ?? null;
     }
 
     drawMeasure() {
         const graphics = this.measureGraphics;
         if (!graphics || !this.viewport) return;
         graphics.clear();
-        const measure = this.measure;
+        const measure = this.measure, shown = this.shownRoute();
         this.measureLabel.visible = !!measure;
-        if (!measure) return;
-        const start = this.viewport.toScreen(hexCenter(measure.origin.column, measure.origin.row));
-        const end = this.viewport.toScreen(hexCenter(measure.target.column, measure.target.row));
-        graphics.moveTo(start.x, start.y).lineTo(end.x, end.y).stroke({ color: 0xffffff, width: 2 });
+        this.renderRouteLists(shown);
+        if (!measure && !shown) return;
+        const screen = hex => this.viewport.toScreen(hexCenter(hex.column, hex.row));
+        const start = screen(measure?.origin ?? shown.from), end = screen(measure?.target ?? shown.to);
+        if (shown?.routes.length) {
+            // Every fewest-jump option is drawn as dashed white legs marching towards the target,
+            // the quickest last and brightest, with a small dot at each stop on the way.
+            const reduced = this.reducedMotion?.matches === true;
+            const offset = reduced ? 0 : (this.selectionTime ?? 0) * ROUTE_DASH_SPEED / 1000;
+            shown.routes.map((route, index) => ({ route, index })).reverse().forEach(({ route, index }) => {
+                const stops = route.map(screen), alpha = index === 0 ? 1 : ROUTE_OPTION_ALPHA;
+                for (const [a, b] of dashedSegments(stops, 8, 6, offset)) graphics.moveTo(a.x, a.y).lineTo(b.x, b.y);
+                graphics.stroke({ color: 0xffffff, width: 2, alpha });
+                for (const stop of stops.slice(1, -1)) graphics.circle(stop.x, stop.y, 3).fill({ color: 0xffffff, alpha });
+            });
+        } else graphics.moveTo(start.x, start.y).lineTo(end.x, end.y)
+            .stroke({ color: shown ? ROUTE_BLOCKED_COLOUR : 0xffffff, width: 2 });
         graphics.circle(start.x, start.y, 4).fill({ color: 0xffffff });
-        this.measureLabelText.text = jumpLabel(hexDistance(measure.origin, measure.target));
+        if (!measure) return;
+        this.measureLabelText.text = jumpPlanLabel(hexDistance(measure.origin, measure.target), this.measureRoute ?? null);
         const width = this.measureLabelText.width + 10, height = this.measureLabelText.height + 6;
         this.measureLabelText.position.set(5, 3);
         this.measureLabelBackground.clear().rect(0, 0, width, height).fill({ color: 0x000000, alpha: .75 });
         this.measureLabel.position.set((start.x + end.x) / 2 - width / 2, (start.y + end.y) / 2 - height / 2);
     }
 
+    // Stop-over lists at the top left, one per route option, side by side. Rebuilt only when the
+    // lists change, since drawMeasure runs every frame while the dashes march.
+    renderRouteLists(shown) {
+        const model = routeLists(shown, hex => this.router().system(hex));
+        const key = JSON.stringify(model);
+        if (key === this.routeListsKey) return;
+        this.routeListsKey = key;
+        this.routeListsModel = model;
+        const document = globalThis.document;
+        if (!document || !this.host?.appendChild) return;
+        if (!this.routeListsElement) {
+            this.routeListsElement = document.createElement("div");
+            this.routeListsElement.className = "jump-routes";
+            this.routeListsElement.setAttribute("aria-label", "Jump route");
+            this.host.appendChild(this.routeListsElement);
+        }
+        const panel = this.routeListsElement, element = (tag, className, text) => {
+            const node = document.createElement(tag);
+            node.className = className;
+            if (text != null) node.textContent = text;
+            return node;
+        };
+        panel.replaceChildren();
+        panel.hidden = !model;
+        if (!model) return;
+        panel.classList.toggle("blocked", !model.lists.length);
+        panel.appendChild(element("div", "jump-routes-title", model.title));
+        const lists = element("div", "jump-routes-lists");
+        for (const list of model.lists) {
+            const column = element("div", "jump-route");
+            column.appendChild(element("div", "jump-route-title", list.title));
+            const stops = element("ol", "jump-route-stops");
+            for (const stop of list.stops) {
+                const row = element("li", "jump-route-stop");
+                row.append(element("span", "jump-route-hex", stop.hex), element("span", "jump-route-uwp", stop.uwp || "—"),
+                    element("span", "jump-route-name", stop.name));
+                stops.appendChild(row);
+            }
+            column.appendChild(stops);
+            lists.appendChild(column);
+        }
+        if (model.lists.length) panel.appendChild(lists);
+        if (model.more) panel.appendChild(element("div", "jump-routes-more", moreRoutesLabel(model.more)));
+    }
+
     // A destination needs a charted sector to persist by sector ID and hex. A right-click without
-    // dragging on the current destination clears it.
+    // dragging on the current destination clears it. The hex the measurement started at is kept
+    // with it, when it is in a charted sector, so the route stays on the map.
     chooseDestination(origin, target) {
-        const sector = this.sectors.find(s => s.col === Math.floor(target.column / 32) && s.row === Math.floor(target.row / 40));
+        const sector = this.sectorAt(target);
         if (!sector) return;
-        const hex = String(target.column % 32 + 1).padStart(2, "0") + String(target.row % 40 + 1).padStart(2, "0");
+        const hex = sectorHex(target);
         const key = `${sector.id}/${hex}`;
         const clear = origin.column === target.column && origin.row === target.row && this.destination?.key === key;
+        const fromSector = clear ? null : this.sectorAt(origin);
         this.destination = clear ? null : { ...hexCenter(target.column, target.row), key };
-        this.saveDestination(clear ? null : { sectorId: sector.id, hex });
+        this.destinationOrigin = fromSector ? { column: origin.column, row: origin.row } : null;
+        this.saveDestination(clear ? null : { sectorId: sector.id, hex,
+            ...(fromSector ? { from: { sectorId: fromSector.id, hex: sectorHex(origin) } } : {}) });
+        this.planDestination();
         this.drawSelection(this.viewport.scale.x);
         this.publishPresentation();
+    }
+
+    sectorAt(hex) {
+        return this.sectors.find(s => s.col === Math.floor(hex.column / 32) && s.row === Math.floor(hex.row / 40)) ?? null;
     }
 
     // Selecting the destination hex (map click or search) clears the destination. Restoring a
@@ -645,6 +761,8 @@ export class DynamicMap {
         const selected = this.selected, destination = this.destination;
         if (!selected || !destination || selected.x !== destination.x || selected.y !== destination.y) return;
         this.destination = null;
+        this.destinationOrigin = null;
+        this.destinationRoute = null;
         this.saveDestination(null);
         if (this.viewport) this.drawSelection(this.viewport.scale.x);
         this.publishPresentation();
@@ -655,14 +773,20 @@ export class DynamicMap {
         saveMapDestination(destination);
     }
 
-    // Restores the saved destination by sector ID and hex, like the selected world.
+    // Restores the saved destination, and the hex its route starts at, by sector ID and hex,
+    // like the selected world.
     restoreDestination() {
         if (this.readOnly) return;
         const saved = loadMapDestination();
-        const sector = saved ? this.sectors.find(s => s.id === saved.sectorId) : null;
-        const location = saved ? parseHex(saved.hex) : null;
-        this.destination = sector && location ? { ...hexCenter(sector.col * 32 + location.column - 1,
-            sector.row * 40 + location.row - 1), key: `${sector.id}/${saved.hex}` } : null;
+        const resolve = place => {
+            const sector = place ? this.sectors.find(s => s.id === place.sectorId) : null;
+            const location = place ? parseHex(place.hex) : null;
+            return sector && location ? { sector, column: sector.col * 32 + location.column - 1, row: sector.row * 40 + location.row - 1 } : null;
+        };
+        const target = resolve(saved), from = target ? resolve(saved.from) : null;
+        this.destination = target ? { ...hexCenter(target.column, target.row), key: `${target.sector.id}/${saved.hex}` } : null;
+        this.destinationOrigin = from ? { column: from.column, row: from.row } : null;
+        this.planDestination();
     }
 
     saveWorldSelection(sectorId, hex) {
@@ -816,9 +940,16 @@ export class DynamicMap {
         const { x, y } = this.viewport.center;
         const marked = hex => hex ? { x: hex.x + offsetX, y: hex.y + offsetY, key: hex.key ?? null } : null;
         const centre = hex => { const point = hexCenter(hex.column, hex.row); return { x: point.x + offsetX, y: point.y + offsetY }; };
+        // A route plan is cast only past the ship's jump range: the range, up to ROUTE_OPTIONS
+        // routes as absolute hex centres, and how many routes share the fewest jumps.
+        const plan = value => ({ jump: value.jump, routes: value.routes.map(route => route.map(centre)), count: value.count });
+        const destinationRoute = this.destination && this.destinationRoute
+            ? { from: centre(this.destinationRoute.from), to: centre(this.destinationRoute.to), ...plan(this.destinationRoute) } : null;
         this.presentation.publish({ version: 1, x: x + offsetX, y: y + offsetY, zoom: this.viewport.scale.x,
             selected: marked(this.selected), destination: marked(this.destination),
-            measure: this.measure ? { from: centre(this.measure.origin), to: centre(this.measure.target) } : null });
+            measure: this.measure ? { from: centre(this.measure.origin), to: centre(this.measure.target),
+                ...(this.measureRoute ? plan(this.measureRoute) : {}) } : null,
+            destinationRoute });
     }
 
     applyPresentation(state) {
@@ -832,8 +963,13 @@ export class DynamicMap {
             x: state.selected.x - offsetX, y: state.selected.y - offsetY } : null;
         this.destination = state.destination ? { ...state.destination,
             x: state.destination.x - offsetX, y: state.destination.y - offsetY } : null;
-        this.measure = state.measure ? { origin: globalHex(state.measure.from.x - offsetX, state.measure.from.y - offsetY),
-            target: globalHex(state.measure.to.x - offsetX, state.measure.to.y - offsetY) } : null;
+        const hex = point => globalHex(point.x - offsetX, point.y - offsetY);
+        this.measure = state.measure ? { origin: hex(state.measure.from), target: hex(state.measure.to) } : null;
+        const plan = value => ({ jump: value.jump, routes: value.routes.map(route => route.map(hex)), count: value.count });
+        this.measureRoute = state.measure?.jump ? plan(state.measure) : null;
+        const destinationRoute = state.destinationRoute;
+        this.destinationRoute = destinationRoute
+            ? { from: hex(destinationRoute.from), to: hex(destinationRoute.to), ...plan(destinationRoute) } : null;
         this.updatePresentationSelection();
         this.drawPresentationPointer();
         this.lastView = "";
@@ -927,10 +1063,13 @@ export class DynamicMap {
             }
         }
         this.measure = null;
+        this.measureRoute = null;
         globalThis.removeEventListener("blur", this.onPointerLeave);
         globalThis.removeEventListener("pagehide", this.onPointerLeave);
         document.removeEventListener("visibilitychange", this.onVisibilityChange);
         this.presentationPointer?.remove();
+        this.routeListsElement?.remove();
+        this.destinationRoute = null;
         this.resizeObserver?.disconnect();
         for (const entry of this.sectorCache.values()) entry.controller.abort();
         this.sectorCache.clear();

@@ -18,13 +18,13 @@
                 <div class="sheet-fields ship-identity">
                     <label><span class="sheet-label">Name</span><input class="sheet-input sheet-name" maxlength="120" placeholder="Starship name" @bind="name" disabled="@busy" /></label>
                     <label><span class="sheet-label">Type</span><input class="sheet-input" maxlength="120" placeholder="Free Trader" @bind="classification" disabled="@busy" /></label>
+                    <div><span class="sheet-label">Design</span><label class="sheet-toggle" title="A one-off design pays full price for its systems; a standard design pays 90%"><input type="checkbox" @bind="prototype" disabled="@busy" /> Prototype</label></div>
                 </div>
                 <div class="sheet-fields ship-fields">
                     <label><span class="sheet-label">Tech Level</span><input class="sheet-input" type="number" min="@StarshipRules.MinTechLevel" max="@StarshipRules.MaxTechLevel" step="1" @bind="techLevel" disabled="@busy" /></label>
                     <label><span class="sheet-label">Displacement (tons)</span><input class="sheet-input" type="number" min="@StarshipRules.MinDisplacement" max="@StarshipRules.MaxDisplacement" step="1" @bind="displacement" disabled="@busy" /></label>
                     <label><span class="sheet-label">Damage Taken</span><input class="sheet-input" type="number" min="0" step="1" @bind="damageTaken" disabled="@busy" /></label>
-                    <div title="Worked out from the systems' costs: 90% of their total for a standard design, the full total for a prototype"><span class="sheet-label">Purchase Cost (MCr)</span><span class="sheet-static">@PurchaseCost.ToString("#,0.000")</span>
-                        <label class="sheet-toggle" title="A one-off design pays full price for its systems"><input type="checkbox" @bind="prototype" disabled="@busy" /> Prototype</label></div>
+                    <div title="Worked out from the systems' costs: 90% of their total for a standard design, the full total for a prototype"><span class="sheet-label">Purchase Cost (MCr)</span><span class="sheet-static">@PurchaseCost.ToString("#,0.000")</span></div>
                     <div title="Purchase Cost in credits ÷ 12,000, rounded down"><span class="sheet-label">Maintenance (Cr / month)</span><span class="sheet-static">@StarshipRules.MaintenanceCost(PurchaseCost).ToString("N0")</span></div>
                 </div>
                 <label class="crew"><span class="sheet-label">Crew</span><input class="sheet-input" maxlength="1000" placeholder="Pilot, Astrogator, Engineer x3" @bind="crew" disabled="@busy" />

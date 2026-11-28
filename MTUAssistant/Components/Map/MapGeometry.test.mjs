@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { HEX_X, hexCenter, findHex, detailLevel, LabelLayout, parseHex, worldPriority, mapAppearance, baseSymbols, isSubsectorCapital, worldName, worldLabelRules, borderSegments, routePoints, insetBorderSegment, globalHex, hexDistance, jumpLabel } from '../../wwwroot/js/MapGeometry.js';
 import { readFile } from 'node:fs/promises';
+import { validMapState } from '../../wwwroot/js/PresentationSync.js';
 // Collocated browser modules use public /js URLs; map those to physical wwwroot files in Node.
 let rendererSource = await readFile(new URL('./MapView.razor.js', import.meta.url), 'utf8');
-for (const moduleName of ['WorldSelection.js', 'MapGeometry.js', 'PresentationSync.js', 'CastWindow.js', 'HexSelection.js', 'MapDestination.js'])
+for (const moduleName of ['WorldSelection.js', 'MapGeometry.js', 'PresentationSync.js', 'CastWindow.js', 'HexSelection.js', 'MapDestination.js', 'JumpRoute.js'])
     rendererSource = rendererSource.replaceAll(`../../js/${moduleName}`,
         new URL(`../../wwwroot/js/${moduleName}`, import.meta.url).href);
 const { DynamicMap } = await import(`data:text/javascript;base64,${Buffer.from(rendererSource).toString('base64')}`);
@@ -467,12 +468,14 @@ try {
     assert.equal(gm.measure, null); assert.equal(gm.measureLabel.visible, false);
     assert.ok(!gm.captured.has(7), 'release frees the pointer');
     assert.deepEqual(gm.destination, { ...hexCenter(33, 4), key: '22/0205' }, 'release snaps the destination to the hex under the pointer');
-    assert.equal(jumpStorage.get('mtu.map.destination'), '{"sectorId":22,"hex":"0205"}');
+    assert.equal(jumpStorage.get('mtu.map.destination'), '{"sectorId":22,"hex":"0205","from":{"sectorId":17,"hex":"0405"}}',
+        'the destination keeps the hex its route starts from');
     snapshot = gm.snapshots.at(-1);
     assert.equal(snapshot.measure, null, 'the cast measurement clears on release');
     assert.deepEqual(snapshot.destination, { x: hexCenter(33, 4).x - 32 * HEX_X, y: hexCenter(33, 4).y, key: '22/0205' });
-    assert.deepEqual(Object.keys(snapshot).sort(), ['destination', 'measure', 'selected', 'version', 'x', 'y', 'zoom'].sort(),
-        'the snapshot carries only camera, selection, destination and measurement');
+    assert.deepEqual(Object.keys(snapshot).sort(), ['destination', 'destinationRoute', 'measure', 'selected', 'version', 'x', 'y', 'zoom'].sort(),
+        'the snapshot carries only camera, selection, destination, measurement and destination route');
+    assert.equal(snapshot.destinationRoute, null, 'no equipped ship, no destination route');
     assert.ok(gm.destinationMarker.ops.some(op => op[0] === 'stroke' && op[1].color === 0xffa500), 'the destination marker is drawn in orange');
 
     // A cancelled drag keeps the previous destination; a right-click on the destination clears it.
@@ -550,6 +553,146 @@ try {
     cast.applyPresentation({ version: 1, x: 0, y: 0, zoom: 10, selected: null });
     assert.equal(cast.destination, null); assert.equal(cast.measure, null);
     assert.equal(cast.measureLabel.visible, false, 'older snapshots without these fields clear them');
+
+    // Past the equipped ship's jump range the measurement plots every quickest route, dashed and
+    // marching towards the target; with no route it turns orange. Without a ship it stays a plain
+    // distance. Releasing keeps the route on the map while the destination is set.
+    jumpStorage.delete('mtu.map.destination');
+    const routed = jumpMap();
+    routed.sectors[0].points = [{ column: 5, row: 4, name: 'Alpha', uwp: 'A788899-C' }, { column: 7, row: 4, name: 'Beta', uwp: 'B000000-9' },
+        { column: 5, row: 3, name: 'Gamma', uwp: 'C555555-7' }];
+    routed.setJumpRange(2);
+    pointer(routed, 'pointerdown', 3, 4); pointer(routed, 'pointermove', 9, 4);
+    const quickest = [3, 5, 7, 9].map(column => ({ column, row: 4 }));
+    const other = [{ column: 3, row: 4 }, { column: 5, row: 3 }, { column: 7, row: 4 }, { column: 9, row: 4 }];
+    assert.equal(routed.measureRoute.jump, 2);
+    assert.equal(routed.measureRoute.count, 2, 'two routes share the fewest jumps');
+    assert.deepEqual(new Set(routed.measureRoute.routes.map(route => JSON.stringify(route))), new Set([quickest, other].map(route => JSON.stringify(route))));
+    assert.equal(routed.measureLabelText.text, '6 parsecs · 3 jumps');
+    const lastDraw = map => map.measureGraphics.ops.slice(map.measureGraphics.ops.map(op => op[0]).lastIndexOf('clear'));
+    let ops = lastDraw(routed);
+    assert.ok(ops.filter(op => op[0] === 'moveTo').length > 6, 'the routes are drawn as dashes');
+    assert.deepEqual(ops.filter(op => op[0] === 'stroke').map(op => op[1]), [{ color: 0xffffff, width: 2, alpha: .45 }, { color: 0xffffff, width: 2, alpha: 1 }],
+        'every option is dashed white, the quickest drawn last at full strength');
+    assert.deepEqual(ops.filter(op => op[0] === 'circle').map(op => op[3]), [3, 3, 3, 3, 4], 'a dot at each stop and at the origin');
+    const firstDash = () => lastDraw(routed).find(op => op[0] === 'moveTo').slice(1);
+    routed.selectionTime = 0; routed.drawMeasure();
+    const still = firstDash();
+    routed.selectionTime = 250; routed.drawMeasure();
+    const moved = firstDash();
+    const origin = hexCenter(3, 4), fromOrigin = point => Math.hypot(point[0] - origin.x * 10, point[1] - origin.y * 10);
+    assert.ok(Math.abs(fromOrigin(still)) < 1e-9 && Math.abs(fromOrigin(moved) - 5) < 1e-9, 'the dashes march 20 px a second from the origin towards the target');
+    routed.reducedMotion = { matches: true }; routed.drawMeasure();
+    assert.deepEqual(firstDash(), still, 'reduced motion keeps the dashes still');
+    routed.reducedMotion = null;
+    const lists = routed.routeListsModel;
+    assert.equal(lists.title, 'Jump-2 route · 3 jumps');
+    assert.equal(lists.lists.length, 2, 'one stop-over list per option');
+    assert.deepEqual(lists.lists.map(list => list.title), ['Option 1 · 3 jumps · 6 parsecs', 'Option 2 · 3 jumps · 6 parsecs']);
+    assert.deepEqual(lists.lists.find(list => list.stops[1].name === 'Alpha').stops, [{ hex: '0405', uwp: '', name: 'Empty hex' },
+        { hex: '0605', uwp: 'A788899-C', name: 'Alpha' }, { hex: '0805', uwp: 'B000000-9', name: 'Beta' }, { hex: '1005', uwp: '', name: 'Empty hex' }]);
+    snapshot = routed.snapshots.at(-1);
+    assert.equal(snapshot.measure.jump, 2);
+    assert.equal(snapshot.measure.count, 2);
+    assert.deepEqual(snapshot.measure.routes[0], routed.measureRoute.routes[0].map(stop => ({ x: hexCenter(stop.column, stop.row).x - 32 * HEX_X, y: hexCenter(stop.column, stop.row).y })),
+        'the cast routes are absolute hex centres');
+    assert.equal(validMapState(snapshot), true);
+    pointer(routed, 'pointermove', 4, 4);
+    assert.equal(routed.measureRoute, null, 'within one jump there is no route plan');
+    assert.equal(routed.routeListsModel, null, 'and no stop-over list');
+    assert.equal(routed.snapshots.at(-1).measure.jump, undefined, 'and none is cast');
+    pointer(routed, 'pointermove', 12, 4);
+    assert.deepEqual(routed.measureRoute, { jump: 2, routes: [], count: 0 });
+    assert.equal(routed.measureLabelText.text, '9 parsecs · no Jump-2 route');
+    assert.deepEqual(routed.routeListsModel, { title: 'No Jump-2 route', lists: [], more: 0 });
+    ops = lastDraw(routed);
+    assert.deepEqual(ops.filter(op => op[0] === 'stroke').at(-1)[1], { color: 0xffa500, width: 2 }, 'unreachable targets are orange');
+    assert.deepEqual(routed.snapshots.at(-1).measure.routes, []);
+    routed.setJumpRange(4);
+    assert.equal(routed.measureLabelText.text, '9 parsecs · no Jump-4 route', 'a new ship replans the live measurement');
+    routed.setJumpRange(null);
+    assert.equal(routed.measureRoute, null);
+    assert.equal(routed.measureLabelText.text, '9 parsecs', 'with no ship equipped only the distance is shown');
+    routed.setJumpRange(2);
+    pointer(routed, 'pointermove', 9, 4);
+    pointer(routed, 'pointercancel', 9, 4);
+    assert.equal(routed.measureRoute, null, 'a cancelled measurement clears the route');
+    assert.equal(routed.destinationRoute ?? null, null, 'and sets no destination route');
+    assert.equal(routed.routeListsModel, null);
+
+    // Releasing sets the destination, and its route stays on the map from the measurement's start.
+    pointer(routed, 'pointerdown', 3, 4); pointer(routed, 'pointermove', 9, 4); pointer(routed, 'pointerup', 9, 4);
+    assert.equal(routed.measure, null);
+    assert.deepEqual(routed.destinationOrigin, { column: 3, row: 4 });
+    assert.deepEqual(routed.destinationRoute.from, { column: 3, row: 4 });
+    assert.deepEqual(routed.destinationRoute.to, { column: 9, row: 4 });
+    assert.equal(routed.destinationRoute.count, 2);
+    assert.equal(routed.measureLabel.visible, false, 'the destination route has no distance label');
+    assert.equal(routed.routeListsModel.lists.length, 2, 'the stop-over lists stay up');
+    ops = lastDraw(routed);
+    assert.equal(ops.filter(op => op[0] === 'stroke').length, 2, 'both options stay dashed on the map');
+    snapshot = routed.snapshots.at(-1);
+    assert.equal(snapshot.measure, null);
+    assert.deepEqual(snapshot.destinationRoute.from, { x: hexCenter(3, 4).x - 32 * HEX_X, y: hexCenter(3, 4).y });
+    assert.equal(snapshot.destinationRoute.routes.length, 2);
+    assert.equal(validMapState(snapshot), true);
+    // A new measurement takes over the lists and routes while it lasts.
+    pointer(routed, 'pointerdown', 3, 4); pointer(routed, 'pointermove', 4, 4);
+    assert.equal(routed.routeListsModel, null, 'a short measurement hides the destination lists');
+    pointer(routed, 'pointercancel', 4, 4);
+    assert.equal(routed.routeListsModel.lists.length, 2, 'and they come back when it ends');
+    // The route start is saved with the destination and restored with it.
+    const reopenedRoute = jumpMap();
+    reopenedRoute.sectors[0].points = routed.sectors[0].points;
+    reopenedRoute.restoreDestination();
+    assert.deepEqual(reopenedRoute.destinationOrigin, { column: 3, row: 4 });
+    assert.equal(reopenedRoute.destinationRoute, null, 'no route until the ship is known');
+    reopenedRoute.setJumpRange(2);
+    assert.equal(reopenedRoute.destinationRoute.count, 2, 'the restored destination gets its route');
+    reopenedRoute.setJumpRange(6);
+    assert.equal(reopenedRoute.destinationRoute, null, 'within one jump of a bigger drive there is no route');
+    // Selecting the destination hex clears the destination and its route.
+    routed.update = () => {};
+    routed.callback = { invokeMethodAsync: () => Promise.resolve() };
+    routed.pointerAt = hexCenter(9, 4);
+    await routed.selectWorld({ clientX: 0, clientY: 0 });
+    assert.equal(routed.destination, null);
+    assert.equal(routed.destinationRoute, null);
+    assert.equal(routed.routeListsModel, null);
+    assert.equal(routed.snapshots.at(-1).destinationRoute, null);
+    // A blocked destination route stays orange.
+    pointer(routed, 'pointerdown', 3, 4); pointer(routed, 'pointermove', 12, 4); pointer(routed, 'pointerup', 12, 4);
+    assert.deepEqual(routed.destinationRoute.routes, []);
+    assert.deepEqual(lastDraw(routed).filter(op => op[0] === 'stroke').at(-1)[1], { color: 0xffa500, width: 2 });
+    assert.equal(routed.routeListsModel.title, 'No Jump-2 route');
+
+    // The presentation draws the routes it is sent and never plans one itself.
+    const castRoute = jumpMap({ readOnly: true });
+    castRoute.sectors[0].points = routed.sectors[0].points;
+    castRoute.viewport = { ...castRoute.viewport, setZoom() {}, moveCenter() {} };
+    castRoute.update = () => castRoute.drawSelection(10);
+    castRoute.updatePresentationSelection = () => {};
+    castRoute.setJumpRange(2);
+    assert.equal(castRoute.jumpRange, undefined, 'the presentation ignores the jump range');
+    const measuring = { version: 1, x: 0, y: 0, zoom: 10, selected: null, destination: null, destinationRoute: null,
+        measure: { from: { x: hexCenter(3, 4).x - 32 * HEX_X, y: hexCenter(3, 4).y }, to: { x: hexCenter(9, 4).x - 32 * HEX_X, y: hexCenter(9, 4).y },
+            jump: 2, routes: [quickest.map(stop => ({ x: hexCenter(stop.column, stop.row).x - 32 * HEX_X, y: hexCenter(stop.column, stop.row).y }))], count: 3 } };
+    castRoute.applyPresentation(measuring);
+    assert.deepEqual(castRoute.measureRoute, { jump: 2, routes: [quickest], count: 3 });
+    assert.equal(castRoute.measureLabelText.text, '6 parsecs · 3 jumps');
+    assert.deepEqual(castRoute.routeListsModel.lists[0].stops.map(stop => stop.name), ['Empty hex', 'Alpha', 'Beta', 'Empty hex'],
+        'players see the stop-over names from their own copy of the map');
+    assert.equal(castRoute.routeListsModel.more, 2);
+    castRoute.applyPresentation({ ...measuring, measure: { ...measuring.measure, routes: [], count: 0 } });
+    assert.deepEqual(castRoute.measureRoute.routes, []);
+    assert.deepEqual(lastDraw(castRoute).filter(op => op[0] === 'stroke').at(-1)[1], { color: 0xffa500, width: 2 });
+    castRoute.applyPresentation({ ...measuring, measure: null, destination: snapshot.destination, destinationRoute: snapshot.destinationRoute });
+    assert.equal(castRoute.measureRoute, null);
+    assert.equal(castRoute.destinationRoute.count, 2, 'the destination route is mirrored');
+    assert.equal(castRoute.routeListsModel.lists.length, 2);
+    castRoute.applyPresentation({ version: 1, x: 0, y: 0, zoom: 10, selected: null });
+    assert.equal(castRoute.destinationRoute, null, 'older snapshots without routes clear them');
+    assert.equal(castRoute.routeListsModel, null);
 } finally {
     if (savedStorage) Object.defineProperty(globalThis, 'localStorage', savedStorage);
     else delete globalThis.localStorage;

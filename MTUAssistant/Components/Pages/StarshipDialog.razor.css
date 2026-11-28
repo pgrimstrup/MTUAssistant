@@ -2,7 +2,7 @@
 .ship-data { display:grid; gap:.9rem; padding:1rem 1.2rem 1.1rem; }
 .crew { display:block; }
 /* Name and Type share a line, as Name and Player do on the Traveller sheet. */
-.ship-identity { grid-template-columns:minmax(0,2.2fr) minmax(0,1.3fr); align-items:start; }
+.ship-identity { grid-template-columns:minmax(0,2.2fr) minmax(0,1.3fr) auto; align-items:start; }
 .ship-fields { grid-template-columns:repeat(5,minmax(0,1fr)); align-items:start; }
 .crew .sheet-hint { display:block; margin-top:.3rem; }
 

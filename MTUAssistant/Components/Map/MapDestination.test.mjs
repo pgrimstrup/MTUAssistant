@@ -30,6 +30,14 @@ for (const hex of ['0101', '3240', '1910']) {
 storage.values.set(DESTINATION_STORAGE_KEY, '{"sectorId":5,"hex":"0101"}');
 saveMapDestination({ sectorId: 5, hex: 'bad' }, storage);
 assert.equal(storage.values.get(DESTINATION_STORAGE_KEY), '{"sectorId":5,"hex":"0101"}', 'an invalid destination is never saved');
+// The map keeps the hex the jump route starts from; a bad one makes the whole value invalid.
+saveMapDestination({ sectorId: 5, hex: '0101', from: { sectorId: 6, hex: '3240', extra: 1 } }, storage);
+assert.equal(storage.values.get(DESTINATION_STORAGE_KEY), '{"sectorId":5,"hex":"0101","from":{"sectorId":6,"hex":"3240"}}');
+assert.deepEqual(loadMapDestination(storage), { sectorId: 5, hex: '0101', from: { sectorId: 6, hex: '3240' } });
+for (const from of [null, 7, { sectorId: 6 }, { sectorId: 6, hex: '0000' }]) {
+    storage.values.set(DESTINATION_STORAGE_KEY, JSON.stringify({ sectorId: 5, hex: '0101', from }));
+    assert.equal(loadMapDestination(storage), null, `invalid route start ${JSON.stringify(from)}`);
+}
 console.log('Map destination validation passed.');
 
 // Blocked or missing browser storage never throws.
